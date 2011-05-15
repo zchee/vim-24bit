@@ -7929,7 +7929,7 @@ static struct fst
     {"sin",		1, 1, f_sin},
     {"sinh",		1, 1, f_sinh},
 #endif
-    {"sort",		1, 2, f_sort},
+    {"sort",		1, 3, f_sort},
     {"soundfold",	1, 1, f_soundfold},
     {"spellbadword",	0, 1, f_spellbadword},
     {"spellsuggest",	1, 3, f_spellsuggest},
@@ -16365,6 +16365,7 @@ static int
 
 static int	item_compare_ic;
 static char_u	*item_compare_func;
+static dict_T	*item_compare_selfdict;
 static int	item_compare_func_err;
 #define ITEM_COMPARE_FAIL 999
 
@@ -16424,7 +16425,8 @@ item_compare2(s1, s2)
 
     rettv.v_type = VAR_UNKNOWN;		/* clear_tv() uses this */
     res = call_func(item_compare_func, (int)STRLEN(item_compare_func),
-				 &rettv, 2, argv, 0L, 0L, &dummy, TRUE, NULL);
+				 &rettv, 2, argv, 0L, 0L, &dummy, TRUE,
+				 item_compare_selfdict);
     clear_tv(&argv[0]);
     clear_tv(&argv[1]);
 
@@ -16486,6 +16488,17 @@ f_sort(argvars, rettv)
 		else
 		    item_compare_func = get_tv_string(&argvars[1]);
 	    }
+	}
+
+	item_compare_selfdict = NULL;
+	if (argvars[2].v_type != VAR_UNKNOWN)
+	{
+	    if (argvars[2].v_type != VAR_DICT)
+	    {
+		EMSG(_(e_dictreq));
+		return;
+	    }
+	    item_compare_selfdict = argvars[2].vval.v_dict;
 	}
 
 	/* Make an array with each entry pointing to an item in the List. */
