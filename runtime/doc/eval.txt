@@ -1917,6 +1917,7 @@ shellescape( {string} [, {special}])
 				String	escape {string} for use as shell
 					command argument
 simplify( {filename})		String	simplify filename as much as possible
+signexists( {name})		Number	TRUE if sign {name} defined
 sin( {expr})			Float	sine of {expr}
 sinh( {expr})			Float	hyperbolic sine of {expr}
 sort( {list} [, {func}])	List	sort {list}, using {func} to compare
@@ -5250,6 +5251,12 @@ simplify({filename})					*simplify()*
 		removed when "dir" is a symbolic link within the same
 		directory.  In order to resolve all the involved symbolic
 		links before simplifying the path name, use |resolve()|.
+
+signexists({name})					*signexists()*
+		The result is a Number, which is non-zero if sign {name} is 
+		defined.  It does not check whether sign was placed anywhere 
+		though.
+		{only available when compiled with the |+signs| feature}
 
 
 sin({expr})						*sin()*
