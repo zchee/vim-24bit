@@ -55,6 +55,7 @@ int sign_get_attr __ARGS((int typenr, int line));
 char_u *sign_get_text __ARGS((int typenr));
 void *sign_get_image __ARGS((int typenr));
 char_u *sign_typenr2name __ARGS((int typenr));
+int sign_exists __ARGS((char_u *name));
 void free_signs __ARGS((void));
 char_u *get_sign_name __ARGS((expand_T *xp, int idx));
 void set_context_in_sign_cmd __ARGS((expand_T *xp, char_u *arg));

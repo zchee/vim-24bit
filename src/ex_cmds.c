@@ -7159,6 +7159,22 @@ sign_typenr2name(typenr)
     return (char_u *)_("[Deleted]");
 }
 
+/*
+ * Return TRUE if sign "name" defined
+ */
+    int
+sign_exists(name)
+    char_u	*name;
+{
+    sign_T	*sp;
+
+    for (sp = first_sign; sp != NULL; sp = sp->sn_next)
+	if (STRCMP(sp->sn_name, name) == 0)
+	    break;
+
+    return sp != NULL;
+}
+
 #if defined(EXITFREE) || defined(PROTO)
 /*
  * Undefine/free all signs.

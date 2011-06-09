@@ -687,6 +687,9 @@ static void f_settabvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_settabwinvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_setwinvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_shellescape __ARGS((typval_T *argvars, typval_T *rettv));
+#ifdef FEAT_SIGNS
+static void f_signexists __ARGS((typval_T *argvars, typval_T *rettv));
+#endif
 static void f_simplify __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_FLOAT
 static void f_sin __ARGS((typval_T *argvars, typval_T *rettv));
@@ -7925,6 +7928,9 @@ static struct fst
     {"settabwinvar",	4, 4, f_settabwinvar},
     {"setwinvar",	3, 3, f_setwinvar},
     {"shellescape",	1, 2, f_shellescape},
+#ifdef FEAT_SIGNS
+    {"signexists",	1, 1, f_signexists},
+#endif
     {"simplify",	1, 1, f_simplify},
 #ifdef FEAT_FLOAT
     {"sin",		1, 1, f_sin},
@@ -16300,6 +16306,19 @@ f_shellescape(argvars, rettv)
 		       get_tv_string(&argvars[0]), non_zero_arg(&argvars[1]));
     rettv->v_type = VAR_STRING;
 }
+
+#ifdef FEAT_SIGNS
+/*
+ * "signexists()" function
+ */
+    static void
+f_signexists(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    rettv->vval.v_number = sign_exists(get_tv_string(&argvars[0]));
+}
+#endif
 
 /*
  * "simplify()" function
