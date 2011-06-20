@@ -7142,6 +7142,18 @@ sign_get_image(typenr)
 	    return sp->sn_image;
     return NULL;
 }
+
+    char_u *
+sign_get_icon(typenr)
+    int		typenr;
+{
+    sign_T	*sp;
+
+    for (sp = first_sign; sp != NULL; sp = sp->sn_next)
+	if (sp->sn_typenr == typenr)
+	    return sp->sn_icon;
+    return NULL;
+}
 #endif
 
 /*

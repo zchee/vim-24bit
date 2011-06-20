@@ -578,6 +578,9 @@ static void f_getpos __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getqflist __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getreg __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getregtype __ARGS((typval_T *argvars, typval_T *rettv));
+#ifdef FEAT_SIGNS
+static void f_getsigns __ARGS((typval_T *argvars, typval_T *rettv));
+#endif
 static void f_gettabvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_gettabwinvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getwinposx __ARGS((typval_T *argvars, typval_T *rettv));
@@ -7817,6 +7820,9 @@ static struct fst
     {"getqflist",	0, 0, f_getqflist},
     {"getreg",		0, 2, f_getreg},
     {"getregtype",	0, 1, f_getregtype},
+#ifdef FEAT_SIGNS
+    {"getsigns",	1, 1, f_getsigns},
+#endif
     {"gettabvar",	2, 2, f_gettabvar},
     {"gettabwinvar",	3, 3, f_gettabwinvar},
     {"getwinposx",	0, 0, f_getwinposx},
@@ -11547,6 +11553,40 @@ f_getregtype(argvars, rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = vim_strsave(buf);
 }
+
+#ifdef FEAT_SIGNS
+/*
+ * "getsigns()" function
+ */
+    static void
+f_getsigns(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    dict_T	*dict;
+    signlist_T	*sign;
+
+    if(rettv_list_alloc(rettv) == OK)
+    {
+	for (sign = curbuf->b_signlist; sign != NULL; sign = sign->next)
+	{
+	    dict = dict_alloc();
+	    if (dict == NULL)
+		return;
+	    dict_add_nr_str(dict, "id", (long)sign->id, NULL);
+	    dict_add_nr_str(dict, "name", 0L, sign_typenr2name(sign->typenr));
+	    dict_add_nr_str(dict, "line", (long)sign->lnum, NULL);
+	    dict_add_nr_str(dict, "linehl", (long)sign_get_attr(sign->typenr, TRUE), NULL);
+	    dict_add_nr_str(dict, "texthl", (long)sign_get_attr(sign->typenr, FALSE), NULL);
+	    dict_add_nr_str(dict, "text", 0L, sign_get_text(sign->typenr));
+# ifdef FEAT_SIGN_ICONS
+	    dict_add_nr_str(dict, "icon", 0L, sign_get_icon(sign->typenr));
+# endif
+	    list_append_dict(rettv->vval.v_list, dict);
+	}
+    }
+}
+#endif
 
 /*
  * "gettabvar()" function
