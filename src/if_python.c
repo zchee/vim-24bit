@@ -1539,8 +1539,8 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 {
     char_u	*key = PyString_AsString(keyObject);
     typval_T	tv;
-    dictitem_T	*di;
     dict_T	*d = ((DictionaryObject *)(self))->dict;
+    dictitem_T	*di;
 
     if(d->dv_lock)
     {
@@ -1548,11 +1548,23 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	return -1;
     }
 
+    di = dict_find(d, key, -1);
+
+    if(valObject == NULL) {
+	if(di == NULL) {
+	    PyErr_SetString(PyExc_IndexError, _("no such key in dictionary"));
+	    return -1;
+	}
+	hashitem_T	*hi = hash_find(&d->dv_hashtab, di->di_key);
+	hash_remove(&d->dv_hashtab, hi);
+	dictitem_free(di);
+	return 0;
+    }
+
     if(ConvertFromPyObject(valObject, &tv) == -1) {
 	return -1;
     }
 
-    di = dict_find(d, key, -1);
     if(di == NULL) {
 	di = dictitem_alloc(key);
 	if(di == NULL) {
