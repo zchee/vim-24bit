@@ -151,7 +151,6 @@ struct PyMethodDef { Py_ssize_t a; };
 # endif
 # define PyInt_AsLong dll_PyInt_AsLong
 # define PyInt_FromLong dll_PyInt_FromLong
-# define PyInt_Check dll_PyInt_Check
 # define PyInt_Type (*dll_PyInt_Type)
 # define PyList_GetItem dll_PyList_GetItem
 # define PyList_Append dll_PyList_Append
@@ -159,15 +158,12 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyList_SetItem dll_PyList_SetItem
 # define PyList_Size dll_PyList_Size
 # define PyList_Type (*dll_PyList_Type)
-# define PyList_Check dll_PyList_Check
 # define PyTuple_Size dll_PyTuple_Size
 # define PyTuple_GetItem dll_PyTuple_GetItem
-# define PyTuple_Check dll_PyTuple_Check
 # define PyTuple_Type (*dll_PyTuple_Type)
 # define PyImport_ImportModule dll_PyImport_ImportModule
 # define PyDict_New dll_PyDict_New
 # define PyDict_GetItemString dll_PyDict_GetItemString
-# define PyDict_Check dll_PyDict_Check
 # define PyDict_Items dll_PyDict_Items
 # define PyModule_GetDict dll_PyModule_GetDict
 # define PyRun_SimpleString dll_PyRun_SimpleString
@@ -176,11 +172,9 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyString_FromString dll_PyString_FromString
 # define PyString_FromStringAndSize dll_PyString_FromStringAndSize
 # define PyString_Size dll_PyString_Size
-# define PyString_Check dll_PyString_Check
 # define PyString_Type (*dll_PyString_Type)
 # define PyFloat_AsDouble dll_PyFloat_AsDouble
 # define PyFloat_FromDouble dll_PyFloat_FromDouble
-# define PyFloat_Check dll_PyFloat_Check
 # define PyFloat_Type (*dll_PyFloat_Type)
 # define PyImport_AddModule (*dll_PyImport_AddModule)
 # define PySys_SetObject dll_PySys_SetObject
@@ -234,14 +228,13 @@ static PyObject*(*dll_PyList_New)(PyInt size);
 static int(*dll_PyList_SetItem)(PyObject *, PyInt, PyObject *);
 static PyInt(*dll_PyList_Size)(PyObject *);
 static PyTypeObject* dll_PyList_Type;
-static int(*dll_PyList_Check)(PyObject *);
-static int(*dll_PyTuple_Check)(PyObject *);
 static PyInt(*dll_PyTuple_Size)(PyObject *);
 static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
 static PyTypeObject* dll_PyTuple_Type;
 static PyObject*(*dll_PyImport_ImportModule)(const char *);
 static PyObject*(*dll_PyDict_New)(void);
 static PyObject*(*dll_PyDict_GetItemString)(PyObject *, const char *);
+static PyObject*(*dll_PyDict_Items)(PyObject *);
 static PyObject*(*dll_PyModule_GetDict)(PyObject *);
 static int(*dll_PyRun_SimpleString)(char *);
 static PyObject *(*dll_PyRun_String)(char *, int, PyObject *, PyObject *);
@@ -250,6 +243,8 @@ static PyObject*(*dll_PyString_FromString)(const char *);
 static PyObject*(*dll_PyString_FromStringAndSize)(const char *, PyInt);
 static PyInt(*dll_PyString_Size)(PyObject *);
 static PyTypeObject* dll_PyString_Type;
+static double(*dll_PyFloat_AsDouble)(PyObject *);
+static PyObject*(*dll_PyFloat_FromDouble)(double);
 static PyTypeObject* dll_PyFloat_Type;
 static int(*dll_PySys_SetObject)(char *, PyObject *);
 static int(*dll_PySys_SetArgv)(int, char **);
@@ -258,6 +253,7 @@ static int (*dll_PyType_Ready)(PyTypeObject *type);
 static PyObject*(*dll_Py_BuildValue)(char *, ...);
 static PyObject*(*dll_Py_FindMethod)(struct PyMethodDef[], PyObject *, char *);
 static PyObject*(*dll_Py_InitModule4)(char *, struct PyMethodDef *, char *, PyObject *, int);
+static PyObject*(*dll_PyImport_AddModule)(char *);
 static void(*dll_Py_SetPythonHome)(char *home);
 static void(*dll_Py_Initialize)(void);
 static void(*dll_Py_Finalize)(void);
@@ -317,7 +313,6 @@ static struct
 # endif
     {"PyInt_AsLong", (PYTHON_PROC*)&dll_PyInt_AsLong},
     {"PyInt_FromLong", (PYTHON_PROC*)&dll_PyInt_FromLong},
-    {"PyInt_Check", (PYTHON_PROC*)&dll_PyInt_Check},
     {"PyInt_Type", (PYTHON_PROC*)&dll_PyInt_Type},
     {"PyList_GetItem", (PYTHON_PROC*)&dll_PyList_GetItem},
     {"PyList_Append", (PYTHON_PROC*)&dll_PyList_Append},
@@ -325,14 +320,11 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&dll_PyList_SetItem},
     {"PyList_Size", (PYTHON_PROC*)&dll_PyList_Size},
     {"PyList_Type", (PYTHON_PROC*)&dll_PyList_Type},
-    {"PyList_Check", (PYTHON_PROC*)&dll_PyList_Check},
-    {"PyTuple_Check", (PYTHON_PROC*)&dll_PyTuple_Check},
     {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
     {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
     {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
-    {"PyDict_Check", (PYTHON_PROC*)&dll_PyDict_Check},
     {"PyDict_Items", (PYTHON_PROC*)&dll_PyDict_Items},
     {"PyDict_New", (PYTHON_PROC*)&dll_PyDict_New},
     {"PyModule_GetDict", (PYTHON_PROC*)&dll_PyModule_GetDict},
@@ -342,12 +334,10 @@ static struct
     {"PyString_FromString", (PYTHON_PROC*)&dll_PyString_FromString},
     {"PyString_FromStringAndSize", (PYTHON_PROC*)&dll_PyString_FromStringAndSize},
     {"PyString_Size", (PYTHON_PROC*)&dll_PyString_Size},
-    {"PyString_Check", (PYTHON_PROC*)&dll_PyString_Check},
     {"PyString_Type", (PYTHON_PROC*)&dll_PyString_Type},
     {"PyFloat_Type", (PYTHON_PROC*)&dll_PyFloat_Type},
     {"PyFloat_AsDouble", (PYTHON_PROC*)&dll_PyFloat_AsDouble},
     {"PyFloat_FromDouble", (PYTHON_PROC*)&dll_PyFloat_FromDouble},
-    {"PyFloat_Check", (PYTHON_PROC*)&dll_PyFloat_Check},
     {"PyImport_AddModule", (PYTHON_PROC*)&dll_PyImport_AddModule},
     {"PySys_SetObject", (PYTHON_PROC*)&dll_PySys_SetObject},
     {"PySys_SetArgv", (PYTHON_PROC*)&dll_PySys_SetArgv},
@@ -1566,7 +1556,7 @@ DictionaryItem(PyObject *self, PyObject *keyObject)
     char_u	*key;
     dictitem_T	*val;
 
-    key = PyString_AsString(keyObject);
+    key = (char_u *) PyString_AsString(keyObject);
     val = dict_find(((DictionaryObject *) (self))->dict, key, -1);
 
     return ConvertToPyObject(&val->di_tv);
@@ -1575,7 +1565,7 @@ DictionaryItem(PyObject *self, PyObject *keyObject)
     static PyInt
 DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 {
-    char_u	*key = PyString_AsString(keyObject);
+    char_u	*key = (char_u *) PyString_AsString(keyObject);
     typval_T	tv;
     dict_T	*d = ((DictionaryObject *)(self))->dict;
     dictitem_T	*di;
@@ -1644,6 +1634,7 @@ list_py_concat(list_T *l, PyObject *obj, PyInquiry Size, PyIntArgFunc Item)
 	    return -1;
 	}
     }
+    return 0;
 }
 
 /* FIXME Copy-paste from if_lua.c */
@@ -1836,7 +1827,8 @@ ListConcatInPlace(PyObject *self, PyObject *obj)
 	return NULL;
     }
 
-    list_py_concat(((ListObject *) (self))->list, obj, PyList_Size, PyList_GetItem);
+    if(list_py_concat(((ListObject *) (self))->list, obj, PyList_Size, PyList_GetItem)==-1)
+	return NULL;
 
     return self;
 }
@@ -2047,7 +2039,8 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 
 	/* TODO: Add support for PyTuple? */
 	l = list_alloc();
-	list_py_concat(l, obj, PyList_Size, PyList_GetItem);
+	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
+	    return -1;
 
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = l;
@@ -2057,7 +2050,8 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	list_T	*l;
 
 	l = list_alloc();
-	list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem);
+	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
+	    return -1;
 
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = l;
