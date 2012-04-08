@@ -546,6 +546,13 @@ typedef struct
     list_T	*list;
 } ListObject;
 
+static PyObject *ListConcatInPlace(PyObject *, PyObject *);
+
+static struct PyMethodDef ListMethods[] = {
+    {"extend", (PyCFunction)ListConcatInPlace, METH_O, ""},
+    { NULL,	    NULL,		0,	    NULL }
+};
+
 typedef struct
 {
     PyObject_HEAD

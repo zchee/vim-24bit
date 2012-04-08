@@ -1687,9 +1687,8 @@ static PyObject *ListItem(PyObject *, Py_ssize_t);
 static PyObject *ListSlice(PyObject *, Py_ssize_t, Py_ssize_t);
 static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
 static int ListAssSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
-#if PY_MAJOR_VERSION >= 2
 static PyObject *ListConcatInPlace(PyObject *, PyObject *);
-#endif
+static PyObject *ListGetattr(PyObject *, char *);
 
 static PySequenceMethods ListAsSeq = {
     (PyInquiry)			ListLength,
@@ -1714,7 +1713,7 @@ static PyTypeObject ListType = {
 
     (destructor)  ListDestructor,
     (printfunc)   0,
-    (getattrfunc) 0,
+    (getattrfunc) ListGetattr,
     (setattrfunc) 0,
     (cmpfunc)     0,
     (reprfunc)    0,
@@ -1746,6 +1745,12 @@ ListDestructor(PyObject *self)
     list_unref(((ListObject *)(self))->list);
 
     Py_DECREF(self);
+}
+
+    static PyObject *
+ListGetattr(PyObject *self, char *name)
+{
+    return Py_FindMethod(ListMethods, self, name);
 }
 
     static PyInt
