@@ -1680,6 +1680,7 @@ static PyInt ListLength(PyObject *);
 static PyObject *ListConcat(PyObject *, PyObject *);
 static PyObject *ListRepeat(PyObject *, Py_ssize_t);
 static PyObject *ListItem(PyObject *, Py_ssize_t);
+static PyObject *ListSlice(PyObject *, Py_ssize_t, Py_ssize_t);
 static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
 #if PY_MAJOR_VERSION >= 2
 static PyObject *ListConcatInPlace(PyObject *, PyObject *);
@@ -1690,7 +1691,7 @@ static PySequenceMethods ListAsSeq = {
     (binaryfunc)		ListConcat,
     (PyIntArgFunc)		ListRepeat,
     (PyIntArgFunc)		ListItem,
-    (PyIntIntArgFunc)		0,
+    (PyIntIntArgFunc)		ListSlice,
     (PyIntObjArgProc)		ListAssItem,
     (PyIntIntObjArgProc)	0,
     (objobjproc)		0,
@@ -1775,6 +1776,51 @@ ListItem(PyObject *self, Py_ssize_t index)
 	return NULL;
     }
     return ConvertToPyObject(&li->li_tv);
+}
+
+    static PyObject *
+ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
+{
+    PyInt	i;
+    PyInt	size = ListLength(self);
+    PyInt	n;
+    PyObject	*list;
+    int		reversed = 0;
+
+    if(first < 0)
+	first += size;
+    if(last < 0)
+	last += size;
+
+    if(first > size-1) {
+	PyErr_SetString(PyExc_IndexError, _("list index out of range"));
+	return NULL;
+    }
+    if(last > size)
+	last = size;
+    if(first >= last) {
+	first = last;
+    }
+    n = last-first;
+    list = PyList_New(n);
+    if(list == NULL)
+	return NULL;
+
+    for (i = 0; i < n; ++i) {
+	PyObject	*item = ListItem(self, i);
+	if(item == NULL) {
+	    Py_DECREF(list);
+	    return NULL;
+	}
+
+	if((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item))) {
+	    Py_DECREF(item);
+	    Py_DECREF(list);
+	    return NULL;
+	}
+    }
+
+    return list;
 }
 
     static int
@@ -2044,7 +2090,6 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
     else if(PyList_Check(obj)) {
 	list_T	*l;
 
-	/* TODO: Add support for PyTuple? */
 	l = list_alloc();
 	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
 	    return -1;
