@@ -490,8 +490,7 @@ typedef struct
 {
     PyObject_HEAD
     buf_T *buf;
-}
-BufferObject;
+} BufferObject;
 
 #define INVALID_BUFFER_VALUE ((buf_T *)(-1))
 
@@ -546,6 +545,20 @@ typedef struct
     PyObject_HEAD
     list_T	*list;
 } ListObject;
+
+typedef struct
+{
+    PyObject_HEAD
+    char_u	*name;
+} FunctionObject;
+
+static PyObject *FunctionCall(PyObject *, PyObject *);
+
+static struct PyMethodDef FunctionMethods[] = {
+    /* name,	    function,		calling,    documentation */
+    {"__call__",    FunctionCall,       METH_VARARGS | METH_KEYWORDS, ""},
+    { NULL,	    NULL,		0,	    NULL }
+};
 
 #define INVALID_WINDOW_VALUE ((win_T *)(-1))
 

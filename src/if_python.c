@@ -1511,9 +1511,7 @@ DictionaryNew(dict_T *dict)
     static void
 DictionaryDestructor(PyObject *self)
 {
-    DictionaryObject *this = (DictionaryObject *)(self);
-
-    dict_unref(this->dict);
+    dict_unref(((DictionaryObject *)(self))->dict);
 
     Py_DECREF(self);
 }
@@ -1589,16 +1587,16 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 #define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
 
     static int
-list_py_concat(list_T *l, PyObject *obj)
+list_py_concat(list_T *l, PyObject *obj, PyInquiry Size, PyIntArgFunc Item)
 {
     Py_ssize_t	i;
-    Py_ssize_t	lsize = PyList_Size(obj);
+    Py_ssize_t	lsize = Size(obj);
     PyObject	*litem;
     listitem_T	*li;
     typval_T	v;
 
     for(i=0; i<lsize; i++) {
-	litem = PyList_GetItem(obj, i);
+	litem = Item(obj, i);
 	OBJ_NULL_ERR(litem, "internal error: no list item")
 	if(ConvertFromPyObject(litem, &v) == -1) {
 	    return -1;
@@ -1710,9 +1708,7 @@ ListNew(list_T *list)
     static void
 ListDestructor(PyObject *self)
 {
-    ListObject *this = (ListObject *)(self);
-
-    list_unref(this->list);
+    list_unref(((ListObject *)(self))->list);
 
     Py_DECREF(self);
 }
@@ -1802,9 +1798,108 @@ ListConcatInPlace(PyObject *self, PyObject *obj)
 	return NULL;
     }
 
-    list_py_concat(((ListObject *) (self))->list, obj);
+    list_py_concat(((ListObject *) (self))->list, obj, PyList_Size, PyList_GetItem);
 
     return self;
+}
+
+static void FunctionDestructor(PyObject *);
+static PyObject *FunctionGetattr(PyObject *, char *);
+
+static PyTypeObject FunctionType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "vimfunction",
+    sizeof(FunctionObject),
+    0,
+
+    (destructor)  FunctionDestructor,
+    (printfunc)   0,
+    (getattrfunc) FunctionGetattr,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    0,                      /* as sequence */
+    0,                      /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) 0,
+    (reprfunc)    0,
+};
+
+    static PyObject *
+FunctionNew(char_u *name)
+{
+    FunctionObject	*self;
+
+    self = PyObject_NEW(FunctionObject, &FunctionType);
+    if(self == NULL)
+	return NULL;
+    self->name = name;
+    func_ref(name);
+    return (PyObject *)(self);
+}
+
+    static void
+FunctionDestructor(PyObject *self)
+{
+    func_unref(((FunctionObject *) self)->name);
+
+    Py_DECREF(self);
+}
+
+    static PyObject *
+FunctionGetattr(PyObject *self, char *name)
+{
+    FunctionObject	*this = (FunctionObject *)(self);
+
+    if(strcmp(name, "name") == 0)
+	return PyString_FromString((char *)(this->name));
+    else
+	return Py_FindMethod(FunctionMethods, self, name);
+}
+
+    static PyObject *
+FunctionCall(PyObject *self, PyObject *argsObject)
+{
+    FunctionObject	*this = (FunctionObject *)(self);
+    char_u	*name = this->name;
+    typval_T	args;
+    typval_T	selfdicttv;
+    typval_T	rettv;
+    dict_T	*selfdict = NULL;
+    PyObject	*selfdictObject;
+    PyObject	*result;
+    PyObject	*kwargs = NULL;
+
+    if(ConvertFromPyObject(argsObject, &args) == -1)
+	return NULL;
+
+    /*
+     * selfdictObject = PyDict_GetItemString(kwargs, "self");
+     * if(selfdictObject != NULL) {
+     *     if(ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
+     *         return NULL;
+     *     if(selfdicttv.v_type != VAR_DICT)
+     *     {
+     *         PyErr_SetString(PyExc_TypeError, _("'self' argument must be a dictionary"));
+     *         return NULL;
+     *     }
+     *     selfdict = selfdicttv.vval.v_dict;
+     * }
+     */
+
+    func_call(name, &args, selfdict, &rettv);
+    result = ConvertToPyObject(&rettv);
+
+    clear_tv(&args);
+    clear_tv(&rettv);
+    if(selfdict != NULL)
+	clear_tv(&selfdicttv);
+
+    return result;
 }
 
     static PyObject *
@@ -1812,6 +1907,7 @@ ConvertToPyObject(typval_T *tv)
 {
     if(tv == NULL)
     {
+	PyErr_SetVim(_("NULL reference passed"));
 	return NULL;
     }
     switch (tv->v_type)
@@ -1828,7 +1924,10 @@ ConvertToPyObject(typval_T *tv)
 	    return ListNew(tv->vval.v_list);
 	case VAR_DICT:
 	    return DictionaryNew(tv->vval.v_dict);
+	case VAR_FUNC:
+	    return FunctionNew(tv->vval.v_string);
 	default:
+	    PyErr_SetVim(_("internal error: invalid value type"));
 	    return NULL;
     }
 }
@@ -1910,7 +2009,17 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 
 	/* TODO: Add support for PyTuple? */
 	l = list_alloc();
-	list_py_concat(l, obj);
+	list_py_concat(l, obj, PyList_Size, PyList_GetItem);
+
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = l;
+    }
+    else if(PyTuple_Check(obj))
+    {
+	list_T	*l;
+
+	l = list_alloc();
+	list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem);
 
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = l;
@@ -1922,7 +2031,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
     }
 #endif
     else {
-	PyErr_BadArgument();
+	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
 	return -1;
     }
     return 0;

@@ -827,8 +827,6 @@ static int script_autoload __ARGS((char_u *name, int reload));
 static char_u *autoload_name __ARGS((char_u *name));
 static void cat_func_name __ARGS((char_u *buf, ufunc_T *fp));
 static void func_free __ARGS((ufunc_T *fp));
-static void func_unref __ARGS((char_u *name));
-static void func_ref __ARGS((char_u *name));
 static void call_user_func __ARGS((ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rettv, linenr_T firstline, linenr_T lastline, dict_T *selfdict));
 static int can_free_funccal __ARGS((funccall_T *fc, int copyID)) ;
 static void free_funccal __ARGS((funccall_T *fc, int free_val));
@@ -9155,6 +9153,42 @@ f_byteidx(argvars, rettv)
 #endif
 }
 
+    void
+func_call(name, args, selfdict, rettv)
+    char_u	*name;
+    typval_T	*args;
+    dict_T	*selfdict;
+    typval_T	*rettv;
+{
+    listitem_T	*item;
+    typval_T	argv[MAX_FUNC_ARGS + 1];
+    int		argc = 0;
+    int		dummy;
+
+    for (item = args->vval.v_list->lv_first; item != NULL;
+							 item = item->li_next)
+    {
+	if (argc == MAX_FUNC_ARGS)
+	{
+	    EMSG(_("E699: Too many arguments"));
+	    break;
+	}
+	/* Make a copy of each argument.  This is needed to be able to set
+	 * v_lock to VAR_FIXED in the copy without changing the original list.
+	 */
+	copy_tv(&item->li_tv, &argv[argc++]);
+    }
+
+    if (item == NULL)
+	(void)call_func(name, (int)STRLEN(name), rettv, argc, argv,
+				 curwin->w_cursor.lnum, curwin->w_cursor.lnum,
+						      &dummy, TRUE, selfdict);
+
+    /* Free the arguments. */
+    while (argc > 0)
+	clear_tv(&argv[--argc]);
+}
+
 /*
  * "call(func, arglist)" function
  */
@@ -9164,10 +9198,6 @@ f_call(argvars, rettv)
     typval_T	*rettv;
 {
     char_u	*func;
-    typval_T	argv[MAX_FUNC_ARGS + 1];
-    int		argc = 0;
-    listitem_T	*item;
-    int		dummy;
     dict_T	*selfdict = NULL;
 
     if (argvars[1].v_type != VAR_LIST)
@@ -9195,28 +9225,7 @@ f_call(argvars, rettv)
 	selfdict = argvars[2].vval.v_dict;
     }
 
-    for (item = argvars[1].vval.v_list->lv_first; item != NULL;
-							 item = item->li_next)
-    {
-	if (argc == MAX_FUNC_ARGS)
-	{
-	    EMSG(_("E699: Too many arguments"));
-	    break;
-	}
-	/* Make a copy of each argument.  This is needed to be able to set
-	 * v_lock to VAR_FIXED in the copy without changing the original list.
-	 */
-	copy_tv(&item->li_tv, &argv[argc++]);
-    }
-
-    if (item == NULL)
-	(void)call_func(func, (int)STRLEN(func), rettv, argc, argv,
-				 curwin->w_cursor.lnum, curwin->w_cursor.lnum,
-						      &dummy, TRUE, selfdict);
-
-    /* Free the arguments. */
-    while (argc > 0)
-	clear_tv(&argv[--argc]);
+    func_call(func, &argvars[1], selfdict, rettv);
 }
 
 #ifdef FEAT_FLOAT
@@ -22154,7 +22163,7 @@ func_free(fp)
  * Unreference a Function: decrement the reference count and free it when it
  * becomes zero.  Only for numbered functions.
  */
-    static void
+    void
 func_unref(name)
     char_u	*name;
 {
@@ -22178,7 +22187,7 @@ func_unref(name)
 /*
  * Count a reference to a Function.
  */
-    static void
+    void
 func_ref(name)
     char_u	*name;
 {
