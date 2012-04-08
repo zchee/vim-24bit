@@ -552,11 +552,10 @@ typedef struct
     char_u	*name;
 } FunctionObject;
 
-static PyObject *FunctionCall(PyObject *, PyObject *);
+static PyObject *FunctionCall(PyObject *, PyObject *, PyObject *);
 
 static struct PyMethodDef FunctionMethods[] = {
-    /* name,	    function,		calling,    documentation */
-    {"__call__",    FunctionCall,       METH_VARARGS | METH_KEYWORDS, ""},
+    {"__call__",    (PyCFunction)FunctionCall, METH_VARARGS|METH_KEYWORDS, ""},
     { NULL,	    NULL,		0,	    NULL }
 };
 
