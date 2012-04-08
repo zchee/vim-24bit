@@ -1459,7 +1459,7 @@ static PyMappingMethods DictionaryAsMapping = {
 static PyTypeObject DictionaryType = {
     PyObject_HEAD_INIT(0)
     0,
-    "dictionary",
+    "vimdictionary",
     sizeof(DictionaryObject),
     0,
 
@@ -1488,9 +1488,9 @@ DictionaryNew(dict_T *dict)
      */
     DictionaryObject *self;
 
-    if (dict->d_python_ref != NULL)
+    if (dict->dv_python_ref != NULL)
     {
-	self = dict->d_python_ref;
+	self = dict->dv_python_ref;
 	Py_INCREF(self);
     }
     else
@@ -1500,7 +1500,7 @@ DictionaryNew(dict_T *dict)
 	    return NULL;
 	self->dict = dict;
 	++dict->dv_refcount;
-	dict->d_python_ref = self;
+	dict->dv_python_ref = self;
     }
 
     return (PyObject *)(self);
@@ -1572,6 +1572,212 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
     return 0;
 }
 
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
+
+    static int
+list_py_concat(list_T *l, PyObject *obj)
+{
+    Py_ssize_t	i;
+    Py_ssize_t	lsize = PyList_Size(obj);
+    PyObject	*litem;
+    listitem_T	*li;
+    typval_T	v;
+
+    for(i=0; i<lsize; i++) {
+	litem = PyList_GetItem(obj, i);
+	OBJ_NULL_ERR(litem, "internal error: no list item")
+	if(ConvertFromPyObject(litem, &v) == -1) {
+	    return -1;
+	}
+	if(list_append_tv(l, &v) == FAIL) {
+	    PyErr_SetVim(_("failed to add item to list"));
+	    return -1;
+	}
+    }
+}
+
+    static listitem_T *
+list_find (list_T *l, long n)
+{
+    /* Copy-paste from if_lua.c */
+    listitem_T *li;
+    if (l == NULL || n < -l->lv_len || n >= l->lv_len)
+	return NULL;
+    if (n < 0) /* search backward? */
+	for (li = l->lv_last; n < -1; li = li->li_prev)
+	    n++;
+    else /* search forward */
+	for (li = l->lv_first; n > 0; li = li->li_next)
+	    n--;
+    return li;
+}
+
+static void ListDestructor(PyObject *);
+static PyInt ListLength(PyObject *);
+static PyObject *ListConcat(PyObject *, PyObject *);
+static PyObject *ListRepeat(PyObject *, Py_ssize_t);
+static PyObject *ListItem(PyObject *, Py_ssize_t);
+static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
+#if PY_MAJOR_VERSION >= 2
+static PyObject *ListConcatInPlace(PyObject *, PyObject *);
+#endif
+
+static PySequenceMethods ListAsSeq = {
+    (PyInquiry)			ListLength,
+    (binaryfunc)		ListConcat,
+    (PyIntArgFunc)		ListRepeat,
+    (PyIntArgFunc)		ListItem,
+    (PyIntIntArgFunc)		0,
+    (PyIntObjArgProc)		ListAssItem,
+    (PyIntIntObjArgProc)	0,
+    (objobjproc)		0,
+#if PY_MAJOR_VERSION >= 2
+    (binaryfunc)		ListConcatInPlace,
+#endif
+};
+
+static PyTypeObject ListType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "vimlist",
+    sizeof(ListObject),
+    0,
+
+    (destructor)  ListDestructor,
+    (printfunc)   0,
+    (getattrfunc) 0,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    &ListAsSeq,             /* as sequence */
+    0,                      /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) 0,
+    (reprfunc)    0,
+};
+
+    static PyObject *
+ListNew(list_T *list)
+{
+    /*
+     * Increments reference count for given list so that it won’t be suddenly 
+     * freed. It is decremeted back in destructor.
+     */
+    ListObject *self;
+
+    if (list->lv_python_ref != NULL)
+    {
+	self = list->lv_python_ref;
+	Py_INCREF(self);
+    }
+    else
+    {
+	self = PyObject_NEW(ListObject, &ListType);
+	if (self == NULL)
+	    return NULL;
+	self->list = list;
+	++list->lv_refcount;
+	list->lv_python_ref = self;
+    }
+
+    return (PyObject *)(self);
+}
+
+    static void
+ListDestructor(PyObject *self)
+{
+    ListObject *this = (ListObject *)(self);
+
+    list_unref(this->list);
+
+    Py_DECREF(self);
+}
+
+    static PyInt
+ListLength(PyObject *self)
+{
+    return ((PyInt) (((ListObject *) (self))->list->lv_len));
+}
+
+    static PyObject *
+ListConcat(PyObject *self, PyObject *obj)
+{
+    return NULL;
+}
+
+    static PyObject *
+ListRepeat(PyObject *self, Py_ssize_t count)
+{
+    return NULL;
+}
+
+    static PyObject *
+ListItem(PyObject *self, Py_ssize_t index)
+{
+    listitem_T	*li;
+
+    if(index>=ListLength(self)) {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+	return NULL;
+    }
+    li = list_find(((ListObject *) (self))->list, (long) index);
+    if(li == NULL) {
+	PyErr_SetVim(_("internal error: failed to get vim list item"));
+	return NULL;
+    }
+    return ConvertToPyObject(&li->li_tv);
+}
+
+    static int
+ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
+{
+    typval_T	tv;
+    Py_ssize_t	length;
+    list_T	*l;
+    listitem_T	*li;
+
+    if(ConvertFromPyObject(obj, &tv) == -1)
+	return -1;
+
+    length = ListLength(self);
+    l = ((ListObject *) (self))->list;
+    if(index>length) {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+    }
+    else if(index == length) {
+	if(list_append_tv(l, &tv) == FAIL) {
+		PyErr_SetVim(_("internal error: failed to add item to list"));
+		return -1;
+	}
+    }
+    else {
+	li = list_find(l, (long) index);
+	if(li == NULL) {
+	    PyErr_SetVim(_("internal error: list index out of range"));
+	    return -1;
+	}
+	clear_tv(&li->li_tv);
+	copy_tv(&tv, &li->li_tv);
+    }
+    return 0;
+}
+
+    static PyObject *
+ListConcatInPlace(PyObject *self, PyObject *obj)
+{
+    if(!PyList_Check(obj)) {
+	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
+	return NULL;
+    }
+
+    list_py_concat(((ListObject *) (self))->list, obj);
+
+    return self;
+}
+
     static PyObject *
 ConvertToPyObject(typval_T *tv)
 {
@@ -1590,8 +1796,7 @@ ConvertToPyObject(typval_T *tv)
 	    return PyFloat_FromDouble((double) tv->vval.v_float);
 #endif
 	case VAR_LIST:
-	    /* TODO */
-	    return NULL;
+	    return ListNew(tv->vval.v_list);
 	case VAR_DICT:
 	    return DictionaryNew(tv->vval.v_dict);
 	default:
@@ -1599,23 +1804,9 @@ ConvertToPyObject(typval_T *tv)
     }
 }
 
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
-
     static int
 ConvertFromPyObject(PyObject *obj, typval_T *tv)
 {
-    dict_T	*d;
-    char_u	*key;
-    dictitem_T	*di;
-    PyObject	*lst;
-    PyObject	*litem;
-    PyObject	*lobj;
-    Py_ssize_t	lsize;
-    Py_ssize_t	i;
-    typval_T	v;
-    list_T	*l;
-    listitem_T	*li;
-
     if(obj->ob_type == &DictionaryType) {
 	tv->v_type = VAR_DICT;
 	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
@@ -1635,6 +1826,15 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
     }
     else if(PyDict_Check(obj)) {
+	dict_T	*d;
+	char_u	*key;
+	dictitem_T	*di;
+	PyObject	*lst;
+	PyObject	*litem;
+	PyObject	*lobj;
+	Py_ssize_t	lsize;
+	typval_T	v;
+
 	d = dict_alloc();
 	lst = PyDict_Items(obj);
 	lsize = PyList_Size(lst);
@@ -1674,20 +1874,11 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	tv->vval.v_dict = d;
     }
     else if(PyList_Check(obj)) {
+	list_T	*l;
+
 	/* TODO: Add support for PyTuple? */
 	l = list_alloc();
-	lsize = PyList_Size(obj);
-	for(i=0; i<lsize; i++) {
-	    litem = PyList_GetItem(obj, i);
-	    OBJ_NULL_ERR(litem, "internal error: no list item")
-	    if(ConvertFromPyObject(litem, &v) == -1) {
-		return -1;
-	    }
-	    if(list_append_tv(l, &v) == FAIL) {
-		PyErr_SetVim(_("failed to add item to list"));
-		return -1;
-	    }
-	}
+	list_py_concat(l, obj);
 
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = l;

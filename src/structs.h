@@ -1150,6 +1150,10 @@ struct listvar_S
     char	lv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
     list_T	*lv_used_next;	/* next list in used lists list */
     list_T	*lv_used_prev;	/* previous list in used lists list */
+
+#ifdef FEAT_PYTHON
+    void	*lv_python_ref;	/* The Python reference to this list */
+#endif
 };
 
 /*
@@ -1185,7 +1189,7 @@ struct dictvar_S
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
 
 #ifdef FEAT_PYTHON
-    void	*d_python_ref;	/* The Python reference to this dictionary */
+    void	*dv_python_ref;	/* The Python reference to this dictionary */
 #endif
 
 };
