@@ -1792,6 +1792,7 @@ ListItem(PyObject *self, Py_ssize_t index)
 	else \
 	    idx += size; \
     }
+/* FIXME l[2:-10] in python adds the third item, here it adds the first one */
 #define PROC_RANGE(err_val) \
     NEGATIVE_INDEX(first) \
     NEGATIVE_INDEX(last) \
@@ -1891,6 +1892,11 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
     listitem_T	*next;
     typval_T	v;
     list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock) {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
 
     PROC_RANGE(-1)
 
