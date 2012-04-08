@@ -440,6 +440,40 @@ VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
 #endif
 }
 
+static PyObject *ConvertToPyObject(typval_T *);
+
+    static PyObject *
+VimEvalPy(PyObject *self UNUSED, PyObject *args UNUSED)
+{
+#ifdef FEAT_EVAL
+    char	*expr;
+    typval_T	*our_tv;
+    PyObject	*result;
+    PyObject    *lookup_dict;
+
+    if (!PyArg_ParseTuple(args, "s", &expr))
+	return NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    Python_Lock_Vim();
+    our_tv = eval_expr((char_u *)expr, NULL);
+
+    Python_Release_Vim();
+    Py_END_ALLOW_THREADS
+
+    if (our_tv == NULL)
+    {
+	PyErr_SetVim(_("invalid expression"));
+	return NULL;
+    }
+
+    return ConvertToPyObject(our_tv);
+#else
+    PyErr_SetVim(_("expressions disabled at compile time"));
+    return NULL;
+#endif
+}
+
 /*
  * Vim module - Definitions
  */
@@ -448,6 +482,7 @@ static struct PyMethodDef VimMethods[] = {
     /* name,	     function,		calling,    documentation */
     {"command",	     VimCommand,	1,	    "Execute a Vim ex-mode command" },
     {"eval",	     VimEval,		1,	    "Evaluate an expression using Vim evaluator" },
+    {"pyeval",       VimEvalPy,         1,          "Like eval(), but returns objects attached to vim ones"},
     { NULL,	     NULL,		0,	    NULL }
 };
 
@@ -499,6 +534,12 @@ typedef struct
     PyObject_HEAD
     win_T	*win;
 } WindowObject;
+
+typedef struct
+{
+    PyObject_HEAD
+    dict_T	*dict;
+} DictionaryObject;
 
 #define INVALID_WINDOW_VALUE ((win_T *)(-1))
 
