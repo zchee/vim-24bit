@@ -158,11 +158,12 @@ vim.bindeval(str)					*python-bindeval*
 	   list or dictionary. Thus modifications to these objects imply 
 	   modifications of the original.
 	2. if expression evaluates to a function reference, then it returns 
-	   vimfunction object with __call__ method defined. Use self keyword 
-	   argument to assign |self| object for dictionary functions.
+	   callable vimfunction object. Use self keyword argument to assign 
+	   |self| object for dictionary functions.
 
-	Note: this function has the same behavior as |lua-eval|, |python-eval| 
-	      is kept for backwards compatibility in order not to make scripts 
+	Note: this function has the same behavior as |lua-eval| (except that 
+	      lua does not support running vim functions), |python-eval| is 
+	      kept for backwards compatibility in order not to make scripts 
 	      relying on outputs of vim.eval() being a copy of original or 
 	      vim.eval("1") returning a string.
 
