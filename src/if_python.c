@@ -1565,7 +1565,7 @@ DictionaryItem(PyObject *self, PyObject *keyObject)
     static PyInt
 DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 {
-    char_u	*key = (char_u *) PyString_AsString(keyObject);
+    char_u	*key;
     typval_T	tv;
     dict_T	*d = ((DictionaryObject *)(self))->dict;
     dictitem_T	*di;
@@ -1575,6 +1575,13 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	PyErr_SetVim(_("dict is locked"));
 	return -1;
     }
+
+    /* Add conversion from PyInt? */
+    if(!PyString_Check(keyObject)) {
+	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed"));
+	return -1;
+    }
+    key = (char_u *) PyString_AsString(keyObject);
 
     di = dict_find(d, key, -1);
 
