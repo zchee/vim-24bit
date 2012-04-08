@@ -1785,12 +1785,16 @@ ListItem(PyObject *self, Py_ssize_t index)
     return ConvertToPyObject(&li->li_tv);
 }
 
+#define NEGATIVE_INDEX(idx) \
+    if(idx < 0) {\
+	if(idx < -size) \
+	    idx = 0; \
+	else \
+	    idx += size; \
+    }
 #define PROC_RANGE(err_val) \
-    if(first < 0) \
-	first += size; \
-    if(last < 0) \
-	last += size; \
- \
+    NEGATIVE_INDEX(first) \
+    NEGATIVE_INDEX(last) \
     if(first > size-1) { \
 	PyErr_SetString(PyExc_IndexError, _("list index out of range")); \
 	return err_val; \
