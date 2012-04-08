@@ -434,6 +434,7 @@ get_exceptions(void)
 
 static PyObject *BufferNew (buf_T *);
 static PyObject *WindowNew(win_T *);
+static PyObject *DictionaryNew(dict_T *);
 static PyObject *LineToString(const char *);
 
 static PyTypeObject RangeType;
@@ -799,6 +800,9 @@ PythonIO_Init(void)
 /******************************************************
  * 3. Implementation of the Vim module for Python
  */
+
+static PyObject *ConvertToPyObject(typval_T *);
+static int ConvertFromPyObject(PyObject *, typval_T *);
 
 /* Window type - Implementation functions
  * --------------------------------------
@@ -1441,6 +1445,265 @@ LineToString(const char *str)
     return result;
 }
 
+static void DictionaryDestructor(PyObject *);
+static PyInt DictionaryLength(PyObject *);
+static PyObject *DictionaryItem(PyObject *, PyObject *);
+static PyInt DictionaryAssItem(PyObject *, PyObject *, PyObject *);
+
+static PyMappingMethods DictionaryAsMapping = {
+    (PyInquiry)		DictionaryLength,
+    (binaryfunc)	DictionaryItem,
+    (objobjargproc)	DictionaryAssItem,
+};
+
+static PyTypeObject DictionaryType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "dictionary",
+    sizeof(DictionaryObject),
+    0,
+
+    (destructor)  DictionaryDestructor,
+    (printfunc)   0,
+    (getattrfunc) 0,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    0,                      /* as sequence */
+    &DictionaryAsMapping,   /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) 0,
+    (reprfunc)    0,
+};
+
+    static PyObject *
+DictionaryNew(dict_T *dict)
+{
+    /*
+     * Increments reference count for given dictionary so that it won’t be 
+     * suddenly freed. It is decremeted back in destructor.
+     */
+    DictionaryObject *self;
+
+    if (dict->d_python_ref != NULL)
+    {
+	self = dict->d_python_ref;
+	Py_INCREF(self);
+    }
+    else
+    {
+	self = PyObject_NEW(DictionaryObject, &DictionaryType);
+	if (self == NULL)
+	    return NULL;
+	self->dict = dict;
+	++dict->dv_refcount;
+	dict->d_python_ref = self;
+    }
+
+    return (PyObject *)(self);
+}
+
+    static void
+DictionaryDestructor(PyObject *self)
+{
+    DictionaryObject *this = (DictionaryObject *)(self);
+
+    dict_unref(this->dict);
+
+    Py_DECREF(self);
+}
+
+    static PyInt
+DictionaryLength(PyObject *self)
+{
+    return ((PyInt) ((((DictionaryObject *)(self))->dict->dv_hashtab.ht_used)));
+}
+
+    static PyObject *
+DictionaryItem(PyObject *self, PyObject *keyObject)
+{
+    char_u	*key;
+    dictitem_T	*val;
+
+    key = PyString_AsString(keyObject);
+    val = dict_find(((DictionaryObject *) (self))->dict, key, -1);
+
+    return ConvertToPyObject(&val->di_tv);
+}
+
+    static PyInt
+DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
+{
+    char_u	*key = PyString_AsString(keyObject);
+    typval_T	tv;
+    dictitem_T	*di;
+    dict_T	*d = ((DictionaryObject *)(self))->dict;
+
+    if(d->dv_lock)
+    {
+	PyErr_SetVim(_("dict is locked"));
+	return -1;
+    }
+
+    if(ConvertFromPyObject(valObject, &tv) == -1) {
+	return -1;
+    }
+
+    di = dict_find(d, key, -1);
+    if(di == NULL) {
+	di = dictitem_alloc(key);
+	if(di == NULL) {
+	    PyErr_NoMemory();
+	    return -1;
+	}
+	if(dict_add(d, di) == FAIL) {
+	    vim_free(di);
+	    PyErr_SetVim(_("failed to add key to dictionary"));
+	    return -1;
+	}
+    }
+    else
+	clear_tv(&di->di_tv);
+
+    copy_tv(&tv, &di->di_tv);
+    return 0;
+}
+
+    static PyObject *
+ConvertToPyObject(typval_T *tv)
+{
+    if(tv == NULL)
+    {
+	return NULL;
+    }
+    switch (tv->v_type)
+    {
+	case VAR_STRING:
+	    return PyString_FromString((char *) tv->vval.v_string);
+	case VAR_NUMBER:
+	    return PyInt_FromLong((long) tv->vval.v_number);
+#ifdef FEAT_FLOAT
+	case VAR_FLOAT:
+	    return PyFloat_FromDouble((double) tv->vval.v_float);
+#endif
+	case VAR_LIST:
+	    /* TODO */
+	    return NULL;
+	case VAR_DICT:
+	    return DictionaryNew(tv->vval.v_dict);
+	default:
+	    return NULL;
+    }
+}
+
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
+
+    static int
+ConvertFromPyObject(PyObject *obj, typval_T *tv)
+{
+    dict_T	*d;
+    char_u	*key;
+    dictitem_T	*di;
+    PyObject	*lst;
+    PyObject	*litem;
+    PyObject	*lobj;
+    Py_ssize_t	lsize;
+    Py_ssize_t	i;
+    typval_T	v;
+    list_T	*l;
+    listitem_T	*li;
+
+    if(obj->ob_type == &DictionaryType) {
+	tv->v_type = VAR_DICT;
+	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
+    }
+    /* TODO
+     * else if(obj->ob_type == &ListType) {
+     *     tv->v_type = VAR_LIST;
+     *     tv->vval.v_list = (((ListObject *)(obj))->list);
+     * }
+     */
+    else if(PyString_Check(obj)) {
+	tv->v_type = VAR_STRING;
+	tv->vval.v_string = (char_u *) PyString_AsString(obj);
+    }
+    else if(PyInt_Check(obj)) {
+	tv->v_type = VAR_NUMBER;
+	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
+    }
+    else if(PyDict_Check(obj)) {
+	d = dict_alloc();
+	lst = PyDict_Items(obj);
+	lsize = PyList_Size(lst);
+	while(lsize--) {
+	    litem = PyList_GetItem(lst, lsize);
+	    OBJ_NULL_ERR(litem, "internal error: no dict item")
+
+	    lobj = PyTuple_GetItem(litem, 0);
+	    OBJ_NULL_ERR(lobj, "internal error: no key")
+	    if(!PyString_Check(lobj)) {
+		PyErr_SetString(PyExc_TypeError, _("key is not a string"));
+		return -1;
+	    }
+	    key = (char_u *) PyString_AsString(lobj);
+
+	    lobj = PyTuple_GetItem(litem, 1);
+	    OBJ_NULL_ERR(lobj, "internal error: no value")
+
+	    di = dictitem_alloc(key);
+	    if(di == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	    }
+	    if(ConvertFromPyObject(lobj, &v) == -1) {
+		vim_free(di);
+		return -1;
+	    }
+	    if(dict_add(d, di) == FAIL) {
+		vim_free(di);
+		PyErr_SetVim(_("failed to add key to dictionary"));
+		return -1;
+	    }
+	    copy_tv(&v, &di->di_tv);
+	}
+
+	tv->v_type = VAR_DICT;
+	tv->vval.v_dict = d;
+    }
+    else if(PyList_Check(obj)) {
+	/* TODO: Add support for PyTuple? */
+	l = list_alloc();
+	lsize = PyList_Size(obj);
+	for(i=0; i<lsize; i++) {
+	    litem = PyList_GetItem(obj, i);
+	    OBJ_NULL_ERR(litem, "internal error: no list item")
+	    if(ConvertFromPyObject(litem, &v) == -1) {
+		return -1;
+	    }
+	    if(list_append_tv(l, &v) == FAIL) {
+		PyErr_SetVim(_("failed to add item to list"));
+		return -1;
+	    }
+	}
+
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = l;
+    }
+#ifdef FEAT_FLOAT
+    else if(PyFloat_Check(obj)) {
+	tv->v_type = VAR_FLOAT;
+	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
+    }
+#endif
+    else {
+	PyErr_BadArgument();
+	return -1;
+    }
+    return 0;
+}
 
 /* Don't generate a prototype for the next function, it generates an error on
  * newer Python versions. */

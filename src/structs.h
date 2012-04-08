@@ -1183,6 +1183,11 @@ struct dictvar_S
     char	dv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
     dict_T	*dv_used_next;	/* next dict in used dicts list */
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
+
+#ifdef FEAT_PYTHON
+    void	*d_python_ref;	/* The Python reference to this dictionary */
+#endif
+
 };
 
 /* values for b_syn_spell: what to do with toplevel text */
