@@ -111,4 +111,7 @@ void last_set_msg __ARGS((scid_T scriptID));
 void ex_oldfiles __ARGS((exarg_T *eap));
 int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bufp, int *fnamelen));
 char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
+void func_unref __ARGS((char_u *name));
+void func_ref __ARGS((char_u *name));
+void func_call __ARGS((char_u *name, typval_T *args, dict_T *selfdict, typval_T *rettv));
 /* vim: set ft=c : */
