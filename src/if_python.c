@@ -1482,27 +1482,12 @@ static PyTypeObject DictionaryType = {
     static PyObject *
 DictionaryNew(dict_T *dict)
 {
-    /*
-     * Increments reference count for given dictionary so that it won’t be 
-     * suddenly freed. It is decremeted back in destructor.
-     */
     DictionaryObject *self;
-
-    if (dict->dv_python_ref != NULL)
-    {
-	self = dict->dv_python_ref;
-	Py_INCREF(self);
-    }
-    else
-    {
-	self = PyObject_NEW(DictionaryObject, &DictionaryType);
-	if (self == NULL)
-	    return NULL;
-	self->dict = dict;
-	++dict->dv_refcount;
-	dict->dv_python_ref = self;
-    }
-
+    self = PyObject_NEW(DictionaryObject, &DictionaryType);
+    if (self == NULL)
+	return NULL;
+    self->dict = dict;
+    ++dict->dv_refcount;
     return (PyObject *)(self);
 }
 
@@ -1696,27 +1681,12 @@ static PyTypeObject ListType = {
     static PyObject *
 ListNew(list_T *list)
 {
-    /*
-     * Increments reference count for given list so that it won’t be suddenly 
-     * freed. It is decremeted back in destructor.
-     */
     ListObject *self;
-
-    if (list->lv_python_ref != NULL)
-    {
-	self = list->lv_python_ref;
-	Py_INCREF(self);
-    }
-    else
-    {
-	self = PyObject_NEW(ListObject, &ListType);
-	if (self == NULL)
-	    return NULL;
-	self->list = list;
-	++list->lv_refcount;
-	list->lv_python_ref = self;
-    }
-
+    self = PyObject_NEW(ListObject, &ListType);
+    if (self == NULL)
+	return NULL;
+    self->list = list;
+    ++list->lv_refcount;
     return (PyObject *)(self);
 }
 
