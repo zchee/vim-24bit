@@ -114,4 +114,6 @@ char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *fla
 void func_unref __ARGS((char_u *name));
 void func_ref __ARGS((char_u *name));
 void func_call __ARGS((char_u *name, typval_T *args, dict_T *selfdict, typval_T *rettv));
+void listitem_remove __ARGS((list_T *l, listitem_T *item));
+int list_insert_tv __ARGS((list_T *l, typval_T *tv, listitem_T *item));
 /* vim: set ft=c : */
