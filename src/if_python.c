@@ -1825,7 +1825,7 @@ static PyTypeObject FunctionType = {
     0,                      /* as mapping */
 
     (hashfunc)    0,
-    (ternaryfunc) 0,
+    (ternaryfunc) FunctionCall,
     (reprfunc)    0,
 };
 
