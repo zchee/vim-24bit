@@ -1683,8 +1683,6 @@ list_remove (list_T *l, listitem_T *li)
 
 static void ListDestructor(PyObject *);
 static PyInt ListLength(PyObject *);
-static PyObject *ListConcat(PyObject *, PyObject *);
-static PyObject *ListRepeat(PyObject *, Py_ssize_t);
 static PyObject *ListItem(PyObject *, Py_ssize_t);
 static PyObject *ListSlice(PyObject *, Py_ssize_t, Py_ssize_t);
 static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
@@ -1695,8 +1693,8 @@ static PyObject *ListConcatInPlace(PyObject *, PyObject *);
 
 static PySequenceMethods ListAsSeq = {
     (PyInquiry)			ListLength,
-    (binaryfunc)		ListConcat,
-    (PyIntArgFunc)		ListRepeat,
+    (binaryfunc)		0,
+    (PyIntArgFunc)		0,
     (PyIntArgFunc)		ListItem,
     (PyIntIntArgFunc)		ListSlice,
     (PyIntObjArgProc)		ListAssItem,
@@ -1754,18 +1752,6 @@ ListDestructor(PyObject *self)
 ListLength(PyObject *self)
 {
     return ((PyInt) (((ListObject *) (self))->list->lv_len));
-}
-
-    static PyObject *
-ListConcat(PyObject *self, PyObject *obj)
-{
-    return NULL;
-}
-
-    static PyObject *
-ListRepeat(PyObject *self, Py_ssize_t count)
-{
-    return NULL;
 }
 
     static PyObject *
@@ -1869,8 +1855,8 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 
     if(index == length) {
 	if(list_append_tv(l, &tv) == FAIL) {
-		PyErr_SetVim(_("internal error: failed to add item to list"));
-		return -1;
+	    PyErr_SetVim(_("internal error: failed to add item to list"));
+	    return -1;
 	}
     }
     else {
@@ -1948,12 +1934,19 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
     static PyObject *
 ListConcatInPlace(PyObject *self, PyObject *obj)
 {
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock) {
+	PyErr_SetVim(_("list is locked"));
+	return NULL;
+    }
+
     if(!PyList_Check(obj)) {
 	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
 	return NULL;
     }
 
-    if(list_py_concat(((ListObject *) (self))->list, obj, PyList_Size, PyList_GetItem, 1)==-1)
+    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem, 1)==-1)
 	return NULL;
 
     return self;
