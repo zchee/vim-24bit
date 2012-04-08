@@ -1924,10 +1924,13 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     func_call(name, &args, selfdict, &rettv);
     result = ConvertToPyObject(&rettv);
 
+    /* FIXME Check what should really be cleared. */
     clear_tv(&args);
     clear_tv(&rettv);
-    if(selfdict != NULL)
-	clear_tv(&selfdicttv);
+    /*
+     * if(selfdict!=NULL)
+     *     clear_tv(selfdicttv);
+     */
 
     return result;
 }
@@ -1997,6 +2000,10 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	typval_T	v;
 
 	d = dict_alloc();
+	if(d == NULL) {
+	    PyErr_NoMemory();
+	    return -1;
+	}
 	lst = PyDict_Items(obj);
 	lsize = PyList_Size(lst);
 	while(lsize--) {
