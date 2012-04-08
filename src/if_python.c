@@ -1608,10 +1608,10 @@ list_py_concat(list_T *l, PyObject *obj)
     }
 }
 
+/* FIXME Copy-paste from if_lua.c */
     static listitem_T *
 list_find (list_T *l, long n)
 {
-    /* Copy-paste from if_lua.c */
     listitem_T *li;
     if (l == NULL || n < -l->lv_len || n >= l->lv_len)
 	return NULL;
@@ -1622,6 +1622,28 @@ list_find (list_T *l, long n)
 	for (li = l->lv_first; n > 0; li = li->li_next)
 	    n--;
     return li;
+}
+
+/* FIXME Copy-paste from if_lua.c */
+    static void
+list_remove (list_T *l, listitem_T *li)
+{
+    listwatch_T *lw;
+    --l->lv_len;
+    /* fix watchers */
+    for (lw = l->lv_watch; lw != NULL; lw = lw->lw_next)
+	if (lw->lw_item == li)
+	    lw->lw_item = li->li_next;
+    /* fix list pointers */
+    if (li->li_next == NULL) /* last? */
+	l->lv_last = li->li_prev;
+    else
+	li->li_next->li_prev = li->li_prev;
+    if (li->li_prev == NULL) /* first? */
+	l->lv_first = li->li_next;
+    else
+	li->li_prev->li_next = li->li_next;
+    l->lv_idx_item = NULL;
 }
 
 static void ListDestructor(PyObject *);
@@ -1747,19 +1769,31 @@ ListItem(PyObject *self, Py_ssize_t index)
 ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 {
     typval_T	tv;
-    Py_ssize_t	length;
-    list_T	*l;
+    list_T	*l = ((ListObject *) (self))->list;
     listitem_T	*li;
+    Py_ssize_t	length = ListLength(self);
+
+    if(l->lv_lock) {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
+    if(index>length || (index==length && obj==NULL)) {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+	return -1;
+    }
+
+    if(obj == NULL) {
+	li = list_find(l, (long) index);
+	list_remove(l, li);
+	clear_tv(&li->li_tv);
+	vim_free(li);
+	return 0;
+    }
 
     if(ConvertFromPyObject(obj, &tv) == -1)
 	return -1;
 
-    length = ListLength(self);
-    l = ((ListObject *) (self))->list;
-    if(index>length) {
-	PyErr_SetString(PyExc_IndexError, "list index out of range");
-    }
-    else if(index == length) {
+    if(index == length) {
 	if(list_append_tv(l, &tv) == FAIL) {
 		PyErr_SetVim(_("internal error: failed to add item to list"));
 		return -1;
@@ -1767,10 +1801,6 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
     }
     else {
 	li = list_find(l, (long) index);
-	if(li == NULL) {
-	    PyErr_SetVim(_("internal error: list index out of range"));
-	    return -1;
-	}
 	clear_tv(&li->li_tv);
 	copy_tv(&tv, &li->li_tv);
     }
