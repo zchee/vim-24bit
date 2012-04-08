@@ -426,7 +426,6 @@ static int get_list_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
 static int rettv_list_alloc __ARGS((typval_T *rettv));
 static listitem_T *listitem_alloc __ARGS((void));
 static void listitem_free __ARGS((listitem_T *item));
-static void listitem_remove __ARGS((list_T *l, listitem_T *item));
 static long list_len __ARGS((list_T *l));
 static int list_equal __ARGS((list_T *l1, list_T *l2, int ic, int recursive));
 static int dict_equal __ARGS((dict_T *d1, dict_T *d2, int ic, int recursive));
@@ -436,7 +435,6 @@ static long list_find_nr __ARGS((list_T *l, long idx, int *errorp));
 static long list_idx_of_item __ARGS((list_T *l, listitem_T *item));
 static void list_append __ARGS((list_T *l, listitem_T *item));
 static int list_append_number __ARGS((list_T *l, varnumber_T n));
-static int list_insert_tv __ARGS((list_T *l, typval_T *tv, listitem_T *item));
 static int list_extend __ARGS((list_T	*l1, list_T *l2, listitem_T *bef));
 static int list_concat __ARGS((list_T *l1, list_T *l2, typval_T *tv));
 static list_T *list_copy __ARGS((list_T *orig, int deep, int copyID));
@@ -5947,7 +5945,7 @@ listitem_free(item)
 /*
  * Remove a list item from a List and free it.  Also clears the value.
  */
-    static void
+    void
 listitem_remove(l, item)
     list_T  *l;
     listitem_T *item;
@@ -6378,7 +6376,7 @@ list_append_number(l, n)
  * If "item" is NULL append at the end.
  * Return FAIL when out of memory.
  */
-    static int
+    int
 list_insert_tv(l, tv, item)
     list_T	*l;
     typval_T	*tv;

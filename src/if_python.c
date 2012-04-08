@@ -1620,7 +1620,6 @@ list_py_concat(list_T *l, PyObject *obj, PyInquiry Size, PyIntArgFunc Item)
     Py_ssize_t	i;
     Py_ssize_t	lsize = Size(obj);
     PyObject	*litem;
-    listitem_T	*li;
     typval_T	v;
 
     for(i=0; i<lsize; i++) {
@@ -1682,6 +1681,7 @@ static PyObject *ListRepeat(PyObject *, Py_ssize_t);
 static PyObject *ListItem(PyObject *, Py_ssize_t);
 static PyObject *ListSlice(PyObject *, Py_ssize_t, Py_ssize_t);
 static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
+static int ListAssSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
 #if PY_MAJOR_VERSION >= 2
 static PyObject *ListConcatInPlace(PyObject *, PyObject *);
 #endif
@@ -1693,7 +1693,7 @@ static PySequenceMethods ListAsSeq = {
     (PyIntArgFunc)		ListItem,
     (PyIntIntArgFunc)		ListSlice,
     (PyIntObjArgProc)		ListAssItem,
-    (PyIntIntObjArgProc)	0,
+    (PyIntIntObjArgProc)	ListAssSlice,
     (objobjproc)		0,
 #if PY_MAJOR_VERSION >= 2
     (binaryfunc)		ListConcatInPlace,
@@ -1778,6 +1778,22 @@ ListItem(PyObject *self, Py_ssize_t index)
     return ConvertToPyObject(&li->li_tv);
 }
 
+#define PROC_RANGE(err_val) \
+    if(first < 0) \
+	first += size; \
+    if(last < 0) \
+	last += size; \
+ \
+    if(first > size-1) { \
+	PyErr_SetString(PyExc_IndexError, _("list index out of range")); \
+	return err_val; \
+    } \
+    if(last > size) \
+	last = size; \
+    if(first >= last) { \
+	first = last; \
+    }
+
     static PyObject *
 ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
 {
@@ -1787,20 +1803,8 @@ ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
     PyObject	*list;
     int		reversed = 0;
 
-    if(first < 0)
-	first += size;
-    if(last < 0)
-	last += size;
+    PROC_RANGE(NULL)
 
-    if(first > size-1) {
-	PyErr_SetString(PyExc_IndexError, _("list index out of range"));
-	return NULL;
-    }
-    if(last > size)
-	last = size;
-    if(first >= last) {
-	first = last;
-    }
     n = last-first;
     list = PyList_New(n);
     if(list == NULL)
@@ -1861,6 +1865,56 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 	li = list_find(l, (long) index);
 	clear_tv(&li->li_tv);
 	copy_tv(&tv, &li->li_tv);
+    }
+    return 0;
+}
+
+    static int
+ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
+{
+    PyInt	size = ListLength(self);
+    Py_ssize_t	i;
+    Py_ssize_t	lsize = PyList_Size(obj);
+    PyObject	*litem;
+    listitem_T	*li;
+    listitem_T	*next;
+    typval_T	v;
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(!PyList_Check(obj)) {
+	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
+	return -1;
+    }
+    PROC_RANGE(-1)
+
+    if(first == size)
+	li = NULL;
+    else {
+	li = list_find(l, (long) first);
+	if(li == NULL) {
+	    PyErr_SetVim(_("internal error: no vim list item"));
+	    return -1;
+	}
+	if(last > first) {
+	    i = last - first;
+	    while(i-- && li != NULL) {
+		next = li->li_next;
+		listitem_remove(l, li);
+		li = next;
+	    }
+	}
+    }
+
+    for(i=0; i<lsize; i++) {
+	litem = PyList_GetItem(obj, i);
+	OBJ_NULL_ERR(litem, "internal error: no list item")
+	if(ConvertFromPyObject(litem, &v) == -1) {
+	    return -1;
+	}
+	if(list_insert_tv(l, &v, li) == FAIL) {
+	    PyErr_SetVim(_("failed to add item to list"));
+	    return -1;
+	}
     }
     return 0;
 }
