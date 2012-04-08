@@ -1881,17 +1881,13 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 {
     PyInt	size = ListLength(self);
     Py_ssize_t	i;
-    Py_ssize_t	lsize = PyList_Size(obj);
+    Py_ssize_t	lsize;
     PyObject	*litem;
     listitem_T	*li;
     listitem_T	*next;
     typval_T	v;
     list_T	*l = ((ListObject *) (self))->list;
 
-    if(!PyList_Check(obj)) {
-	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
-	return -1;
-    }
     PROC_RANGE(-1)
 
     if(first == size)
@@ -1912,9 +1908,19 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 	}
     }
 
+    if(obj == NULL)
+	return 0;
+
+    if(!PyList_Check(obj)) {
+	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
+	return -1;
+    }
+
+    lsize = PyList_Size(obj);
+
     for(i=0; i<lsize; i++) {
 	litem = PyList_GetItem(obj, i);
-	if(obj==NULL) {
+	if(litem == NULL) {
 	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
 	}
