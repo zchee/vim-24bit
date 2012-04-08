@@ -2079,6 +2079,10 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = (((ListObject *)(obj))->list);
     }
+    else if(obj->ob_type == &FunctionType) {
+	tv->v_type = VAR_FUNC;
+	tv->vval.v_string = (((FunctionObject *)(obj))->name);
+    }
     else if(PyString_Check(obj)) {
 	char_u	*retval = NULL;
 	char_u	*result = (char_u *) PyString_AsString(obj);
