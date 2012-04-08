@@ -541,6 +541,12 @@ typedef struct
     dict_T	*dict;
 } DictionaryObject;
 
+typedef struct
+{
+    PyObject_HEAD
+    list_T	*list;
+} ListObject;
+
 #define INVALID_WINDOW_VALUE ((win_T *)(-1))
 
     static int
