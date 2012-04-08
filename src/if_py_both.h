@@ -396,7 +396,7 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
 #endif
 
     static PyObject *
-VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
+VimEval(PyObject *self UNUSED, PyObject *args)
 {
 #ifdef FEAT_EVAL
     char	*expr;
@@ -443,7 +443,7 @@ VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
 static PyObject *ConvertToPyObject(typval_T *);
 
     static PyObject *
-VimEvalPy(PyObject *self UNUSED, PyObject *args UNUSED)
+VimEvalPy(PyObject *self UNUSED, PyObject *args)
 {
 #ifdef FEAT_EVAL
     char	*expr;
@@ -467,7 +467,14 @@ VimEvalPy(PyObject *self UNUSED, PyObject *args UNUSED)
 	return NULL;
     }
 
-    return ConvertToPyObject(our_tv);
+    result = ConvertToPyObject(our_tv);
+    Py_BEGIN_ALLOW_THREADS
+    Python_Lock_Vim();
+    free_tv(our_tv);
+    Python_Release_Vim();
+    Py_END_ALLOW_THREADS
+
+    return result;
 #else
     PyErr_SetVim(_("expressions disabled at compile time"));
     return NULL;
