@@ -482,7 +482,7 @@ static struct PyMethodDef VimMethods[] = {
     /* name,	     function,		calling,    documentation */
     {"command",	     VimCommand,	1,	    "Execute a Vim ex-mode command" },
     {"eval",	     VimEval,		1,	    "Evaluate an expression using Vim evaluator" },
-    {"pyeval",       VimEvalPy,         1,          "Like eval(), but returns objects attached to vim ones"},
+    {"bindeval",     VimEvalPy,         1,          "Like eval(), but returns objects attached to vim ones"},
     { NULL,	     NULL,		0,	    NULL }
 };
 
