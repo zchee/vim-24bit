@@ -452,6 +452,8 @@ static PyTypeObject RangeType;
 static PyInt RangeStart;
 static PyInt RangeEnd;
 
+static PyObject *globals;
+
 static void PythonIO_Flush(void);
 static int PythonIO_Init(void);
 static int PythonMod_Init(void);
@@ -582,6 +584,8 @@ Python_Init(void)
 	if (PythonMod_Init())
 	    goto fail;
 
+	globals = PyModule_GetDict(PyImport_AddModule("__main__"));
+
 	/* Remove the element from sys.path that was added because of our
 	 * argv[0] value in PythonMod_Init().  Previously we used an empty
 	 * string, but dependinding on the OS we then get an empty entry or
@@ -609,9 +613,10 @@ fail:
 /*
  * External interface
  */
-    static void
-DoPythonCommand(exarg_T *eap, const char *cmd)
+    static void *
+DoPythonCommand(exarg_T *eap, const char *cmd, int is_pyeval)
 {
+    void *r;
 #ifndef PY_CAN_RECURSE
     static int		recursive = 0;
 #endif
@@ -640,8 +645,14 @@ DoPythonCommand(exarg_T *eap, const char *cmd)
     if (Python_Init())
 	goto theend;
 
-    RangeStart = eap->line1;
-    RangeEnd = eap->line2;
+    if(is_pyeval) {
+	RangeStart = (PyInt) curwin->w_cursor.lnum;
+	RangeEnd = RangeStart;
+    }
+    else {
+	RangeStart = eap->line1;
+	RangeEnd = eap->line2;
+    }
     Python_Release_Vim();	    /* leave vim */
 
 #if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
@@ -659,7 +670,13 @@ DoPythonCommand(exarg_T *eap, const char *cmd)
 
     Python_RestoreThread();	    /* enter python */
 
-    PyRun_SimpleString((char *)(cmd));
+    if(is_pyeval) {
+	r = (void *) PyRun_String((char *)cmd, Py_eval_input, globals, globals);
+    }
+    else{
+	r = NULL;
+	PyRun_SimpleString((char *)(cmd));
+    }
 
     Python_SaveThread();	    /* leave python */
 
@@ -681,7 +698,7 @@ theend:
 #ifndef PY_CAN_RECURSE
     --recursive;
 #endif
-    return;	    /* keeps lint happy */
+    return r;
 }
 
 /*
@@ -696,9 +713,9 @@ ex_python(exarg_T *eap)
     if (!eap->skip)
     {
 	if (script == NULL)
-	    DoPythonCommand(eap, (char *)eap->arg);
+	    DoPythonCommand(eap, (char *)eap->arg, 0);
 	else
-	    DoPythonCommand(eap, (char *)script);
+	    DoPythonCommand(eap, (char *)script, 0);
     }
     vim_free(script);
 }
@@ -744,7 +761,7 @@ ex_pyfile(exarg_T *eap)
     *p++ = '\0';
 
     /* Execute the file */
-    DoPythonCommand(eap, buffer);
+    DoPythonCommand(eap, buffer, 0);
 }
 
 /******************************************************
@@ -1823,15 +1840,18 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	tv->v_type = VAR_DICT;
 	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
     }
-    /* TODO
-     * else if(obj->ob_type == &ListType) {
-     *     tv->v_type = VAR_LIST;
-     *     tv->vval.v_list = (((ListObject *)(obj))->list);
-     * }
-     */
+    else if(obj->ob_type == &ListType) {
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = (((ListObject *)(obj))->list);
+    }
     else if(PyString_Check(obj)) {
+	char_u	*retval = NULL;
+	char_u	*result = (char_u *) PyString_AsString(obj);
+
+	retval = alloc((unsigned)(STRLEN(result))+1);
+	STRCPY(retval, result);
 	tv->v_type = VAR_STRING;
-	tv->vval.v_string = (char_u *) PyString_AsString(obj);
+	tv->vval.v_string = retval;
     }
     else if(PyInt_Check(obj)) {
 	tv->v_type = VAR_NUMBER;
@@ -1906,6 +1926,20 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	return -1;
     }
     return 0;
+}
+
+    void
+do_pyeval (char_u *str, typval_T *rettv)
+{
+    PyObject *r = (PyObject *) DoPythonCommand(NULL, (char *) str, 1);
+    if(r == NULL) {
+	EMSG(_("E858: Eval did not return a valid python object"));
+	return;
+    }
+    if(ConvertFromPyObject(r, rettv) == -1) {
+	EMSG(_("E859: Failed to convert returned python object to vim value"));
+	return;
+    }
 }
 
 /* Don't generate a prototype for the next function, it generates an error on
