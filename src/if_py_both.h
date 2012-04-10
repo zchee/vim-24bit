@@ -1635,3 +1635,288 @@ static struct PyMethodDef RangeMethods[] = {
     { NULL,	    NULL,		0,	    NULL }
 };
 
+#define PERTURB_SHIFT 5
+
+typedef struct pyhashtable_S
+{
+    size_t	pht_mask;	/* mask used for hash value (nr of items in
+				 * array is "pht_mask" + 1) */
+    size_t	pht_used;	/* number of items used */
+    size_t	pht_filled;	/* number of items used + removed */
+    int		pht_error;	/* when set growing failed, can't add more
+				   items before growing works */
+    void	**pht_array;	/* points to the array, allocated when it's
+				   not "pht_smallarray" */
+    PyObject	**pht_vals;	/* points to the array containing values:
+                                   python objects associated with given key */
+    void	*pht_smallarray[HT_INIT_SIZE];   /* initial array */
+    PyObject	*pht_smallvars[HT_INIT_SIZE];
+} pyhashtab_T;
+
+static int pyhash_may_resize __ARGS((pyhashtab_T *ht, size_t minitems));
+
+/*
+ * Initialize an empty hash table.
+ */
+    static void
+pyhash_init(ht)
+    pyhashtab_T *ht;
+{
+    /* This zeroes all "pht_" entries and all the "hi_key" in "pht_smallarray". 
+     * */
+    vim_memset(ht, 0, sizeof(pyhashtab_T));
+    ht->pht_array = ht->pht_smallarray;
+    ht->pht_vals = ht->pht_smallvars;
+    ht->pht_mask = HT_INIT_SIZE - 1;
+}
+
+    static void **
+pyhash_lookup(ht, key)
+    pyhashtab_T	*ht;
+    void	*key;
+{
+    void	**hi;
+    size_t	idx;
+    size_t	perturb;
+
+    /*
+     * Quickly handle the most common situations:
+     * - return if there is no item at all
+     * - skip over a removed item
+     * - return if the item matches
+     */
+    idx = (((size_t) key) & ht->pht_mask);
+    hi = &ht->pht_array[idx];
+
+    if (*hi == NULL || *hi == key)
+	return hi;
+
+    /*
+     * Need to search through the table to find the key.  The algorithm
+     * to step through the table starts with large steps, gradually becoming
+     * smaller down to (1/4 table size + 1).  This means it goes through all
+     * table entries in the end.
+     * When we run into a NULL key it's clear that the key isn't there.
+     * Return the first available slot found (can be a slot of a removed
+     * item).
+     */
+    for (perturb = (size_t) key; ; perturb >>= PERTURB_SHIFT)
+    {
+	idx = (int)((idx << 2) + idx + perturb + 1);
+	hi = &ht->pht_array[idx & ht->pht_mask];
+	if (*hi == NULL || *hi == key)
+	    return hi;
+    }
+}
+
+#define PHVAL(ht, hi) (ht.pht_vals[hi - ht.pht_array])
+
+/*
+ * Add item "hi" with "key" to hashtable "ht".  "key" must not be NULL and
+ * "hi" must have been obtained with pyhash_lookup() and point to an empty item.
+ * "hi" is invalid after this!
+ * Returns OK or FAIL (out of memory).
+ */
+    static int
+pyhash_add_item(ht, hi, key, val)
+    pyhashtab_T	*ht;
+    void	**hi;
+    void	*key;
+    PyObject	*val;
+{
+    /* If resizing failed before and it fails again we can't add an item. */
+    if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
+	return FAIL;
+
+    ++ht->pht_used;
+    if (*hi == NULL)
+	++ht->pht_filled;
+    *hi = key;
+    ht->pht_vals[hi-ht->pht_array] = val;
+
+    /* When the space gets low may resize the array. */
+    return pyhash_may_resize(ht, 0);
+}
+
+/*
+ * Add item with key "key" to hashtable "ht".
+ * Returns FAIL when out of memory or the key is already present.
+ */
+    static int
+pyhash_add(ht, key, val)
+    pyhashtab_T	*ht;
+    void	*key;
+    PyObject	*val;
+{
+    void	**hi;
+
+    hi = pyhash_lookup(ht, key);
+    if (*hi != NULL)
+    {
+	EMSG2(_(e_intern2), "pyhash_add()");
+	return FAIL;
+    }
+    return pyhash_add_item(ht, hi, key, val);
+}
+
+/*
+ * Remove item "hi" from  hashtable "ht".  "hi" must have been obtained with
+ * pyhash_lookup().
+ * The caller must take care of freeing the item itself.
+ */
+    static void
+pyhash_remove(ht, hi)
+    pyhashtab_T	*ht;
+    void	**hi;
+{
+    --ht->pht_used;
+    *hi = NULL;
+    /* We don’t really care whether references to garbage-collected PyObject 
+     * will be cleared, as they are not to be accessed anyway */
+    pyhash_may_resize(ht, 0);
+}
+
+/*
+ * Shrink a hashtable when there is too much empty space.
+ * Grow a hashtable when there is not enough empty space.
+ * Returns OK or FAIL (out of memory).
+ */
+    static int
+pyhash_may_resize(ht, minitems)
+    pyhashtab_T	*ht;
+    size_t	minitems;		/* minimal number of items */
+{
+    void	*temparray[HT_INIT_SIZE];
+    PyObject	*temppyarray[HT_INIT_SIZE];
+    void	**oldarray, **newarray;
+    void	**olditem, **newitem;
+    PyObject	**newpyitem, **oldpyarray, **newpyarray;
+    size_t	idx;
+    size_t	newi;
+    size_t	todo;
+    size_t	oldsize, newsize;
+    size_t	minsize;
+    size_t	newmask;
+    size_t	perturb;
+
+    if (minitems == 0)
+    {
+	/* Return quickly for small tables with at least two NULL items.  NULL
+	 * items are required for the lookup to decide a key isn't there. */
+	if (ht->pht_filled < HT_INIT_SIZE - 1
+					 && ht->pht_array == ht->pht_smallarray)
+	    return OK;
+
+	/*
+	 * Grow or refill the array when it's more than 2/3 full (including
+	 * removed items, so that they get cleaned up).
+	 * Shrink the array when it's less than 1/5 full.  When growing it is
+	 * at least 1/4 full (avoids repeated grow-shrink operations)
+	 */
+	oldsize = ht->pht_mask + 1;
+	if (ht->pht_filled * 3 < oldsize * 2 && ht->pht_used > oldsize / 5)
+	    return OK;
+
+	if (ht->pht_used > 1000)
+	    minsize = ht->pht_used * 2;  /* it's big, don't make too much room */
+	else
+	    minsize = ht->pht_used * 4;  /* make plenty of room */
+    }
+    else
+    {
+	/* Use specified size. */
+	if (minitems < ht->pht_used)	/* just in case... */
+	    minitems = ht->pht_used;
+	minsize = minitems * 3 / 2;	/* array is up to 2/3 full */
+    }
+
+    newsize = HT_INIT_SIZE;
+    while (newsize < minsize)
+    {
+	newsize <<= 1;		/* make sure it's always a power of 2 */
+	if (newsize <= 0)
+	    return FAIL;	/* overflow */
+    }
+
+    if (newsize == HT_INIT_SIZE)
+    {
+	/* Use the small array inside the hashdict structure. */
+	newarray = ht->pht_smallarray;
+	newpyarray = ht->pht_smallvars;
+	if (ht->pht_array == newarray)
+	{
+	    /* Moving from pht_smallarray to pht_smallarray!  Happens when there
+	     * are many removed items.  Copy the items to be able to clean up
+	     * removed items. */
+	    mch_memmove(temparray, newarray, sizeof(temparray));
+	    oldarray = temparray;
+	    mch_memmove(temppyarray, newpyarray, sizeof(temppyarray));
+	    oldpyarray = temppyarray;
+	}
+	else {
+	    oldarray = ht->pht_array;
+	    oldpyarray = ht->pht_vals;
+	}
+    }
+    else
+    {
+	/* Allocate an array. */
+	newarray = (void **)alloc(sizeof(void *) * newsize);
+	newpyarray = (PyObject **)alloc(sizeof(PyObject *) * newsize);
+	if (newarray == NULL)
+	{
+	    /* Out of memory.  When there are NULL items still return OK.
+	     * Otherwise set pht_error, because lookup may result in a hang if
+	     * we add another item. */
+	    if (ht->pht_filled < ht->pht_mask)
+		return OK;
+	    ht->pht_error = TRUE;
+	    return FAIL;
+	}
+	oldarray = ht->pht_array;
+	oldpyarray = ht->pht_vals;
+    }
+    vim_memset(newarray, 0, sizeof(void *) * newsize);
+
+    /*
+     * Move all the items from the old array to the new one, placing them in
+     * the right spot.  The new array won't have any removed items, thus this
+     * is also a cleanup action.
+     */
+    newmask = newsize - 1;
+    todo = ht->pht_used;
+    for (olditem = oldarray; todo > 0; ++olditem)
+	if (*olditem != NULL)
+	{
+	    /*
+	     * The algorithm to find the spot to add the item is identical to
+	     * the algorithm to find an item in pyhash_lookup().  But we only
+	     * need to search for a NULL key, thus it's simpler.
+	     */
+	    newi = ((size_t) (*olditem) & newmask);
+	    newitem = &newarray[newi];
+	    idx = newi;
+
+	    if (*newitem != NULL)
+		for (perturb = (size_t) olditem; ; perturb >>= PERTURB_SHIFT)
+		{
+		    newi = ((newi << 2) + newi + perturb + 1);
+		    idx = (newi & newmask);
+		    newitem = &newarray[idx];
+		    if (*newitem == NULL)
+			break;
+		}
+	    *newitem = *olditem;
+	    newpyarray[idx] = oldpyarray[olditem-oldarray];
+	    --todo;
+	}
+
+    if (ht->pht_array != ht->pht_smallarray)
+	vim_free(ht->pht_array);
+    ht->pht_array = newarray;
+    ht->pht_mask = newmask;
+    ht->pht_filled = ht->pht_used;
+    ht->pht_error = FALSE;
+
+    return OK;
+}

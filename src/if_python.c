@@ -481,6 +481,8 @@ static PyInt RangeStart;
 static PyInt RangeEnd;
 
 static PyObject *globals;
+static pyhashtab_T dictrefs;
+static pyhashtab_T listrefs;
 
 static void PythonIO_Flush(void);
 static int PythonIO_Init(void);
@@ -613,6 +615,8 @@ Python_Init(void)
 	    goto fail;
 
 	globals = PyModule_GetDict(PyImport_AddModule("__main__"));
+	pyhash_init(&dictrefs);
+	pyhash_init(&listrefs);
 
 	/* Remove the element from sys.path that was added because of our
 	 * argv[0] value in PythonMod_Init().  Previously we used an empty
@@ -1527,19 +1531,36 @@ static PyTypeObject DictionaryType = {
     static PyObject *
 DictionaryNew(dict_T *dict)
 {
-    DictionaryObject *self;
-    self = PyObject_NEW(DictionaryObject, &DictionaryType);
-    if (self == NULL)
-	return NULL;
-    self->dict = dict;
-    ++dict->dv_refcount;
+    DictionaryObject	*self;
+    void	**hi = NULL;
+
+    hi = pyhash_lookup(&dictrefs, (void *) dict);
+    if(*hi == NULL) {
+	self = PyObject_NEW(DictionaryObject, &DictionaryType);
+	if (self == NULL)
+	    return NULL;
+	self->dict = dict;
+	++dict->dv_refcount;
+	pyhash_add_item(&dictrefs, hi, (void *) dict, (PyObject *) self);
+    }
+    else {
+	self = (DictionaryObject *) PHVAL(dictrefs, hi);
+	Py_INCREF(self);
+    }
     return (PyObject *)(self);
 }
 
     static void
 DictionaryDestructor(PyObject *self)
 {
-    dict_unref(((DictionaryObject *)(self))->dict);
+    void	**hi = NULL;
+    DictionaryObject	*this = ((DictionaryObject *) (self));
+
+    hi = pyhash_lookup(&dictrefs, (void *) this->dict);
+    if(hi == NULL)
+	EMSG(_("E860: Internal error: dictionary not present in dictrefs hash"));
+    *hi = NULL;
+    dict_unref(this->dict);
 
     Py_DECREF(self);
 }
@@ -1730,12 +1751,22 @@ static PyTypeObject ListType = {
     static PyObject *
 ListNew(list_T *list)
 {
-    ListObject *self;
-    self = PyObject_NEW(ListObject, &ListType);
-    if (self == NULL)
-	return NULL;
-    self->list = list;
-    ++list->lv_refcount;
+    ListObject	*self;
+    void	**hi = NULL;
+
+    hi = pyhash_lookup(&listrefs, (void *) list);
+    if(*hi == NULL) {
+	self = PyObject_NEW(ListObject, &ListType);
+	if (self == NULL)
+	    return NULL;
+	self->list = list;
+	++list->lv_refcount;
+	pyhash_add_item(&listrefs, hi, (void *) list, (PyObject *) self);
+    }
+    else {
+	self = (ListObject *) PHVAL(listrefs, hi);
+	Py_INCREF(self);
+    }
     return (PyObject *)(self);
 }
 
@@ -2231,6 +2262,69 @@ Py_GetProgramName(void)
     return "vim";
 }
 #endif /* Python 1.4 */
+
+/* FIXME Following three functions are copy-paste from if_lua */
+static void set_ref_in_tv(typval_T *tv, int copyID);
+
+    static void
+set_ref_in_dict(dict_T *d, int copyID)
+{
+    hashtab_T *ht = &d->dv_hashtab;
+    int n = ht->ht_used;
+    hashitem_T *hi;
+    for (hi = ht->ht_array; n > 0; ++hi)
+	if (!HASHITEM_EMPTY(hi))
+	{
+	    dictitem_T *di = dict_lookup(hi);
+	    set_ref_in_tv(&di->di_tv, copyID);
+	    --n;
+	}
+}
+
+    static void
+set_ref_in_list(list_T *l, int copyID)
+{
+    listitem_T *li;
+    for (li = l->lv_first; li != NULL; li = li->li_next)
+	set_ref_in_tv(&li->li_tv, copyID);
+}
+
+    static void
+set_ref_in_tv(typval_T *tv, int copyID)
+{
+    if (tv->v_type == VAR_LIST)
+    {
+	list_T *l = tv->vval.v_list;
+	if (l != NULL && l->lv_copyID != copyID)
+	{
+	    l->lv_copyID = copyID;
+	    set_ref_in_list(l, copyID);
+	}
+    }
+    else if (tv->v_type == VAR_DICT)
+    {
+	dict_T *d = tv->vval.v_dict;
+	if (d != NULL && d->dv_copyID != copyID)
+	{
+	    d->dv_copyID = copyID;
+	    set_ref_in_dict(d, copyID);
+	}
+    }
+}
+
+    void
+set_ref_in_python (int copyID)
+{
+    size_t	i = 0;
+
+    for(i = 0; i <= dictrefs.pht_mask ; i++)
+	if(dictrefs.pht_array[i] != NULL)
+	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
+
+    for(i = 0; i <= listrefs.pht_mask ; i++)
+	if(listrefs.pht_array[i] != NULL)
+	    set_ref_in_list((list_T *) listrefs.pht_array[i], copyID);
+}
 
     static void
 init_structs(void)
