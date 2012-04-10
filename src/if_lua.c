@@ -700,36 +700,6 @@ list_append(list_T *l, listitem_T *item)
     ++l->lv_len;
 }
 
-    static int
-list_insert_tv(list_T *l, typval_T *tv, listitem_T *item)
-{
-    listitem_T	*ni = listitem_alloc();
-
-    if (ni == NULL)
-	return FAIL;
-    copy_tv(tv, &ni->li_tv);
-    if (item == NULL)
-	list_append(l, ni);
-    else
-    {
-	ni->li_prev = item->li_prev;
-	ni->li_next = item;
-	if (item->li_prev == NULL)
-	{
-	    l->lv_first = ni;
-	    ++l->lv_idx;
-	}
-	else
-	{
-	    item->li_prev->li_next = ni;
-	    l->lv_idx_item = NULL;
-	}
-	item->li_prev = ni;
-	++l->lv_len;
-    }
-    return OK;
-}
-
 /* set references */
 
 static void set_ref_in_tv (typval_T *tv, int copyID);

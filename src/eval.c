@@ -6783,6 +6783,10 @@ garbage_collect()
     set_ref_in_lua(copyID);
 #endif
 
+#ifdef FEAT_PYTHON
+    set_ref_in_python(copyID);
+#endif
+
     /*
      * 2. Free lists and dictionaries that are not referenced.
      */
