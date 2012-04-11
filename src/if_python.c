@@ -1535,7 +1535,9 @@ DictionaryNew(dict_T *dict)
     void	**hi = NULL;
 
     hi = pyhash_lookup(&dictrefs, (void *) dict);
-    if(*hi == NULL) {
+    if(*hi != NULL)
+	self = (DictionaryObject *) PHVAL(dictrefs, hi);
+    if(*hi == NULL || self->ob_refcnt<=0) {
 	self = PyObject_NEW(DictionaryObject, &DictionaryType);
 	if (self == NULL)
 	    return NULL;
@@ -1544,7 +1546,6 @@ DictionaryNew(dict_T *dict)
 	pyhash_add_item(&dictrefs, hi, (void *) dict, (PyObject *) self);
     }
     else {
-	self = (DictionaryObject *) PHVAL(dictrefs, hi);
 	Py_INCREF(self);
     }
     return (PyObject *)(self);
@@ -1557,9 +1558,8 @@ DictionaryDestructor(PyObject *self)
     DictionaryObject	*this = ((DictionaryObject *) (self));
 
     hi = pyhash_lookup(&dictrefs, (void *) this->dict);
-    if(hi == NULL)
-	EMSG(_("E860: Internal error: dictionary not present in dictrefs hash"));
-    *hi = NULL;
+    if(hi != NULL && *hi == this)
+	*hi = NULL;
     dict_unref(this->dict);
 
     Py_DECREF(self);
@@ -1755,7 +1755,9 @@ ListNew(list_T *list)
     void	**hi = NULL;
 
     hi = pyhash_lookup(&listrefs, (void *) list);
-    if(*hi == NULL) {
+    if(*hi != NULL)
+	self = (ListObject *) PHVAL(listrefs, hi);
+    if(*hi == NULL || self->ob_refcnt<=0) {
 	self = PyObject_NEW(ListObject, &ListType);
 	if (self == NULL)
 	    return NULL;
@@ -1764,7 +1766,6 @@ ListNew(list_T *list)
 	pyhash_add_item(&listrefs, hi, (void *) list, (PyObject *) self);
     }
     else {
-	self = (ListObject *) PHVAL(listrefs, hi);
 	Py_INCREF(self);
     }
     return (PyObject *)(self);
@@ -1773,7 +1774,13 @@ ListNew(list_T *list)
     static void
 ListDestructor(PyObject *self)
 {
-    list_unref(((ListObject *)(self))->list);
+    void	**hi = NULL;
+    ListObject	*this = ((ListObject *) (self));
+
+    hi = pyhash_lookup(&listrefs, (void *) this->list);
+    if(hi != NULL && *hi == this)
+	*hi = NULL;
+    list_unref(this->list);
 
     Py_DECREF(self);
 }
