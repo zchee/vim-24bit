@@ -2326,6 +2326,9 @@ set_ref_in_python (int copyID)
 {
     size_t	i = 0;
 
+    if(!initialised)
+	return;
+
     for(i = 0; i <= dictrefs.pht_mask ; i++)
 	if(dictrefs.pht_array[i] != NULL && dictrefs.pht_vals[i]->ob_refcnt>0)
 	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
