@@ -2322,12 +2322,11 @@ set_ref_in_python (int copyID)
     size_t	i = 0;
 
     for(i = 0; i <= dictrefs.pht_mask ; i++)
-	if(dictrefs.pht_array[i] != NULL) {
+	if(dictrefs.pht_array[i] != NULL && dictrefs.pht_vals[i]->ob_refcnt>0)
 	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
-	}
 
     for(i = 0; i <= listrefs.pht_mask ; i++)
-	if(listrefs.pht_array[i] != NULL)
+	if(listrefs.pht_array[i] != NULL && listrefs.pht_vals[i]->ob_refcnt>0)
 	    set_ref_in_list((list_T *) listrefs.pht_array[i], copyID);
 }
 
