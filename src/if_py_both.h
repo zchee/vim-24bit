@@ -1713,7 +1713,8 @@ pyhash_lookup(ht, key)
 
 /*
  * Add item "hi" with "key" to hashtable "ht".  "key" must not be NULL and
- * "hi" must have been obtained with pyhash_lookup() and point to an empty item.
+ * "hi" must have been obtained with pyhash_lookup() and point to an *any* item.
+ * Unlike original hashes non-empty items are also accepted.
  * "hi" is invalid after this!
  * Returns OK or FAIL (out of memory).
  */
@@ -1724,18 +1725,23 @@ pyhash_add_item(ht, hi, key, val)
     void	*key;
     PyObject	*val;
 {
-    /* If resizing failed before and it fails again we can't add an item. */
-    if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
-	return FAIL;
+    int		adding = (*hi == NULL);
+    if(adding) {
+        /* If resizing failed before and it fails again we can't add an item. */
+        if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
+	    return FAIL;
 
-    ++ht->pht_used;
-    if (*hi == NULL)
+        ++ht->pht_used;
 	++ht->pht_filled;
+    }
     *hi = key;
     ht->pht_vals[hi-ht->pht_array] = val;
 
     /* When the space gets low may resize the array. */
-    return pyhash_may_resize(ht, 0);
+    if(adding)
+        return pyhash_may_resize(ht, 0);
+    else
+        return OK;
 }
 
 /*
@@ -1771,8 +1777,7 @@ pyhash_remove(ht, hi)
 {
     --ht->pht_used;
     *hi = NULL;
-    /* We don’t really care whether references to garbage-collected PyObject 
-     * will be cleared, as they are not to be accessed anyway */
+    ht->pht_vals[hi-ht->pht_array] = NULL;
     pyhash_may_resize(ht, 0);
 }
 
