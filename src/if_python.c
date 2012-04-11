@@ -2029,7 +2029,12 @@ FunctionNew(char_u *name)
     self = PyObject_NEW(FunctionObject, &FunctionType);
     if(self == NULL)
 	return NULL;
-    self->name = name;
+    self->name = (char_u *) alloc((char_u) sizeof(char_u)*STRLEN(name));
+    if(self->name == NULL) {
+	PyErr_NoMemory();
+	return NULL;
+    }
+    STRCPY(self->name, name);
     func_ref(name);
     return (PyObject *)(self);
 }
