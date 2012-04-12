@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -1535,6 +1535,10 @@ DictionaryNew(dict_T *dict)
     void	**hi = NULL;
 
     hi = pyhash_lookup(&dictrefs, (void *) dict);
+    if(hi == NULL) {
+	PyErr_SetVim(_("internal error: failed to find a place for dictionary"));
+	return NULL;
+    }
     if(*hi != NULL)
 	self = (DictionaryObject *) PHVAL(dictrefs, hi);
     if(*hi == NULL || self->ob_refcnt<=0) {
@@ -1755,6 +1759,10 @@ ListNew(list_T *list)
     void	**hi = NULL;
 
     hi = pyhash_lookup(&listrefs, (void *) list);
+    if(hi == NULL) {
+	PyErr_SetVim(_("internal error: failed to find a place for list"));
+	return NULL;
+    }
     if(*hi != NULL)
 	self = (ListObject *) PHVAL(listrefs, hi);
     if(*hi == NULL || self->ob_refcnt<=0) {
@@ -2042,8 +2050,10 @@ FunctionNew(char_u *name)
     static void
 FunctionDestructor(PyObject *self)
 {
-    func_unref(((FunctionObject *) self)->name);
+    FunctionObject	*this = (FunctionObject *) (self);
 
+    func_unref(this->name);
+    vim_free(this->name);
     Py_DECREF(self);
 }
 
@@ -2133,6 +2143,23 @@ ConvertToPyObject(typval_T *tv)
 }
 
     static int
+set_string_copy(char_u *str, typval_T *tv, int raise)
+{
+    char_u	*copy;
+
+    copy = (char_u *) alloc(STRLEN(str)+1);
+    if(copy == NULL) {
+	if(raise)
+	    PyErr_NoMemory();
+	return -1;
+    }
+
+    STRCPY(copy, str);
+    tv->vval.v_string = copy;
+    return 0;
+}
+
+    static int
 ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 {
     if(obj->ob_type == &DictionaryType) {
@@ -2144,17 +2171,24 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	tv->vval.v_list = (((ListObject *)(obj))->list);
     }
     else if(obj->ob_type == &FunctionType) {
+	char_u	*retval = NULL;
+
+	if(set_string_copy(((FunctionObject *) (obj))->name, tv, raise) == -1)
+	    return -1;
+
 	tv->v_type = VAR_FUNC;
-	tv->vval.v_string = (((FunctionObject *)(obj))->name);
     }
     else if(PyString_Check(obj)) {
 	char_u	*retval = NULL;
 	char_u	*result = (char_u *) PyString_AsString(obj);
 
-	retval = alloc((unsigned)(STRLEN(result))+1);
-	STRCPY(retval, result);
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv, raise) == -1)
+	    return -1;
+
 	tv->v_type = VAR_STRING;
-	tv->vval.v_string = retval;
     }
     else if(PyInt_Check(obj)) {
 	tv->v_type = VAR_NUMBER;
