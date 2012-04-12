@@ -1670,14 +1670,19 @@ pyhash_init(ht)
     ht->pht_mask = HT_INIT_SIZE - 1;
 }
 
+#define PYOBJ_DELETED(obj) (obj->ob_refcnt <= 0)
+
     static void **
 pyhash_lookup(ht, key)
     pyhashtab_T	*ht;
     void	*key;
 {
     void	**hi;
+    void	**freeitem = NULL;
     size_t	idx;
     size_t	perturb;
+    size_t	index;
+    PyObject	*obj;
 
     /*
      * Quickly handle the most common situations:
@@ -1688,8 +1693,12 @@ pyhash_lookup(ht, key)
     idx = (((size_t) key) & ht->pht_mask);
     hi = &ht->pht_array[idx];
 
-    if (*hi == NULL || *hi == key)
-	return hi;
+    if(*hi == NULL)
+        return hi;
+    if (PYOBJ_DELETED(ht->pht_vals[idx]))
+        freeitem = hi;
+    else if (*hi == key)
+        return hi;
 
     /*
      * Need to search through the table to find the key.  The algorithm
@@ -1703,9 +1712,19 @@ pyhash_lookup(ht, key)
     for (perturb = (size_t) key; ; perturb >>= PERTURB_SHIFT)
     {
 	idx = (int)((idx << 2) + idx + perturb + 1);
-	hi = &ht->pht_array[idx & ht->pht_mask];
-	if (*hi == NULL || *hi == key)
-	    return hi;
+	index = idx & ht->pht_mask;
+	hi = &ht->pht_array[index];
+	obj = ht->pht_vals[index];
+	if (*hi == NULL)
+	    return freeitem == NULL ? hi : freeitem;
+	if (*hi == key) {
+	    if(PYOBJ_DELETED(obj))
+		freeitem = hi;
+	    else
+		return hi;
+	}
+	else if(PYOBJ_DELETED(obj))
+	    freeitem = hi;
     }
 }
 
@@ -1744,6 +1763,9 @@ pyhash_add_item(ht, hi, key, val)
         return OK;
 }
 
+#define PYHASHITEM_EMPTY(ht, hi) ((*hi == NULL) || \
+				  (PYOBJ_DELETED(PHVAL(ht, hi))))
+
 /*
  * Add item with key "key" to hashtable "ht".
  * Returns FAIL when out of memory or the key is already present.
@@ -1757,7 +1779,7 @@ pyhash_add(ht, key, val)
     void	**hi;
 
     hi = pyhash_lookup(ht, key);
-    if (*hi != NULL)
+    if (!PYHASHITEM_EMPTY((*ht), hi))
     {
 	EMSG2(_(e_intern2), "pyhash_add()");
 	return FAIL;
@@ -1777,7 +1799,7 @@ pyhash_remove(ht, hi)
 {
     --ht->pht_used;
     *hi = NULL;
-    ht->pht_vals[hi-ht->pht_array] = NULL;
+    PHVAL((*ht), hi) = NULL;
     pyhash_may_resize(ht, 0);
 }
 
@@ -1882,6 +1904,7 @@ pyhash_may_resize(ht, minitems)
 	oldpyarray = ht->pht_vals;
     }
     vim_memset(newarray, 0, sizeof(void *) * newsize);
+    vim_memset(newpyarray, 0, sizeof(PyObject *) * newsize);
 
     /*
      * Move all the items from the old array to the new one, placing them in
@@ -1893,6 +1916,10 @@ pyhash_may_resize(ht, minitems)
     for (olditem = oldarray; todo > 0; ++olditem)
 	if (*olditem != NULL)
 	{
+	    if(PYOBJ_DELETED(oldpyarray[olditem-oldarray])) {
+		--todo;
+		continue;
+	    }
 	    /*
 	     * The algorithm to find the spot to add the item is identical to
 	     * the algorithm to find an item in pyhash_lookup().  But we only
@@ -1919,6 +1946,7 @@ pyhash_may_resize(ht, minitems)
     if (ht->pht_array != ht->pht_smallarray)
 	vim_free(ht->pht_array);
     ht->pht_array = newarray;
+    ht->pht_vals = newpyarray;
     ht->pht_mask = newmask;
     ht->pht_filled = ht->pht_used;
     ht->pht_error = FALSE;
