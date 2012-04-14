@@ -1,4 +1,4 @@
-Tests for vimlist, vimdictionary and vimfunction python types.     vim: set ft=vim :
+Tests for various python features.     vim: set ft=vim :
 
 STARTTEST
 :so small.vim
@@ -133,6 +133,36 @@ STARTTEST
 :py l=vim.bindeval('l')
 :lockvar! l
 :py l[2]='i'
+:$put =string(l)
+:unlockvar! l
+:"
+:" Function calls
+:function New(...)
+:return ['NewStart']+a:000+['NewEnd']
+:endfunction
+:function DictNew(...) dict
+:return ['DictNewStart']+a:000+['DictNewEnd', self]
+:endfunction
+:let l=[function('New'), function('DictNew')]
+:py l=vim.bindeval('l')
+:py l.extend(list(l[0](1, 2, 3)))
+:$put =string(l)
+:py l.extend(list(l[1](1, 2, 3, self={'a': 'b'})))
+:$put =string(l)
+:try
+:py l[1](1, 2, 3)
+:catch
+:$put =v:exception
+:endtry
+:delfunction New
+:try
+:py l[0](1, 2, 3)
+:catch
+:$put =v:exception
+:endtry
+:"
+:" pyeval()
+:let l=pyeval('range(3)')
 :$put =string(l)
 :endfun
 :"
