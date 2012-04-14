@@ -26,8 +26,13 @@ Vim(put):E684:
 [0, 'b', 2, 3]
 [0, 1, 'c']
 [0, 1, 2, 3, 'd']
-[0, 1, 'e', 3]
+[0, 1, 2, 'e', 3]
 ['f', 2, 3]
 [0, 1, 'g', 2, 3]
 ['h']
 [0, 1, 2, 3]
+[function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd']
+[function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
+Vim(python):E725: Calling dict function without Dictionary: DictNew
+Vim(python):E117: Unknown function: New
+[0, 1, 2]
