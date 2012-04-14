@@ -1562,8 +1562,8 @@ DictionaryDestructor(PyObject *self)
     DictionaryObject	*this = ((DictionaryObject *) (self));
 
     hi = pyhash_lookup(&dictrefs, (void *) this->dict);
-    if(hi != NULL && *hi == this)
-	*hi = NULL;
+    if(hi != NULL && *hi == this->dict)
+	pyhash_remove(&dictrefs, hi);
     dict_unref(this->dict);
 
     Py_DECREF(self);
@@ -1786,8 +1786,8 @@ ListDestructor(PyObject *self)
     ListObject	*this = ((ListObject *) (self));
 
     hi = pyhash_lookup(&listrefs, (void *) this->list);
-    if(hi != NULL && *hi == this)
-	*hi = NULL;
+    if(hi != NULL && *hi == this->list)
+	pyhash_remove(&listrefs, hi);
     list_unref(this->list);
 
     Py_DECREF(self);
@@ -1999,6 +1999,8 @@ ListConcatInPlace(PyObject *self, PyObject *obj)
 
     if(list_py_concat(l, obj, PyList_Size, PyList_GetItem, 1)==-1)
 	return NULL;
+
+    Py_INCREF(self);
 
     return self;
 }
