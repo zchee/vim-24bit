@@ -15,7 +15,7 @@ STARTTEST
 :try
 :  $put =string(l[-4])
 :catch
-:  $put =v:exception[:14]
+:  $put =v:exception[:13]
 :endtry
 :" List assignment
 :py l[0]=0
@@ -29,7 +29,7 @@ STARTTEST
 :py d['1']='asd'
 :py d['b']=[1, 2, f]
 :py d['-1']={'a': 1}
-:for [key, val] in items(d)
+:for [key, val] in sort(items(d))
 :  $put =string(key) . ' : ' . string(val)
 :  unlet key val
 :endfor
@@ -40,10 +40,10 @@ STARTTEST
 :let l = range(8)
 :py l=vim.bindeval('l')
 :try
-:py del l[:3]
-:py del l[1:]
+:   py del l[:3]
+:   py del l[1:]
 :catch
-:$put =v:exception
+:   $put =v:exception
 :endtry
 :$put =string(l)
 :"
@@ -150,20 +150,32 @@ STARTTEST
 :py l.extend(list(l[1](1, 2, 3, self={'a': 'b'})))
 :$put =string(l)
 :try
-:py l[1](1, 2, 3)
+:   py l[1](1, 2, 3)
 :catch
-:$put =v:exception
+:   $put =v:exception
 :endtry
 :delfunction New
 :try
-:py l[0](1, 2, 3)
+:   py l[0](1, 2, 3)
 :catch
-:$put =v:exception
+:   $put =v:exception
 :endtry
 :"
 :" pyeval()
 :let l=pyeval('range(3)')
 :$put =string(l)
+:let d=pyeval('{"a": "b", "c": 1, "d": ["e"]}')
+:$put =sort(items(d))
+:try
+:   let undef=pyeval('undefined_name')
+:catch
+:   $put =v:exception[:13]
+:endtry
+:try
+:   let vim=pyeval('vim')
+:catch
+:   $put =v:exception[:13]
+:endtry
 :endfun
 :"
 :call Test()

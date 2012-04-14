@@ -1,12 +1,12 @@
 start:
 [1, 'as''d', [1, 2, function('strlen'), {'a': 1}]]
 [1, 2, function('strlen'), {'a': 1}]
-Vim(put):E684: 
+Vim(put):E684:
 [0, 'as''d', [1, 2, function('strlen'), {'a': 1}]]
 [0, function('strlen'), [1, 2, function('strlen'), {'a': 1}]]
+'-1' : {'a': 1}
 '1' : 'asd'
 'b' : [1, 2, function('strlen')]
-'-1' : {'a': 1}
 [0, function('strlen')]
 [3]
 {'1': 'asd', 'b': [1, 2, function('strlen')]}
@@ -36,3 +36,8 @@ Vim(put):E684:
 Vim(python):E725: Calling dict function without Dictionary: DictNew
 Vim(python):E117: Unknown function: New
 [0, 1, 2]
+['a', 'b']
+['c', 1]
+['d', ['e']]
+Vim(let):E858:
+Vim(let):E859:
