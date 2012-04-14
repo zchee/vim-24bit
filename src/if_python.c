@@ -1971,9 +1971,8 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
 	}
-	if(ConvertFromPyObject(litem, &v, 1) == -1) {
+	if(ConvertFromPyObject(litem, &v, 1) == -1)
 	    return -1;
-	}
 	if(list_insert_tv(l, &v, li) == FAIL) {
 	    PyErr_SetVim(_("failed to add item to list"));
 	    return -1;
@@ -2297,6 +2296,11 @@ do_pyeval (char_u *str, typval_T *rettv)
     if(ConvertFromPyObject(r, rettv, 0) == -1) {
 	EMSG(_("E859: Failed to convert returned python object to vim value"));
 	return;
+    }
+    switch(rettv->v_type) {
+	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
+	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
+	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
     }
 }
 
