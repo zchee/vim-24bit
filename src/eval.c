@@ -6787,6 +6787,10 @@ garbage_collect()
     set_ref_in_python(copyID);
 #endif
 
+#ifdef FEAT_PYTHON3
+    set_ref_in_python3(copyID);
+#endif
+
     /*
      * 2. Free lists and dictionaries that are not referenced.
      */
