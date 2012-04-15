@@ -1638,12 +1638,6 @@ FunctionDestructor(PyObject *self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
-    static PyObject *
-FunctionCall(PyObject *self, PyObject *args, PyObject *kwargs)
-{
-    return NULL;
-}
-
 /* FIXME Copy-paste from if_python.c, without modifications */
     static PyObject *
 FunctionNew(char_u *name)
@@ -1662,6 +1656,20 @@ FunctionNew(char_u *name)
     STRCPY(self->name, name);
     func_ref(name);
     return (PyObject *)(self);
+}
+
+    static PyObject *
+FunctionGetattro(PyObject *self, PyObject *nameobj)
+{
+    FunctionObject	*this = (FunctionObject *)(self);
+    char	*name = "";
+    if(PyUnicode_Check(nameobj))
+	name = _PyUnicode_AsString(nameobj);
+
+    if(strcmp(name, "name") == 0)
+	return PyUnicode_FromString((char *)(this->name));
+
+    return PyObject_GenericGetAttr(self, nameobj);
 }
 
 /* External interface
@@ -2122,9 +2130,12 @@ init_structs(void)
     vim_memset(&FunctionType, 0, sizeof(FunctionType));
     FunctionType.tp_name = "vim.list";
     FunctionType.tp_basicsize = sizeof(FunctionObject);
+    FunctionType.tp_getattro = FunctionGetattro;
     FunctionType.tp_dealloc = FunctionDestructor;
+    FunctionType.tp_call = FunctionCall;
     FunctionType.tp_flags = Py_TPFLAGS_DEFAULT;
     FunctionType.tp_doc = "object that calls vim function";
+    FunctionType.tp_methods = FunctionMethods;
 
     vim_memset(&vimmodule, 0, sizeof(vimmodule));
     vimmodule.m_name = "vim";
