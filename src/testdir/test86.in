@@ -149,6 +149,8 @@ STARTTEST
 :$put =string(l)
 :py l.extend(list(l[1](1, 2, 3, self={'a': 'b'})))
 :$put =string(l)
+:py l.extend([l[0].name])
+:$put =string(l)
 :try
 :   py l[1](1, 2, 3)
 :catch
