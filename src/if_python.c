@@ -654,10 +654,9 @@ fail:
 /*
  * External interface
  */
-    static void *
-DoPythonCommand(exarg_T *eap, const char *cmd, int is_pyeval)
+    static void
+DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
 {
-    void *r;
 #ifndef PY_CAN_RECURSE
     static int		recursive = 0;
 #endif
@@ -686,14 +685,15 @@ DoPythonCommand(exarg_T *eap, const char *cmd, int is_pyeval)
     if (Python_Init())
 	goto theend;
 
-    if(is_pyeval)
+    if(rettv == NULL)
+    {
+	RangeStart = eap->line1;
+	RangeEnd = eap->line2;
+    }
+    else
     {
 	RangeStart = (PyInt) curwin->w_cursor.lnum;
 	RangeEnd = RangeStart;
-    }
-    else {
-	RangeStart = eap->line1;
-	RangeEnd = eap->line2;
     }
     Python_Release_Vim();	    /* leave vim */
 
@@ -712,13 +712,17 @@ DoPythonCommand(exarg_T *eap, const char *cmd, int is_pyeval)
 
     Python_RestoreThread();	    /* enter python */
 
-    if(is_pyeval)
-    {
-	r = (void *) PyRun_String((char *)cmd, Py_eval_input, globals, globals);
-    }
-    else{
-	r = NULL;
+    if(rettv == NULL)
 	PyRun_SimpleString((char *)(cmd));
+    else
+    {
+	PyObject	*r;
+	r = PyRun_String((char *)(cmd), Py_eval_input, globals, globals);
+	if(r == NULL)
+	    EMSG(_("E858: Eval did not return a valid python object"));
+	else if(ConvertFromPyObject(r, rettv) == -1)
+	    EMSG(_("E859: Failed to convert returned python object to vim value"));
+	PyErr_Clear();
     }
 
     Python_SaveThread();	    /* leave python */
@@ -741,7 +745,7 @@ theend:
 #ifndef PY_CAN_RECURSE
     --recursive;
 #endif
-    return r;
+    return;
 }
 
 /*
@@ -756,9 +760,9 @@ ex_python(exarg_T *eap)
     if (!eap->skip)
     {
 	if (script == NULL)
-	    DoPythonCommand(eap, (char *)eap->arg, 0);
+	    DoPythonCommand(eap, (char *)eap->arg, NULL);
 	else
-	    DoPythonCommand(eap, (char *)script, 0);
+	    DoPythonCommand(eap, (char *)script, NULL);
     }
     vim_free(script);
 }
@@ -804,7 +808,7 @@ ex_pyfile(exarg_T *eap)
     *p++ = '\0';
 
     /* Execute the file */
-    DoPythonCommand(eap, buffer, 0);
+    DoPythonCommand(eap, buffer, NULL);
 }
 
 /******************************************************
@@ -864,7 +868,7 @@ PythonIO_Init(void)
  */
 
 static PyObject *ConvertToPyObject(typval_T *);
-static int ConvertFromPyObject(PyObject *, typval_T *, int);
+static int ConvertFromPyObject(PyObject *, typval_T *);
 
 /* Window type - Implementation functions
  * --------------------------------------
@@ -1757,7 +1761,7 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 	return 0;
     }
 
-    if(ConvertFromPyObject(obj, &tv, 1) == -1)
+    if(ConvertFromPyObject(obj, &tv) == -1)
 	return -1;
 
     if(index == length)
@@ -1768,7 +1772,8 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 	    return -1;
 	}
     }
-    else {
+    else
+    {
 	li = list_find(l, (long) index);
 	clear_tv(&li->li_tv);
 	copy_tv(&tv, &li->li_tv);
@@ -1798,7 +1803,8 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 
     if(first == size)
 	li = NULL;
-    else {
+    else
+    {
 	li = list_find(l, (long) first);
 	if(li == NULL)
 	{
@@ -1836,7 +1842,7 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
 	}
-	if(ConvertFromPyObject(litem, &v, 1) == -1)
+	if(ConvertFromPyObject(litem, &v) == -1)
 	    return -1;
 	if(list_insert_tv(l, &v, li) == FAIL)
 	{
@@ -1864,7 +1870,7 @@ ListConcatInPlace(PyObject *self, PyObject *obj)
 	return NULL;
     }
 
-    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem, 1)==-1)
+    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
 	return NULL;
 
     Py_INCREF(self);
@@ -1951,7 +1957,7 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     PyObject	*selfdictObject;
     PyObject	*result;
 
-    if(ConvertFromPyObject(argsObject, &args, 1) == -1)
+    if(ConvertFromPyObject(argsObject, &args) == -1)
 	return NULL;
 
     if(kwargs != NULL)
@@ -1959,7 +1965,7 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
 	selfdictObject = PyDict_GetItemString(kwargs, "self");
 	if(selfdictObject != NULL)
 	{
-	    if(ConvertFromPyObject(selfdictObject, &selfdicttv, 1) == -1)
+	    if(ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
 		return NULL;
 	    if(selfdicttv.v_type != VAR_DICT)
 	    {
@@ -2016,10 +2022,10 @@ ConvertToPyObject(typval_T *tv)
     }
 }
 
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {if(raise) PyErr_SetVim(_(str)); return -1;}
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
 
     static int
-ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
+ConvertFromPyObject(PyObject *obj, typval_T *tv)
 {
     if(obj->ob_type == &DictionaryType)
     {
@@ -2035,7 +2041,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
     {
 	char_u	*retval = NULL;
 
-	if(set_string_copy(((FunctionObject *) (obj))->name, tv, raise) == -1)
+	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_FUNC;
@@ -2048,7 +2054,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	if(result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv, raise) == -1)
+	if(set_string_copy(result, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_STRING;
@@ -2086,8 +2092,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	    OBJ_NULL_ERR(lobj, "internal error: no key")
 	    if(!PyString_Check(lobj))
 	    {
-		if(raise)
-		    PyErr_SetString(PyExc_TypeError, _("key is not a string"));
+		PyErr_SetString(PyExc_TypeError, _("key is not a string"));
 		return -1;
 	    }
 	    key = (char_u *) PyString_AsString(lobj);
@@ -2098,11 +2103,10 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	    di = dictitem_alloc(key);
 	    if(di == NULL)
 	    {
-		if(raise)
-		    PyErr_NoMemory();
+		PyErr_NoMemory();
 		return -1;
 	    }
-	    if(ConvertFromPyObject(lobj, &v, raise) == -1)
+	    if(ConvertFromPyObject(lobj, &v) == -1)
 	    {
 		vim_free(di);
 		return -1;
@@ -2110,8 +2114,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	    if(dict_add(d, di) == FAIL)
 	    {
 		vim_free(di);
-		if(raise)
-		    PyErr_SetVim(_("failed to add key to dictionary"));
+		PyErr_SetVim(_("failed to add key to dictionary"));
 		return -1;
 	    }
 	    copy_tv(&v, &di->di_tv);
@@ -2125,7 +2128,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	list_T	*l;
 
 	l = list_alloc();
-	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem, raise)==-1)
+	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
 	    return -1;
 
 	tv->v_type = VAR_LIST;
@@ -2136,7 +2139,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	list_T	*l;
 
 	l = list_alloc();
-	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem, raise)==-1)
+	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
 	    return -1;
 
 	tv->v_type = VAR_LIST;
@@ -2149,9 +2152,9 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
     }
 #endif
-    else {
-	if(raise)
-	    PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
+    else
+    {
+	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
 	return -1;
     }
     return 0;
@@ -2160,17 +2163,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
     void
 do_pyeval (char_u *str, typval_T *rettv)
 {
-    PyObject *r = (PyObject *) DoPythonCommand(NULL, (char *) str, 1);
-    if(r == NULL)
-    {
-	EMSG(_("E858: Eval did not return a valid python object"));
-	return;
-    }
-    if(ConvertFromPyObject(r, rettv, 0) == -1)
-    {
-	EMSG(_("E859: Failed to convert returned python object to vim value"));
-	return;
-    }
+    DoPythonCommand(NULL, (char *) str, rettv);
     switch(rettv->v_type)
     {
 	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
