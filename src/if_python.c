@@ -1946,53 +1946,6 @@ FunctionGetattr(PyObject *self, char *name)
 }
 
     static PyObject *
-FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
-{
-    FunctionObject	*this = (FunctionObject *)(self);
-    char_u	*name = this->name;
-    typval_T	args;
-    typval_T	selfdicttv;
-    typval_T	rettv;
-    dict_T	*selfdict = NULL;
-    PyObject	*selfdictObject;
-    PyObject	*result;
-
-    if(ConvertFromPyObject(argsObject, &args) == -1)
-	return NULL;
-
-    if(kwargs != NULL)
-    {
-	selfdictObject = PyDict_GetItemString(kwargs, "self");
-	if(selfdictObject != NULL)
-	{
-	    if(ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
-		return NULL;
-	    if(selfdicttv.v_type != VAR_DICT)
-	    {
-		PyErr_SetString(PyExc_TypeError, _("'self' argument must be a dictionary"));
-		clear_tv(&args);
-		clear_tv(&selfdicttv);
-		return NULL;
-	    }
-	    selfdict = selfdicttv.vval.v_dict;
-	}
-    }
-
-    func_call(name, &args, selfdict, &rettv);
-    result = ConvertToPyObject(&rettv);
-
-    /* FIXME Check what should really be cleared. */
-    clear_tv(&args);
-    clear_tv(&rettv);
-    /*
-     * if(selfdict!=NULL)
-     *     clear_tv(selfdicttv);
-     */
-
-    return result;
-}
-
-    static PyObject *
 ConvertToPyObject(typval_T *tv)
 {
     if(tv == NULL)
