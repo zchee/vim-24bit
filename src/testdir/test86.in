@@ -160,6 +160,14 @@ STARTTEST
 :catch
 :   $put =v:exception
 :endtry
+:if has('float')
+:   let l=[0.0]
+:   py l=vim.bindeval('l')
+:   py l.extend([0.0])
+:   $put =string(l)
+:else
+:   $put ='[0.0, 0.0]'
+:endif
 :"
 :" pyeval()
 :let l=pyeval('range(3)')
@@ -176,6 +184,12 @@ STARTTEST
 :catch
 :   $put =v:exception[:13]
 :endtry
+:if has('float')
+:   let f=pyeval('0.0')
+:   $put =string(f)
+:else
+:   $put ='0.0'
+:endif
 :endfun
 :"
 :call Test()

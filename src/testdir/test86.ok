@@ -35,9 +35,11 @@ Vim(put):E684:
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
 Vim(python):E725: Calling dict function without Dictionary: DictNew
 Vim(python):E117: Unknown function: New
+[0.0, 0.0]
 [0, 1, 2]
 ['a', 'b']
 ['c', 1]
 ['d', ['e']]
 Vim(let):E858:
 Vim(let):E859:
+0.0
