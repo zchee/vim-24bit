@@ -34,13 +34,13 @@ Vim(put):E684:
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd']
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}, 'New']
-Vim(python):E725:
-Vim(python):E117:
+Vim(py3):E725:
+Vim(py3):E117:
 [0.0, 0.0]
 [0, 1, 2]
 ['a', 'b']
 ['c', 1]
 ['d', ['e']]
-Vim(let):E858:
-Vim(let):E859:
+Vim(let):E860:
+Vim(let):E861:
 0.0
