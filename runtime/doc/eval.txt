@@ -1877,6 +1877,7 @@ prevnonblank( {lnum})		Number	line nr of non-blank line <= {lnum}
 printf( {fmt}, {expr1}...)	String	format text
 pumvisible()			Number	whether popup menu is visible
 pyeval( {expr})			any	evaluate |Python| expression
+pythreeeval( {expr})		any	evaluate |python3| expression
 range( {expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
 readfile( {fname} [, {binary} [, {max}]])
@@ -4599,8 +4600,18 @@ pyeval({expr})						*pyeval()*
 		converted to Vim data structures.
 		Numbers and strings are returned as they are (strings are 
 		copied though).
-		Lists are represented as Vim |List| type. Tuples are not 
-		currently supported.
+		Lists are represented as Vim |List| type.
+		Dictionaries are represented as Vim |Dictionary| type with 
+		keys converted to strings.
+
+							*E860* *E861*
+pythreeeval({expr})					*pythreeeval()*
+		Evaluate Python expression {expr} and return its result
+		converted to Vim data structures.
+		Numbers and strings are returned as they are (strings are 
+		copied though, unicode strings are additionally converted to 
+		'encoding').
+		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type with 
 		keys converted to strings.
 

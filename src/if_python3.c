@@ -132,6 +132,7 @@ static void init_structs(void);
 # define PyTuple_GetItem py3_PyTuple_GetItem
 # define PySlice_GetIndicesEx py3_PySlice_GetIndicesEx
 # define PyImport_ImportModule py3_PyImport_ImportModule
+# define PyImport_AddModule py3_PyImport_AddModule
 # define PyObject_Init py3__PyObject_Init
 # define PyDict_New py3_PyDict_New
 # define PyDict_GetItemString py3_PyDict_GetItemString
@@ -139,6 +140,8 @@ static void init_structs(void);
 # define PyModule_GetDict py3_PyModule_GetDict
 #undef PyRun_SimpleString
 # define PyRun_SimpleString py3_PyRun_SimpleString
+#undef PyRun_String
+# define PyRun_String py3_PyRun_String
 # define PySys_SetObject py3_PySys_SetObject
 # define PySys_SetArgv py3_PySys_SetArgv
 # define PyType_Type (*py3_PyType_Type)
@@ -211,8 +214,10 @@ static PyObject* (*py3_PyErr_NoMemory)(void);
 static void (*py3_Py_Finalize)(void);
 static void (*py3_PyErr_SetString)(PyObject *, const char *);
 static int (*py3_PyRun_SimpleString)(char *);
+static PyObject* (*py3_PyRun_String)(char *, int, PyObject *, PyObject *);
 static PyObject* (*py3_PyList_GetItem)(PyObject *, Py_ssize_t);
 static PyObject* (*py3_PyImport_ImportModule)(const char *);
+static PyObject* (*py3_PyImport_AddModule)(const char *);
 static int (*py3_PyErr_BadArgument)(void);
 static PyTypeObject* py3_PyType_Type;
 static PyObject* (*py3_PyErr_Occurred)(void);
@@ -310,8 +315,10 @@ static struct
     {"Py_Finalize", (PYTHON_PROC*)&py3_Py_Finalize},
     {"PyErr_SetString", (PYTHON_PROC*)&py3_PyErr_SetString},
     {"PyRun_SimpleString", (PYTHON_PROC*)&py3_PyRun_SimpleString},
+    {"PyRun_String", (PYTHON_PROC*)&py3_PyRun_String},
     {"PyList_GetItem", (PYTHON_PROC*)&py3_PyList_GetItem},
     {"PyImport_ImportModule", (PYTHON_PROC*)&py3_PyImport_ImportModule},
+    {"PyImport_AddModule", (PYTHON_PROC*)&py3_PyImport_AddModule},
     {"PyErr_BadArgument", (PYTHON_PROC*)&py3_PyErr_BadArgument},
     {"PyType_Type", (PYTHON_PROC*)&py3_PyType_Type},
     {"PyErr_Occurred", (PYTHON_PROC*)&py3_PyErr_Occurred},
@@ -559,6 +566,8 @@ call_PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
 static Py_ssize_t RangeStart;
 static Py_ssize_t RangeEnd;
 
+static PyObject *globals;
+
 static int PythonIO_Init(void);
 static void PythonIO_Fini(void);
 PyMODINIT_FUNC Py3Init_vim(void);
@@ -644,6 +653,10 @@ Python3_Init(void)
 
 	PyImport_AppendInittab("vim", Py3Init_vim);
 
+	globals = PyModule_GetDict(PyImport_AddModule("__main__"));
+	pyhash_init(&dictrefs);
+	pyhash_init(&listrefs);
+
 	/* Remove the element from sys.path that was added because of our
 	 * argv[0] value in Py3Init_vim().  Previously we used an empty
 	 * string, but dependinding on the OS we then get an empty entry or
@@ -680,7 +693,7 @@ fail:
  * External interface
  */
     static void
-DoPy3Command(exarg_T *eap, const char *cmd)
+DoPy3Command(exarg_T *eap, const char *cmd, typval_T *rettv)
 {
 #if defined(MACOS) && !defined(MACOS_X_UNIX)
     GrafPtr		oldPort;
@@ -700,8 +713,16 @@ DoPy3Command(exarg_T *eap, const char *cmd)
     if (Python3_Init())
 	goto theend;
 
-    RangeStart = eap->line1;
-    RangeEnd = eap->line2;
+    if(rettv == NULL)
+    {
+	RangeStart = eap->line1;
+	RangeEnd = eap->line2;
+    }
+    else
+    {
+	RangeStart = (PyInt) curwin->w_cursor.lnum;
+	RangeEnd = RangeStart;
+    }
     Python_Release_Vim();	    /* leave vim */
 
 #if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
@@ -725,7 +746,19 @@ DoPy3Command(exarg_T *eap, const char *cmd)
 					(char *)ENC_OPT, CODEC_ERROR_HANDLER);
     cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", CODEC_ERROR_HANDLER);
     Py_XDECREF(cmdstr);
-    PyRun_SimpleString(PyBytes_AsString(cmdbytes));
+    if(rettv == NULL)
+	PyRun_SimpleString(PyBytes_AsString(cmdbytes));
+    else
+    {
+	PyObject	*r;
+	r = PyRun_String(PyBytes_AsString(cmdbytes), Py_eval_input,
+			 globals, globals);
+	if(r == NULL)
+	    EMSG(_("E860: Eval did not return a valid python 3 object"));
+	else if(ConvertFromPyObject(r, rettv) == -1)
+	    EMSG(_("E861: Failed to convert returned python 3 object to vim value"));
+	PyErr_Clear();
+    }
     Py_XDECREF(cmdbytes);
 
     PyGILState_Release(pygilstate);
@@ -760,9 +793,9 @@ ex_py3(exarg_T *eap)
     if (!eap->skip)
     {
 	if (script == NULL)
-	    DoPy3Command(eap, (char *)eap->arg);
+	    DoPy3Command(eap, (char *)eap->arg, NULL);
 	else
-	    DoPy3Command(eap, (char *)script);
+	    DoPy3Command(eap, (char *)script, NULL);
     }
     vim_free(script);
 }
@@ -823,7 +856,7 @@ ex_py3file(exarg_T *eap)
 
 
     /* Execute the file */
-    DoPy3Command(eap, buffer);
+    DoPy3Command(eap, buffer, NULL);
 }
 
 /******************************************************
@@ -1694,9 +1727,6 @@ PyMODINIT_FUNC Py3Init_vim(void)
     PyType_Ready(&ListType);
     PyType_Ready(&FunctionType);
 
-    pyhash_init(&dictrefs);
-    pyhash_init(&listrefs);
-
     /* Set sys.argv[] to avoid a crash in warn(). */
     PySys_SetArgv(1, argv);
 
@@ -1971,6 +2001,18 @@ LineToString(const char *str)
 
     vim_free(tmp);
     return result;
+}
+
+    void
+do_py3eval (char_u *str, typval_T *rettv)
+{
+    DoPy3Command(NULL, (char *) str, rettv);
+    switch(rettv->v_type)
+    {
+	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
+	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
+	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
+    }
 }
 
     void
