@@ -100,7 +100,8 @@ OutputWritelines(PyObject *self, PyObject *args)
 	return NULL;
     Py_INCREF(list);
 
-    if (!PyList_Check(list)) {
+    if (!PyList_Check(list))
+    {
 	PyErr_SetString(PyExc_TypeError, _("writelines() requires list of strings"));
 	Py_DECREF(list);
 	return NULL;
@@ -114,7 +115,8 @@ OutputWritelines(PyObject *self, PyObject *args)
 	char *str = NULL;
 	PyInt len;
 
-	if (!PyArg_Parse(line, "et#", ENC_OPT, &str, &len)) {
+	if (!PyArg_Parse(line, "et#", ENC_OPT, &str, &len))
+	{
 	    PyErr_SetString(PyExc_TypeError, _("writelines() requires list of strings"));
 	    Py_DECREF(list);
 	    return NULL;
@@ -730,7 +732,202 @@ ListItem(PyObject *self, Py_ssize_t index)
     return ConvertToPyObject(&li->li_tv);
 }
 
-static PyObject *ListConcatInPlace(PyObject *, PyObject *);
+#define PROC_RANGE \
+    if(last < 0) {\
+	if(last < -size) \
+	    last = 0; \
+	else \
+	    last += size; \
+    } \
+    if(first < 0) \
+	first = 0; \
+    if(first > size) \
+	first = size; \
+    if(last > size) \
+	last = size;
+
+    static PyObject *
+ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
+{
+    PyInt	i;
+    PyInt	size = ListLength(self);
+    PyInt	n;
+    PyObject	*list;
+    int		reversed = 0;
+
+    PROC_RANGE
+    if(first >= last)
+	first = last;
+
+    n = last-first;
+    list = PyList_New(n);
+    if(list == NULL)
+	return NULL;
+
+    for (i = 0; i < n; ++i)
+    {
+	PyObject	*item = ListItem(self, i);
+	if(item == NULL)
+	{
+	    Py_DECREF(list);
+	    return NULL;
+	}
+
+	if((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item)))
+	{
+	    Py_DECREF(item);
+	    Py_DECREF(list);
+	    return NULL;
+	}
+    }
+
+    return list;
+}
+
+    static int
+ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
+{
+    typval_T	tv;
+    list_T	*l = ((ListObject *) (self))->list;
+    listitem_T	*li;
+    Py_ssize_t	length = ListLength(self);
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
+    if(index>length || (index==length && obj==NULL))
+    {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+	return -1;
+    }
+
+    if(obj == NULL)
+    {
+	li = list_find(l, (long) index);
+	list_remove(l, li);
+	clear_tv(&li->li_tv);
+	vim_free(li);
+	return 0;
+    }
+
+    if(ConvertFromPyObject(obj, &tv) == -1)
+	return -1;
+
+    if(index == length)
+    {
+	if(list_append_tv(l, &tv) == FAIL)
+	{
+	    PyErr_SetVim(_("internal error: failed to add item to list"));
+	    return -1;
+	}
+    }
+    else
+    {
+	li = list_find(l, (long) index);
+	clear_tv(&li->li_tv);
+	copy_tv(&tv, &li->li_tv);
+    }
+    return 0;
+}
+
+    static int
+ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
+{
+    PyInt	size = ListLength(self);
+    Py_ssize_t	i;
+    Py_ssize_t	lsize;
+    PyObject	*litem;
+    listitem_T	*li;
+    listitem_T	*next;
+    typval_T	v;
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
+
+    PROC_RANGE
+
+    if(first == size)
+	li = NULL;
+    else
+    {
+	li = list_find(l, (long) first);
+	if(li == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no vim list item"));
+	    return -1;
+	}
+	if(last > first)
+	{
+	    i = last - first;
+	    while(i-- && li != NULL)
+	    {
+		next = li->li_next;
+		listitem_remove(l, li);
+		li = next;
+	    }
+	}
+    }
+
+    if(obj == NULL)
+	return 0;
+
+    if(!PyList_Check(obj))
+    {
+	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
+	return -1;
+    }
+
+    lsize = PyList_Size(obj);
+
+    for(i=0; i<lsize; i++)
+    {
+	litem = PyList_GetItem(obj, i);
+	if(litem == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no list item"));
+	    return -1;
+	}
+	if(ConvertFromPyObject(litem, &v) == -1)
+	    return -1;
+	if(list_insert_tv(l, &v, li) == FAIL)
+	{
+	    PyErr_SetVim(_("failed to add item to list"));
+	    return -1;
+	}
+    }
+    return 0;
+}
+
+    static PyObject *
+ListConcatInPlace(PyObject *self, PyObject *obj)
+{
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return NULL;
+    }
+
+    if(!PyList_Check(obj))
+    {
+	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
+	return NULL;
+    }
+
+    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
+	return NULL;
+
+    Py_INCREF(self);
+
+    return self;
+}
 
 static struct PyMethodDef ListMethods[] = {
     {"extend", (PyCFunction)ListConcatInPlace, METH_O, ""},
@@ -1938,9 +2135,13 @@ pyhash_lookup(ht, key)
 	obj = ht->pht_vals[index];
 	if (*hi == NULL)
 	    return freeitem == NULL ? hi : freeitem;
-	if (*hi == key) {
+	if (*hi == key)
+	{
 	    if(PYOBJ_DELETED(obj))
-		freeitem = hi;
+	    {
+		if(freeitem == NULL)
+		    freeitem = hi;
+	    }
 	    else
 		return hi;
 	}
@@ -1953,8 +2154,7 @@ pyhash_lookup(ht, key)
 
 /*
  * Add item "hi" with "key" to hashtable "ht".  "key" must not be NULL and
- * "hi" must have been obtained with pyhash_lookup() and point to an *any* item.
- * Unlike original hashes non-empty items are also accepted.
+ * "hi" must have been obtained with pyhash_lookup() and point to an empty item.
  * "hi" is invalid after this!
  * Returns OK or FAIL (out of memory).
  */
@@ -1965,23 +2165,18 @@ pyhash_add_item(ht, hi, key, val)
     void	*key;
     PyObject	*val;
 {
-    int		adding = (*hi == NULL);
-    if(adding) {
-        /* If resizing failed before and it fails again we can't add an item. */
-        if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
-	    return FAIL;
+    /* If resizing failed before and it fails again we can't add an item. */
+    if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
+	return FAIL;
 
-        ++ht->pht_used;
+    ++ht->pht_used;
+    if(PHVAL((*ht), hi) == NULL)
 	++ht->pht_filled;
-    }
     *hi = key;
     ht->pht_vals[hi-ht->pht_array] = val;
 
     /* When the space gets low may resize the array. */
-    if(adding)
-        return pyhash_may_resize(ht, 0);
-    else
-        return OK;
+    return pyhash_may_resize(ht, 0);
 }
 
 #define PYHASHITEM_EMPTY(ht, hi) ((*hi == NULL) || \
@@ -2021,6 +2216,7 @@ pyhash_remove(ht, hi)
     --ht->pht_used;
     *hi = NULL;
     PHVAL((*ht), hi) = NULL;
+    --ht->pht_filled;
     pyhash_may_resize(ht, 0);
 }
 
@@ -2138,7 +2334,8 @@ pyhash_may_resize(ht, minitems)
     for (olditem = oldarray; todo > 0; ++olditem)
 	if (*olditem != NULL)
 	{
-	    if(PYOBJ_DELETED(oldpyarray[olditem-oldarray])) {
+	    if(PYOBJ_DELETED(oldpyarray[olditem-oldarray]))
+	    {
 		--todo;
 		continue;
 	    }

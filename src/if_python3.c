@@ -1563,13 +1563,70 @@ static PySequenceMethods ListAsSeq = {
     (binaryfunc)	0,		 /* RangeConcat, sq_concat,  x+y   */
     (ssizeargfunc)	0,		 /* RangeRepeat, sq_repeat,  x*n   */
     (ssizeargfunc)	ListItem,	 /* sq_item,	  x[i]	   */
-    0,					 /* was_sq_slice,     x[i:j]   */
-    (ssizeobjargproc)	0,	 /* sq_as_item,  x[i]=v   */
-    0,					 /* sq_ass_slice, x[i:j]=v */
+    (void *)		0,		 /* was_sq_slice,     x[i:j]   */
+    (ssizeobjargproc)	ListAssItem,	 /* sq_as_item,  x[i]=v   */
+    (void *)		0,		 /* was_sq_ass_slice, x[i:j]=v */
     0,					 /* sq_contains */
-    0,					 /* sq_inplace_concat */
+    (binaryfunc)	ListConcatInPlace,/* sq_inplace_concat */
     0,					 /* sq_inplace_repeat */
 };
+
+static PyObject *ListSubscript(PyObject *, PyObject *);
+static Py_ssize_t ListAsSubscript(PyObject *, PyObject *, PyObject *);
+
+static PyMappingMethods ListAsMapping = {
+    /* mp_length	*/ (lenfunc) ListLength,
+    /* mp_subscript     */ (binaryfunc) ListSubscript,
+    /* mp_ass_subscript */ (objobjargproc) ListAsSubscript,
+};
+
+    static PyObject *
+ListSubscript(PyObject *self, PyObject* idxObject)
+{
+    if (PyLong_Check(idxObject))
+    {
+	long idx = PyLong_AsLong(idxObject);
+	return ListItem(self, idx);
+    }
+    else if (PySlice_Check(idxObject))
+    {
+	Py_ssize_t start, stop, step, slicelen;
+
+	if (PySlice_GetIndicesEx(idxObject, ListLength(self), &start, &stop,
+				 &step, &slicelen) < 0)
+	    return NULL;
+	return ListSlice(self, start, stop);
+    }
+    else
+    {
+	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
+	return NULL;
+    }
+}
+
+    static Py_ssize_t
+ListAsSubscript(PyObject *self, PyObject *idxObject, PyObject *obj)
+{
+    if (PyLong_Check(idxObject))
+    {
+	long idx = PyLong_AsLong(idxObject);
+	return ListAssItem(self, idx, obj);
+    }
+    else if (PySlice_Check(idxObject))
+    {
+	Py_ssize_t start, stop, step, slicelen;
+
+	if (PySlice_GetIndicesEx(idxObject, ListLength(self), &start, &stop,
+				 &step, &slicelen) < 0)
+	    return -1;
+	return ListAssSlice(self, start, stop, obj);
+    }
+    else
+    {
+	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
+	return -1;
+    }
+}
 
 static PyTypeObject ListType;
 
@@ -1614,12 +1671,6 @@ ListNew(list_T *list)
     else
 	Py_INCREF(self);
     return (PyObject *)(self);
-}
-
-    static PyObject *
-ListConcatInPlace(PyObject *self, PyObject *obj)
-{
-    return NULL;
 }
 
 /* Function object - Definitions
@@ -2123,6 +2174,7 @@ init_structs(void)
     ListType.tp_dealloc = ListDestructor;
     ListType.tp_basicsize = sizeof(ListObject);
     ListType.tp_as_sequence = &ListAsSeq;
+    ListType.tp_as_mapping = &ListAsMapping;
     ListType.tp_flags = Py_TPFLAGS_DEFAULT;
     ListType.tp_doc = "list pushing modifications to vim structure";
     ListType.tp_methods = ListMethods;

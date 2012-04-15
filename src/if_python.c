@@ -1512,9 +1512,6 @@ LineToString(const char *str)
 }
 
 static void DictionaryDestructor(PyObject *);
-static PyInt DictionaryLength(PyObject *);
-static PyObject *DictionaryItem(PyObject *, PyObject *);
-static PyInt DictionaryAssItem(PyObject *, PyObject *, PyObject *);
 
 static PyMappingMethods DictionaryAsMapping = {
     (PyInquiry)		DictionaryLength,
@@ -1588,12 +1585,6 @@ DictionaryDestructor(PyObject *self)
 }
 
 static void ListDestructor(PyObject *);
-static PyInt ListLength(PyObject *);
-static PyObject *ListItem(PyObject *, Py_ssize_t);
-static PyObject *ListSlice(PyObject *, Py_ssize_t, Py_ssize_t);
-static int ListAssItem(PyObject *, Py_ssize_t, PyObject *);
-static int ListAssSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
-static PyObject *ListConcatInPlace(PyObject *, PyObject *);
 static PyObject *ListGetattr(PyObject *, char *);
 
 static PySequenceMethods ListAsSeq = {
@@ -1607,6 +1598,7 @@ static PySequenceMethods ListAsSeq = {
     (objobjproc)		0,
 #if PY_MAJOR_VERSION >= 2
     (binaryfunc)		ListConcatInPlace,
+    0,
 #endif
 };
 
@@ -1679,203 +1671,6 @@ ListDestructor(PyObject *self)
 ListGetattr(PyObject *self, char *name)
 {
     return Py_FindMethod(ListMethods, self, name);
-}
-
-#define PROC_RANGE \
-    if(last < 0) {\
-	if(last < -size) \
-	    last = 0; \
-	else \
-	    last += size; \
-    } \
-    if(first < 0) \
-	first = 0; \
-    if(first > size) \
-	first = size; \
-    if(last > size) \
-	last = size;
-
-    static PyObject *
-ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
-{
-    PyInt	i;
-    PyInt	size = ListLength(self);
-    PyInt	n;
-    PyObject	*list;
-    int		reversed = 0;
-
-    PROC_RANGE
-    if(first >= last)
-	first = last;
-
-    n = last-first;
-    list = PyList_New(n);
-    if(list == NULL)
-	return NULL;
-
-    for (i = 0; i < n; ++i)
-    {
-	PyObject	*item = ListItem(self, i);
-	if(item == NULL)
-	{
-	    Py_DECREF(list);
-	    return NULL;
-	}
-
-	if((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item)))
-	{
-	    Py_DECREF(item);
-	    Py_DECREF(list);
-	    return NULL;
-	}
-    }
-
-    return list;
-}
-
-    static int
-ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
-{
-    typval_T	tv;
-    list_T	*l = ((ListObject *) (self))->list;
-    listitem_T	*li;
-    Py_ssize_t	length = ListLength(self);
-
-    if(l->lv_lock)
-    {
-	PyErr_SetVim(_("list is locked"));
-	return -1;
-    }
-    if(index>length || (index==length && obj==NULL))
-    {
-	PyErr_SetString(PyExc_IndexError, "list index out of range");
-	return -1;
-    }
-
-    if(obj == NULL)
-    {
-	li = list_find(l, (long) index);
-	list_remove(l, li);
-	clear_tv(&li->li_tv);
-	vim_free(li);
-	return 0;
-    }
-
-    if(ConvertFromPyObject(obj, &tv) == -1)
-	return -1;
-
-    if(index == length)
-    {
-	if(list_append_tv(l, &tv) == FAIL)
-	{
-	    PyErr_SetVim(_("internal error: failed to add item to list"));
-	    return -1;
-	}
-    }
-    else
-    {
-	li = list_find(l, (long) index);
-	clear_tv(&li->li_tv);
-	copy_tv(&tv, &li->li_tv);
-    }
-    return 0;
-}
-
-    static int
-ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
-{
-    PyInt	size = ListLength(self);
-    Py_ssize_t	i;
-    Py_ssize_t	lsize;
-    PyObject	*litem;
-    listitem_T	*li;
-    listitem_T	*next;
-    typval_T	v;
-    list_T	*l = ((ListObject *) (self))->list;
-
-    if(l->lv_lock)
-    {
-	PyErr_SetVim(_("list is locked"));
-	return -1;
-    }
-
-    PROC_RANGE
-
-    if(first == size)
-	li = NULL;
-    else
-    {
-	li = list_find(l, (long) first);
-	if(li == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no vim list item"));
-	    return -1;
-	}
-	if(last > first)
-	{
-	    i = last - first;
-	    while(i-- && li != NULL)
-	    {
-		next = li->li_next;
-		listitem_remove(l, li);
-		li = next;
-	    }
-	}
-    }
-
-    if(obj == NULL)
-	return 0;
-
-    if(!PyList_Check(obj))
-    {
-	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
-	return -1;
-    }
-
-    lsize = PyList_Size(obj);
-
-    for(i=0; i<lsize; i++)
-    {
-	litem = PyList_GetItem(obj, i);
-	if(litem == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no list item"));
-	    return -1;
-	}
-	if(ConvertFromPyObject(litem, &v) == -1)
-	    return -1;
-	if(list_insert_tv(l, &v, li) == FAIL)
-	{
-	    PyErr_SetVim(_("failed to add item to list"));
-	    return -1;
-	}
-    }
-    return 0;
-}
-
-    static PyObject *
-ListConcatInPlace(PyObject *self, PyObject *obj)
-{
-    list_T	*l = ((ListObject *) (self))->list;
-
-    if(l->lv_lock)
-    {
-	PyErr_SetVim(_("list is locked"));
-	return NULL;
-    }
-
-    if(!PyList_Check(obj))
-    {
-	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
-	return NULL;
-    }
-
-    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
-	return NULL;
-
-    Py_INCREF(self);
-
-    return self;
 }
 
 static void FunctionDestructor(PyObject *);
