@@ -470,6 +470,16 @@ static PyTypeObject RangeType;
 static int initialised = 0;
 #define PYINITIALISED initialised
 
+/* Add conversion from PyInt? */
+#define DICTKEY_GET(err) \
+    if(!PyString_Check(keyObject)) \
+    { \
+	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed")); \
+	return err; \
+    } \
+    key = (char_u *) PyString_AsString(keyObject);
+#define DICTKEY_UNREF
+
 /*
  * Include the code shared with if_python3.c
  */
@@ -1573,157 +1583,6 @@ DictionaryDestructor(PyObject *self)
     Py_DECREF(self);
 }
 
-    static PyInt
-DictionaryLength(PyObject *self)
-{
-    return ((PyInt) ((((DictionaryObject *)(self))->dict->dv_hashtab.ht_used)));
-}
-
-/* Add conversion from PyInt? */
-#define DICTKEY_GET(obj, err) \
-    if(!PyString_Check(obj)) \
-    { \
-	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed")); \
-	return err; \
-    } \
-    key = (char_u *) PyString_AsString(obj);
-
-    static PyObject *
-DictionaryItem(PyObject *self, PyObject *keyObject)
-{
-    char_u	*key;
-    dictitem_T	*val;
-
-    DICTKEY_GET(keyObject, NULL)
-
-    val = dict_find(((DictionaryObject *) (self))->dict, key, -1);
-
-    return ConvertToPyObject(&val->di_tv);
-}
-
-    static PyInt
-DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
-{
-    char_u	*key;
-    typval_T	tv;
-    dict_T	*d = ((DictionaryObject *)(self))->dict;
-    dictitem_T	*di;
-
-    if(d->dv_lock)
-    {
-	PyErr_SetVim(_("dict is locked"));
-	return -1;
-    }
-
-    DICTKEY_GET(keyObject, -1)
-
-    di = dict_find(d, key, -1);
-
-    if(valObject == NULL)
-    {
-	if(di == NULL)
-	{
-	    PyErr_SetString(PyExc_IndexError, _("no such key in dictionary"));
-	    return -1;
-	}
-	hashitem_T	*hi = hash_find(&d->dv_hashtab, di->di_key);
-	hash_remove(&d->dv_hashtab, hi);
-	dictitem_free(di);
-	return 0;
-    }
-
-    if(ConvertFromPyObject(valObject, &tv, 1) == -1)
-    {
-	return -1;
-    }
-
-    if(di == NULL)
-    {
-	di = dictitem_alloc(key);
-	if(di == NULL)
-	{
-	    PyErr_NoMemory();
-	    return -1;
-	}
-	if(dict_add(d, di) == FAIL)
-	{
-	    vim_free(di);
-	    PyErr_SetVim(_("failed to add key to dictionary"));
-	    return -1;
-	}
-    }
-    else
-	clear_tv(&di->di_tv);
-
-    copy_tv(&tv, &di->di_tv);
-    return 0;
-}
-
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {if(raise) PyErr_SetVim(_(str)); return -1;}
-
-    static int
-list_py_concat(list_T *l, PyObject *obj, PyInquiry Size, PyIntArgFunc Item, int raise)
-{
-    Py_ssize_t	i;
-    Py_ssize_t	lsize = Size(obj);
-    PyObject	*litem;
-    typval_T	v;
-
-    for(i=0; i<lsize; i++)
-    {
-	litem = Item(obj, i);
-	OBJ_NULL_ERR(litem, "internal error: no list item")
-	if(ConvertFromPyObject(litem, &v, 1) == -1)
-	{
-	    return -1;
-	}
-	if(list_append_tv(l, &v) == FAIL)
-	{
-	    PyErr_SetVim(_("failed to add item to list"));
-	    return -1;
-	}
-    }
-    return 0;
-}
-
-/* FIXME Copy-paste from if_lua.c */
-    static listitem_T *
-list_find (list_T *l, long n)
-{
-    listitem_T *li;
-    if (l == NULL || n < -l->lv_len || n >= l->lv_len)
-	return NULL;
-    if (n < 0) /* search backward? */
-	for (li = l->lv_last; n < -1; li = li->li_prev)
-	    n++;
-    else /* search forward */
-	for (li = l->lv_first; n > 0; li = li->li_next)
-	    n--;
-    return li;
-}
-
-/* FIXME Copy-paste from if_lua.c */
-    static void
-list_remove (list_T *l, listitem_T *li)
-{
-    listwatch_T *lw;
-    --l->lv_len;
-    /* fix watchers */
-    for (lw = l->lv_watch; lw != NULL; lw = lw->lw_next)
-	if (lw->lw_item == li)
-	    lw->lw_item = li->li_next;
-    /* fix list pointers */
-    if (li->li_next == NULL) /* last? */
-	l->lv_last = li->li_prev;
-    else
-	li->li_next->li_prev = li->li_prev;
-    if (li->li_prev == NULL) /* first? */
-	l->lv_first = li->li_next;
-    else
-	li->li_prev->li_next = li->li_next;
-    l->lv_idx_item = NULL;
-}
-
 static void ListDestructor(PyObject *);
 static PyInt ListLength(PyObject *);
 static PyObject *ListItem(PyObject *, Py_ssize_t);
@@ -1816,31 +1675,6 @@ ListDestructor(PyObject *self)
 ListGetattr(PyObject *self, char *name)
 {
     return Py_FindMethod(ListMethods, self, name);
-}
-
-    static PyInt
-ListLength(PyObject *self)
-{
-    return ((PyInt) (((ListObject *) (self))->list->lv_len));
-}
-
-    static PyObject *
-ListItem(PyObject *self, Py_ssize_t index)
-{
-    listitem_T	*li;
-
-    if(index>=ListLength(self))
-    {
-	PyErr_SetString(PyExc_IndexError, "list index out of range");
-	return NULL;
-    }
-    li = list_find(((ListObject *) (self))->list, (long) index);
-    if(li == NULL)
-    {
-	PyErr_SetVim(_("internal error: failed to get vim list item"));
-	return NULL;
-    }
-    return ConvertToPyObject(&li->li_tv);
 }
 
 #define PROC_RANGE \
@@ -2182,23 +2016,7 @@ ConvertToPyObject(typval_T *tv)
     }
 }
 
-    static int
-set_string_copy(char_u *str, typval_T *tv, int raise)
-{
-    char_u	*copy;
-
-    copy = (char_u *) alloc(STRLEN(str)+1);
-    if(copy == NULL)
-    {
-	if(raise)
-	    PyErr_NoMemory();
-	return -1;
-    }
-
-    STRCPY(copy, str);
-    tv->vval.v_string = copy;
-    return 0;
-}
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {if(raise) PyErr_SetVim(_(str)); return -1;}
 
     static int
 ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
