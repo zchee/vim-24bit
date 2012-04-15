@@ -541,7 +541,7 @@ typedef struct
     win_T	*win;
 } WindowObject;
 
-static int ConvertFromPyObject(PyObject *, typval_T *, int);
+static int ConvertFromPyObject(PyObject *, typval_T *);
 
 typedef struct
 {
@@ -603,7 +603,7 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	return 0;
     }
 
-    if(ConvertFromPyObject(valObject, &tv, 1) == -1)
+    if(ConvertFromPyObject(valObject, &tv) == -1)
     {
 	return -1;
     }
@@ -639,7 +639,7 @@ typedef struct
 } ListObject;
 
     static int
-list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item, int raise)
+list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
 {
     Py_ssize_t	i;
     Py_ssize_t	lsize = Size(obj);
@@ -655,7 +655,7 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item, int ra
 		PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
 	}
-	if(ConvertFromPyObject(litem, &v, 1) == -1)
+	if(ConvertFromPyObject(litem, &v) == -1)
 	    return -1;
 
 	if(list_append_tv(l, &v) == FAIL)
@@ -2057,7 +2057,8 @@ pyhash_may_resize(ht, minitems)
 	    mch_memmove(temppyarray, newpyarray, sizeof(temppyarray));
 	    oldpyarray = temppyarray;
 	}
-	else {
+	else
+	{
 	    oldarray = ht->pht_array;
 	    oldpyarray = ht->pht_vals;
 	}
@@ -2198,7 +2199,7 @@ set_ref_in_py(int copyID)
 }
 
     static int
-set_string_copy(char_u *str, typval_T *tv, int raise)
+set_string_copy(char_u *str, typval_T *tv)
 {
     char_u	*copy;
 

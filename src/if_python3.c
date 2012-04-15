@@ -502,7 +502,6 @@ static int py3initialised = 0;
 #define PYINITIALISED py3initialised
 
 /* Add conversion from PyInt? */
-static char_u *convert_pyunicode(PyObject *, int);
 #define DICTKEY_GET(err) \
     if(PyBytes_Check(keyObject)) \
 	key = (char_u *) PyBytes_AsString(keyObject); \
@@ -528,25 +527,6 @@ static char_u *convert_pyunicode(PyObject *, int);
  * Include the code shared with if_python.c
  */
 #include "if_py_both.h"
-
-    static char_u *
-convert_pyunicode(PyObject *obj, int raise)
-{
-    PyObject	*bytes = PyString_AsBytes(obj);
-    char_u	*result;
-    char_u	*copy;
-
-    if(bytes == NULL)
-	return NULL;
-
-    result = (char_u *) PyBytes_AsString(bytes);
-    if(result == NULL)
-	return NULL;
-
-    Py_XDECREF(bytes);
-
-    return result;
-}
 
 #define PY3OBJ_DELETED(obj) (obj->ob_base.ob_refcnt<=0)
 
@@ -1119,7 +1099,9 @@ BufferSubscript(PyObject *self, PyObject* idx)
 	    return NULL;
 	}
 	return BufferSlice(self, start, stop);
-    } else {
+    }
+    else
+    {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return NULL;
     }
@@ -1148,7 +1130,9 @@ BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val)
 	return RBAsSlice((BufferObject *)(self), start, stop, val, 1,
 			  (PyInt)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 			  NULL);
-    } else {
+    }
+    else
+    {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return -1;
     }
@@ -1237,7 +1221,9 @@ RangeSubscript(PyObject *self, PyObject* idx)
 	    return NULL;
 	}
 	return RangeSlice(self, start, stop);
-    } else {
+    }
+    else
+    {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return NULL;
     }
@@ -1262,7 +1248,9 @@ RangeAsSubscript(PyObject *self, PyObject *idx, PyObject *val)
 	    return -1;
 	}
 	return RangeAsSlice(self, start, stop, val);
-    } else {
+    }
+    else
+    {
 	PyErr_SetString(PyExc_IndexError, "Index must be int or slice");
 	return -1;
     }
@@ -1741,7 +1729,7 @@ PyMODINIT_FUNC Py3Init_vim(void)
 #define OBJ_NULL_ERR(obj, str) if(obj==NULL) {if(raise) PyErr_SetVim(_(str)); return -1;}
 
     static int
-ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
+ConvertFromPyObject(PyObject *obj, typval_T *tv)
 {
     if(obj->ob_type == &DictionaryType)
     {
@@ -1757,7 +1745,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
     {
 	char_u	*retval = NULL;
 
-	if(set_string_copy(((FunctionObject *) (obj))->name, tv, raise) == -1)
+	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_FUNC;
@@ -1770,20 +1758,30 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	if(result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv, raise) == -1)
+	if(set_string_copy(result, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_STRING;
     }
     else if(PyUnicode_Check(obj))
     {
-	char_u *result = convert_pyunicode(obj, raise);
+	PyObject	*bytes;
+	char_u	*result;
 
+	bytes = PyString_AsBytes(obj);
+	if(bytes == NULL)
+	    return -1;
+
+	result = (char_u *) PyBytes_AsString(bytes);
 	if(result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv, raise) == -1)
+	if(set_string_copy(result, tv) == -1)
+	{
+	    Py_XDECREF(bytes);
 	    return -1;
+	}
+	Py_XDECREF(bytes);
 
 	tv->v_type = VAR_STRING;
     }
@@ -1851,7 +1849,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 		    PyErr_NoMemory();
 		return -1;
 	    }
-	    if(ConvertFromPyObject(lobj, &v, raise) == -1)
+	    if(ConvertFromPyObject(lobj, &v) == -1)
 	    {
 		vim_free(di);
 		return -1;
@@ -1874,7 +1872,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	list_T	*l;
 
 	l = list_alloc();
-	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem, raise)==-1)
+	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
 	    return -1;
 
 	tv->v_type = VAR_LIST;
@@ -1885,7 +1883,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	list_T	*l;
 
 	l = list_alloc();
-	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem, raise)==-1)
+	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
 	    return -1;
 
 	tv->v_type = VAR_LIST;
@@ -1898,7 +1896,8 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv, int raise)
 	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
     }
 #endif
-    else {
+    else
+    {
 	if(raise)
 	    PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
 	return -1;
