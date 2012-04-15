@@ -467,6 +467,9 @@ static PyObject *LineToString(const char *);
 
 static PyTypeObject RangeType;
 
+static int initialised = 0;
+#define PYINITIALISED initialised
+
 /*
  * Include the code shared with if_python3.c
  */
@@ -481,8 +484,6 @@ static PyInt RangeStart;
 static PyInt RangeEnd;
 
 static PyObject *globals;
-static pyhashtab_T dictrefs;
-static pyhashtab_T listrefs;
 
 static void PythonIO_Flush(void);
 static int PythonIO_Init(void);
@@ -498,8 +499,6 @@ static int SetBufferLineList(buf_T *, PyInt, PyInt, PyObject *, PyInt *);
 /******************************************************
  * 1. Python interpreter main program.
  */
-
-static int initialised = 0;
 
 #if PYTHON_API_VERSION < 1007 /* Python 1.4 */
 typedef PyObject PyThreadState;
@@ -1546,7 +1545,7 @@ DictionaryNew(dict_T *dict)
     }
     if(*hi != NULL)
 	self = (DictionaryObject *) PHVAL(dictrefs, hi);
-    if(*hi == NULL || self->ob_refcnt<=0)
+    if(*hi == NULL || PYOBJ_DELETED(self))
     {
 	self = PyObject_NEW(DictionaryObject, &DictionaryType);
 	if (self == NULL)
@@ -1580,13 +1579,23 @@ DictionaryLength(PyObject *self)
     return ((PyInt) ((((DictionaryObject *)(self))->dict->dv_hashtab.ht_used)));
 }
 
+/* Add conversion from PyInt? */
+#define DICTKEY_GET(obj, err) \
+    if(!PyString_Check(obj)) \
+    { \
+	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed")); \
+	return err; \
+    } \
+    key = (char_u *) PyString_AsString(obj);
+
     static PyObject *
 DictionaryItem(PyObject *self, PyObject *keyObject)
 {
     char_u	*key;
     dictitem_T	*val;
 
-    key = (char_u *) PyString_AsString(keyObject);
+    DICTKEY_GET(keyObject, NULL)
+
     val = dict_find(((DictionaryObject *) (self))->dict, key, -1);
 
     return ConvertToPyObject(&val->di_tv);
@@ -1606,13 +1615,7 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	return -1;
     }
 
-    /* Add conversion from PyInt? */
-    if(!PyString_Check(keyObject))
-    {
-	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed"));
-	return -1;
-    }
-    key = (char_u *) PyString_AsString(keyObject);
+    DICTKEY_GET(keyObject, -1)
 
     di = dict_find(d, key, -1);
 
@@ -1781,7 +1784,7 @@ ListNew(list_T *list)
     }
     if(*hi != NULL)
 	self = (ListObject *) PHVAL(listrefs, hi);
-    if(*hi == NULL || self->ob_refcnt<=0)
+    if(*hi == NULL || PYOBJ_DELETED(self))
     {
 	self = PyObject_NEW(ListObject, &ListType);
 	if (self == NULL)
@@ -2369,67 +2372,10 @@ Py_GetProgramName(void)
 }
 #endif /* Python 1.4 */
 
-/* FIXME Following three functions are copy-paste from if_lua, with 
- * modification: setting ?v_copyID is done in set_ref_in_(dict|list) */
-static void set_ref_in_tv(typval_T *tv, int copyID);
-
-    static void
-set_ref_in_dict(dict_T *d, int copyID)
-{
-    hashtab_T *ht = &d->dv_hashtab;
-    int n = ht->ht_used;
-    hashitem_T *hi;
-    d->dv_copyID = copyID;
-    for (hi = ht->ht_array; n > 0; ++hi)
-	if (!HASHITEM_EMPTY(hi))
-	{
-	    dictitem_T *di = dict_lookup(hi);
-	    set_ref_in_tv(&di->di_tv, copyID);
-	    --n;
-	}
-}
-
-    static void
-set_ref_in_list(list_T *l, int copyID)
-{
-    listitem_T *li;
-    l->lv_copyID = copyID;
-    for (li = l->lv_first; li != NULL; li = li->li_next)
-	set_ref_in_tv(&li->li_tv, copyID);
-}
-
-    static void
-set_ref_in_tv(typval_T *tv, int copyID)
-{
-    if (tv->v_type == VAR_LIST)
-    {
-	list_T *l = tv->vval.v_list;
-	if (l != NULL && l->lv_copyID != copyID)
-	    set_ref_in_list(l, copyID);
-    }
-    else if (tv->v_type == VAR_DICT)
-    {
-	dict_T *d = tv->vval.v_dict;
-	if (d != NULL && d->dv_copyID != copyID)
-	    set_ref_in_dict(d, copyID);
-    }
-}
-
     void
 set_ref_in_python (int copyID)
 {
-    size_t	i = 0;
-
-    if(!initialised)
-	return;
-
-    for(i = 0; i <= dictrefs.pht_mask ; i++)
-	if(dictrefs.pht_array[i] != NULL && dictrefs.pht_vals[i]->ob_refcnt>0)
-	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
-
-    for(i = 0; i <= listrefs.pht_mask ; i++)
-	if(listrefs.pht_array[i] != NULL && listrefs.pht_vals[i]->ob_refcnt>0)
-	    set_ref_in_list((list_T *) listrefs.pht_array[i], copyID);
+    set_ref_in_py(copyID);
 }
 
     static void

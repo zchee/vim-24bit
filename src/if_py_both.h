@@ -1655,6 +1655,8 @@ typedef struct pyhashtable_S
 
 static int pyhash_may_resize __ARGS((pyhashtab_T *ht, size_t minitems));
 
+#define PYOBJ_DELETED(obj) (obj->ob_refcnt<=0)
+
 /*
  * Initialize an empty hash table.
  */
@@ -1669,8 +1671,6 @@ pyhash_init(ht)
     ht->pht_vals = ht->pht_smallvars;
     ht->pht_mask = HT_INIT_SIZE - 1;
 }
-
-#define PYOBJ_DELETED(obj) (obj->ob_refcnt <= 0)
 
     static void **
 pyhash_lookup(ht, key)
@@ -1952,4 +1952,70 @@ pyhash_may_resize(ht, minitems)
     ht->pht_error = FALSE;
 
     return OK;
+}
+
+static pyhashtab_T dictrefs;
+static pyhashtab_T listrefs;
+
+/* FIXME Following three functions are copy-paste from if_lua, with 
+ * modification: setting ?v_copyID is done in set_ref_in_(dict|list) */
+static void set_ref_in_tv(typval_T *tv, int copyID);
+
+    static void
+set_ref_in_dict(dict_T *d, int copyID)
+{
+    hashtab_T *ht = &d->dv_hashtab;
+    int n = ht->ht_used;
+    hashitem_T *hi;
+    d->dv_copyID = copyID;
+    for (hi = ht->ht_array; n > 0; ++hi)
+	if (!HASHITEM_EMPTY(hi))
+	{
+	    dictitem_T *di = dict_lookup(hi);
+	    set_ref_in_tv(&di->di_tv, copyID);
+	    --n;
+	}
+}
+
+    static void
+set_ref_in_list(list_T *l, int copyID)
+{
+    listitem_T *li;
+    l->lv_copyID = copyID;
+    for (li = l->lv_first; li != NULL; li = li->li_next)
+	set_ref_in_tv(&li->li_tv, copyID);
+}
+
+    static void
+set_ref_in_tv(typval_T *tv, int copyID)
+{
+    if (tv->v_type == VAR_LIST)
+    {
+	list_T *l = tv->vval.v_list;
+	if (l != NULL && l->lv_copyID != copyID)
+	    set_ref_in_list(l, copyID);
+    }
+    else if (tv->v_type == VAR_DICT)
+    {
+	dict_T *d = tv->vval.v_dict;
+	if (d != NULL && d->dv_copyID != copyID)
+	    set_ref_in_dict(d, copyID);
+    }
+}
+
+    static void
+set_ref_in_py(int copyID)
+{
+    size_t	i;
+
+    if(!PYINITIALISED)
+	return;
+
+    for(i = 0; i <= dictrefs.pht_mask ; i++)
+	if(dictrefs.pht_array[i] != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]))
+	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
+
+    for(i = 0; i <= listrefs.pht_mask ; i++)
+	if(listrefs.pht_array[i] != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]))
+	    set_ref_in_list((list_T *) listrefs.pht_array[i], copyID);
 }
