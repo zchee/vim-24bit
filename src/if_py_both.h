@@ -2151,6 +2151,8 @@ pyhash_lookup(ht, key)
 }
 
 #define PHVAL(ht, hi) (ht.pht_vals[hi - ht.pht_array])
+#define PYHASHITEM_EMPTY(ht, hi) ((*hi == NULL) || \
+				  (PYOBJ_DELETED(PHVAL(ht, hi))))
 
 /*
  * Add item "hi" with "key" to hashtable "ht".  "key" must not be NULL and
@@ -2165,22 +2167,26 @@ pyhash_add_item(ht, hi, key, val)
     void	*key;
     PyObject	*val;
 {
-    /* If resizing failed before and it fails again we can't add an item. */
-    if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
-	return FAIL;
+    int	adding = PYHASHITEM_EMPTY((*ht), hi);
+    if(adding)
+    {
+	/* If resizing failed before and it fails again we can't add an item. */
+	if (ht->pht_error && pyhash_may_resize(ht, 0) == FAIL)
+	    return FAIL;
 
-    ++ht->pht_used;
-    if(PHVAL((*ht), hi) == NULL)
-	++ht->pht_filled;
+	++ht->pht_used;
+	if(PHVAL((*ht), hi) == NULL)
+	    ++ht->pht_filled;
+    }
     *hi = key;
-    ht->pht_vals[hi-ht->pht_array] = val;
+    PHVAL((*ht), hi) = val;
 
-    /* When the space gets low may resize the array. */
-    return pyhash_may_resize(ht, 0);
+    if(adding)
+	/* When the space gets low may resize the array. */
+	return pyhash_may_resize(ht, 0);
+    else
+	return OK;
 }
-
-#define PYHASHITEM_EMPTY(ht, hi) ((*hi == NULL) || \
-				  (PYOBJ_DELETED(PHVAL(ht, hi))))
 
 /*
  * Add item with key "key" to hashtable "ht".
@@ -2242,6 +2248,7 @@ pyhash_may_resize(ht, minitems)
     size_t	minsize;
     size_t	newmask;
     size_t	perturb;
+    size_t	i;
 
     if (minitems == 0)
     {
@@ -2331,14 +2338,11 @@ pyhash_may_resize(ht, minitems)
      */
     newmask = newsize - 1;
     todo = ht->pht_used;
-    for (olditem = oldarray; todo > 0; ++olditem)
-	if (*olditem != NULL)
+    olditem = oldarray;
+    for (i = 0 ; todo > 0 && i <= ht->pht_mask ; ++i)
+    {
+	if (!PYHASHITEM_EMPTY((*ht), olditem))
 	{
-	    if(PYOBJ_DELETED(oldpyarray[olditem-oldarray]))
-	    {
-		--todo;
-		continue;
-	    }
 	    /*
 	     * The algorithm to find the spot to add the item is identical to
 	     * the algorithm to find an item in pyhash_lookup().  But we only
@@ -2358,9 +2362,11 @@ pyhash_may_resize(ht, minitems)
 			break;
 		}
 	    *newitem = *olditem;
-	    newpyarray[idx] = oldpyarray[olditem-oldarray];
+	    newpyarray[idx] = oldpyarray[i];
 	    --todo;
 	}
+	++olditem;
+    }
 
     if (ht->pht_array != ht->pht_smallarray)
 	vim_free(ht->pht_array);
