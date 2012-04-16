@@ -2357,7 +2357,8 @@ set_ref_in_py(int copyID)
     for(i = 0; i <= dictrefs.pht_mask ; i++)
     {
 	dd = (dict_T *) dictrefs.pht_array[i];
-	if(dd != NULL && !PYOBJ_DELETED(dictrefs.pht_vals[i]))
+	if(dd != NULL && !PYOBJ_DELETED(dictrefs.pht_vals[i]) &&
+		dd->dv_copyID != copyID)
 	{
 	    dd->dv_copyID = copyID;
 	    set_ref_in_ht(&dd->dv_hashtab, copyID);
@@ -2368,7 +2369,8 @@ set_ref_in_py(int copyID)
     for(i = 0; i <= listrefs.pht_mask ; i++)
     {
 	ll = (list_T *) listrefs.pht_array[i];
-	if(ll != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]))
+	if(ll != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]) &&
+		ll->lv_copyID != copyID)
 	{
 	    ll->lv_copyID = copyID;
 	    set_ref_in_list(ll, copyID);
