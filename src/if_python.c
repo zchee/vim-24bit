@@ -1547,6 +1547,7 @@ DictionaryDestructor(PyObject *self)
     DictionaryObject	*this = ((DictionaryObject *) (self));
 
     pyll_remove(&this->ref, &lastdict);
+    dict_unref(this->dict);
 
     Py_DECREF(self);
 }
@@ -1599,6 +1600,7 @@ ListDestructor(PyObject *self)
     ListObject	*this = ((ListObject *) (self));
 
     pyll_remove(&this->ref, &lastlist);
+    list_unref(this->list);
 
     Py_DECREF(self);
 }
