@@ -116,4 +116,10 @@ void func_ref __ARGS((char_u *name));
 void func_call __ARGS((char_u *name, typval_T *args, dict_T *selfdict, typval_T *rettv));
 void listitem_remove __ARGS((list_T *l, listitem_T *item));
 int list_insert_tv __ARGS((list_T *l, typval_T *tv, listitem_T *item));
+void set_ref_in_item __ARGS((typval_T *tv, int copyID));
+void set_ref_in_ht __ARGS((hashtab_T *ht, int copyID));
+void set_ref_in_list __ARGS((list_T *l, int copyID));
+listitem_T *list_find __ARGS((list_T *l, long n));
+listitem_T *listitem_alloc __ARGS((void));
+void list_remove __ARGS((list_T *l, listitem_T *item, listitem_T *item2));
 /* vim: set ft=c : */
