@@ -1514,6 +1514,7 @@ DictionaryDestructor(PyObject *self)
     DictionaryObject *this = (DictionaryObject *)(self);
 
     pyll_remove(&this->ref, &lastdict);
+    dict_unref(this->dict);
 
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
@@ -1545,6 +1546,8 @@ static PyMappingMethods ListAsMapping = {
     /* mp_subscript     */ (binaryfunc) ListSubscript,
     /* mp_ass_subscript */ (objobjargproc) ListAsSubscript,
 };
+
+static PyTypeObject ListType;
 
     static PyObject *
 ListSubscript(PyObject *self, PyObject* idxObject)
@@ -1594,8 +1597,6 @@ ListAsSubscript(PyObject *self, PyObject *idxObject, PyObject *obj)
     }
 }
 
-static PyTypeObject ListType;
-
     static void
 ListDestructor(PyObject *self)
 {
@@ -1603,6 +1604,7 @@ ListDestructor(PyObject *self)
     ListObject *this = (ListObject *)(self);
 
     pyll_remove(&this->ref, &lastlist);
+    list_unref(this->list);
 
     Py_TYPE(self)->tp_free((PyObject*)self);
 }

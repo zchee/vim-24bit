@@ -574,6 +574,21 @@ pyll_remove(pylinkedlist_T *ref, pylinkedlist_T **last)
 	ref->pll_next->pll_prev = ref->pll_prev;
 }
 
+    static void
+pyll_add(PyObject *self, pylinkedlist_T *ref, pylinkedlist_T **last)
+{
+    if(*last == NULL)
+	ref->pll_prev = NULL;
+    else
+    {
+	(*last)->pll_next = ref;
+	ref->pll_prev = *last;
+    }
+    ref->pll_next = NULL;
+    ref->pll_obj = self;
+    *last = ref;
+}
+
 static PyTypeObject DictionaryType;
 
 typedef struct
@@ -594,16 +609,7 @@ DictionaryNew(dict_T *dict)
     self->dict = dict;
     ++dict->dv_refcount;
 
-    if(lastdict == NULL)
-	self->ref.pll_prev = NULL;
-    else
-    {
-	lastdict->pll_next = &self->ref;
-	self->ref.pll_prev = lastdict;
-    }
-    self->ref.pll_next = NULL;
-    self->ref.pll_obj = (PyObject *)(self);
-    lastdict = &self->ref;
+    pyll_add((PyObject *)(self), &self->ref, &lastdict);
 
     return (PyObject *)(self);
 }
@@ -712,16 +718,7 @@ ListNew(list_T *list)
     self->list = list;
     ++list->lv_refcount;
 
-    if(lastlist == NULL)
-	self->ref.pll_prev = NULL;
-    else
-    {
-	lastlist->pll_next = &self->ref;
-	self->ref.pll_prev = lastlist;
-    }
-    self->ref.pll_next = NULL;
-    self->ref.pll_obj = (PyObject *)(self);
-    lastlist = &self->ref;
+    pyll_add((PyObject *)(self), &self->ref, &lastlist);
 
     return (PyObject *)(self);
 }
