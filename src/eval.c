@@ -424,13 +424,11 @@ static int get_string_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
 static int get_lit_string_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
 static int get_list_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
 static int rettv_list_alloc __ARGS((typval_T *rettv));
-static listitem_T *listitem_alloc __ARGS((void));
 static void listitem_free __ARGS((listitem_T *item));
 static long list_len __ARGS((list_T *l));
 static int list_equal __ARGS((list_T *l1, list_T *l2, int ic, int recursive));
 static int dict_equal __ARGS((dict_T *d1, dict_T *d2, int ic, int recursive));
 static int tv_equal __ARGS((typval_T *tv1, typval_T *tv2, int ic, int recursive));
-static listitem_T *list_find __ARGS((list_T *l, long n));
 static long list_find_nr __ARGS((list_T *l, long idx, int *errorp));
 static long list_idx_of_item __ARGS((list_T *l, listitem_T *item));
 static void list_append __ARGS((list_T *l, listitem_T *item));
@@ -438,14 +436,10 @@ static int list_append_number __ARGS((list_T *l, varnumber_T n));
 static int list_extend __ARGS((list_T	*l1, list_T *l2, listitem_T *bef));
 static int list_concat __ARGS((list_T *l1, list_T *l2, typval_T *tv));
 static list_T *list_copy __ARGS((list_T *orig, int deep, int copyID));
-static void list_remove __ARGS((list_T *l, listitem_T *item, listitem_T *item2));
 static char_u *list2string __ARGS((typval_T *tv, int copyID));
 static int list_join_inner __ARGS((garray_T *gap, list_T *l, char_u *sep, int echo_style, int copyID, garray_T *join_gap));
 static int list_join __ARGS((garray_T *gap, list_T *l, char_u *sep, int echo, int copyID));
 static int free_unref_items __ARGS((int copyID));
-static void set_ref_in_ht __ARGS((hashtab_T *ht, int copyID));
-static void set_ref_in_list __ARGS((list_T *l, int copyID));
-static void set_ref_in_item __ARGS((typval_T *tv, int copyID));
 static int rettv_dict_alloc __ARGS((typval_T *rettv));
 static void dict_free __ARGS((dict_T *d, int recurse));
 static dictitem_T *dictitem_copy __ARGS((dictitem_T *org));
@@ -5926,7 +5920,7 @@ list_free(l, recurse)
 /*
  * Allocate a list item.
  */
-    static listitem_T *
+    listitem_T *
 listitem_alloc()
 {
     return (listitem_T *)alloc(sizeof(listitem_T));
@@ -6122,7 +6116,7 @@ tv_equal(tv1, tv2, ic, recursive)
  * A negative index is counted from the end; -1 is the last item.
  * Returns NULL when "n" is out of range.
  */
-    static listitem_T *
+    listitem_T *
 list_find(l, n)
     list_T	*l;
     long	n;
@@ -6522,7 +6516,7 @@ list_copy(orig, deep, copyID)
  * Remove items "item" to "item2" from list "l".
  * Does not free the listitem or the value!
  */
-    static void
+    void
 list_remove(l, item, item2)
     list_T	*l;
     listitem_T	*item;
@@ -6877,7 +6871,7 @@ free_unref_items(copyID)
 /*
  * Mark all lists and dicts referenced through hashtab "ht" with "copyID".
  */
-    static void
+    void
 set_ref_in_ht(ht, copyID)
     hashtab_T	*ht;
     int		copyID;
@@ -6897,7 +6891,7 @@ set_ref_in_ht(ht, copyID)
 /*
  * Mark all lists and dicts referenced through list "l" with "copyID".
  */
-    static void
+    void
 set_ref_in_list(l, copyID)
     list_T	*l;
     int		copyID;
@@ -6911,7 +6905,7 @@ set_ref_in_list(l, copyID)
 /*
  * Mark all lists and dicts referenced through typval "tv" with "copyID".
  */
-    static void
+    void
 set_ref_in_item(tv, copyID)
     typval_T	*tv;
     int		copyID;

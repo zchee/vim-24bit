@@ -669,44 +669,6 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
     return 0;
 }
 
-/* FIXME Copy-paste from if_lua.c */
-    static listitem_T *
-list_find (list_T *l, long n)
-{
-    listitem_T *li;
-    if (l == NULL || n < -l->lv_len || n >= l->lv_len)
-	return NULL;
-    if (n < 0) /* search backward? */
-	for (li = l->lv_last; n < -1; li = li->li_prev)
-	    n++;
-    else /* search forward */
-	for (li = l->lv_first; n > 0; li = li->li_next)
-	    n--;
-    return li;
-}
-
-/* FIXME Copy-paste from if_lua.c */
-    static void
-list_remove (list_T *l, listitem_T *li)
-{
-    listwatch_T *lw;
-    --l->lv_len;
-    /* fix watchers */
-    for (lw = l->lv_watch; lw != NULL; lw = lw->lw_next)
-	if (lw->lw_item == li)
-	    lw->lw_item = li->li_next;
-    /* fix list pointers */
-    if (li->li_next == NULL) /* last? */
-	l->lv_last = li->li_prev;
-    else
-	li->li_next->li_prev = li->li_prev;
-    if (li->li_prev == NULL) /* first? */
-	l->lv_first = li->li_next;
-    else
-	li->li_prev->li_next = li->li_next;
-    l->lv_idx_item = NULL;
-}
-
     static PyInt
 ListLength(PyObject *self)
 {
@@ -806,7 +768,7 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
     if(obj == NULL)
     {
 	li = list_find(l, (long) index);
-	list_remove(l, li);
+	list_remove(l, li, li);
 	clear_tv(&li->li_tv);
 	vim_free(li);
 	return 0;
@@ -2382,67 +2344,36 @@ pyhash_may_resize(ht, minitems)
 static pyhashtab_T dictrefs;
 static pyhashtab_T listrefs;
 
-/* FIXME Following three functions are copy-paste from if_lua, with 
- * modification: setting ?v_copyID is done in set_ref_in_(dict|list) */
-static void set_ref_in_tv(typval_T *tv, int copyID);
-
-    static void
-set_ref_in_dict(dict_T *d, int copyID)
-{
-    hashtab_T *ht = &d->dv_hashtab;
-    int n = ht->ht_used;
-    hashitem_T *hi;
-    d->dv_copyID = copyID;
-    for (hi = ht->ht_array; n > 0; ++hi)
-	if (!HASHITEM_EMPTY(hi))
-	{
-	    dictitem_T *di = dict_lookup(hi);
-	    set_ref_in_tv(&di->di_tv, copyID);
-	    --n;
-	}
-}
-
-    static void
-set_ref_in_list(list_T *l, int copyID)
-{
-    listitem_T *li;
-    l->lv_copyID = copyID;
-    for (li = l->lv_first; li != NULL; li = li->li_next)
-	set_ref_in_tv(&li->li_tv, copyID);
-}
-
-    static void
-set_ref_in_tv(typval_T *tv, int copyID)
-{
-    if (tv->v_type == VAR_LIST)
-    {
-	list_T *l = tv->vval.v_list;
-	if (l != NULL && l->lv_copyID != copyID)
-	    set_ref_in_list(l, copyID);
-    }
-    else if (tv->v_type == VAR_DICT)
-    {
-	dict_T *d = tv->vval.v_dict;
-	if (d != NULL && d->dv_copyID != copyID)
-	    set_ref_in_dict(d, copyID);
-    }
-}
-
     static void
 set_ref_in_py(int copyID)
 {
     size_t	i;
+    dict_T	*dd;
+    list_T	*ll;
 
     if(!PYINITIALISED)
 	return;
 
     for(i = 0; i <= dictrefs.pht_mask ; i++)
-	if(dictrefs.pht_array[i] != NULL && !PYOBJ_DELETED(dictrefs.pht_vals[i]))
-	    set_ref_in_dict((dict_T *) dictrefs.pht_array[i], copyID);
+    {
+	dd = (dict_T *) dictrefs.pht_array[i];
+	if(dd != NULL && !PYOBJ_DELETED(dictrefs.pht_vals[i]))
+	{
+	    dd->dv_copyID = copyID;
+	    set_ref_in_ht(&dd->dv_hashtab, copyID);
+	}
+    }
+
 
     for(i = 0; i <= listrefs.pht_mask ; i++)
-	if(listrefs.pht_array[i] != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]))
-	    set_ref_in_list((list_T *) listrefs.pht_array[i], copyID);
+    {
+	ll = (list_T *) listrefs.pht_array[i];
+	if(ll != NULL && !PYOBJ_DELETED(listrefs.pht_vals[i]))
+	{
+	    ll->lv_copyID = copyID;
+	    set_ref_in_list(ll, copyID);
+	}
+    }
 }
 
     static int
