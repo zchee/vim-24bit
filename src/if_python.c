@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -122,6 +122,7 @@ struct PyMethodDef { Py_ssize_t a; };
 /* This makes if_python.c compile without warnings against Python 2.5
  * on Win32 and Win64. */
 # undef PyRun_SimpleString
+# undef PyRun_String
 # undef PyArg_Parse
 # undef PyArg_ParseTuple
 # undef Py_BuildValue
@@ -157,16 +158,25 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyList_SetItem dll_PyList_SetItem
 # define PyList_Size dll_PyList_Size
 # define PyList_Type (*dll_PyList_Type)
+# define PyTuple_Size dll_PyTuple_Size
+# define PyTuple_GetItem dll_PyTuple_GetItem
+# define PyTuple_Type (*dll_PyTuple_Type)
 # define PyImport_ImportModule dll_PyImport_ImportModule
 # define PyDict_New dll_PyDict_New
 # define PyDict_GetItemString dll_PyDict_GetItemString
+# define PyDict_Next dll_PyDict_Next
 # define PyModule_GetDict dll_PyModule_GetDict
 # define PyRun_SimpleString dll_PyRun_SimpleString
+# define PyRun_String dll_PyRun_String
 # define PyString_AsString dll_PyString_AsString
 # define PyString_FromString dll_PyString_FromString
 # define PyString_FromStringAndSize dll_PyString_FromStringAndSize
 # define PyString_Size dll_PyString_Size
 # define PyString_Type (*dll_PyString_Type)
+# define PyFloat_AsDouble dll_PyFloat_AsDouble
+# define PyFloat_FromDouble dll_PyFloat_FromDouble
+# define PyFloat_Type (*dll_PyFloat_Type)
+# define PyImport_AddModule (*dll_PyImport_AddModule)
 # define PySys_SetObject dll_PySys_SetObject
 # define PySys_SetArgv dll_PySys_SetArgv
 # define PyType_Type (*dll_PyType_Type)
@@ -218,16 +228,24 @@ static PyObject*(*dll_PyList_New)(PyInt size);
 static int(*dll_PyList_SetItem)(PyObject *, PyInt, PyObject *);
 static PyInt(*dll_PyList_Size)(PyObject *);
 static PyTypeObject* dll_PyList_Type;
+static PyInt(*dll_PyTuple_Size)(PyObject *);
+static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
+static PyTypeObject* dll_PyTuple_Type;
 static PyObject*(*dll_PyImport_ImportModule)(const char *);
 static PyObject*(*dll_PyDict_New)(void);
 static PyObject*(*dll_PyDict_GetItemString)(PyObject *, const char *);
+static int (*dll_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
 static PyObject*(*dll_PyModule_GetDict)(PyObject *);
 static int(*dll_PyRun_SimpleString)(char *);
+static PyObject *(*dll_PyRun_String)(char *, int, PyObject *, PyObject *);
 static char*(*dll_PyString_AsString)(PyObject *);
 static PyObject*(*dll_PyString_FromString)(const char *);
 static PyObject*(*dll_PyString_FromStringAndSize)(const char *, PyInt);
 static PyInt(*dll_PyString_Size)(PyObject *);
 static PyTypeObject* dll_PyString_Type;
+static double(*dll_PyFloat_AsDouble)(PyObject *);
+static PyObject*(*dll_PyFloat_FromDouble)(double);
+static PyTypeObject* dll_PyFloat_Type;
 static int(*dll_PySys_SetObject)(char *, PyObject *);
 static int(*dll_PySys_SetArgv)(int, char **);
 static PyTypeObject* dll_PyType_Type;
@@ -235,6 +253,7 @@ static int (*dll_PyType_Ready)(PyTypeObject *type);
 static PyObject*(*dll_Py_BuildValue)(char *, ...);
 static PyObject*(*dll_Py_FindMethod)(struct PyMethodDef[], PyObject *, char *);
 static PyObject*(*dll_Py_InitModule4)(char *, struct PyMethodDef *, char *, PyObject *, int);
+static PyObject*(*dll_PyImport_AddModule)(char *);
 static void(*dll_Py_SetPythonHome)(char *home);
 static void(*dll_Py_Initialize)(void);
 static void(*dll_Py_Finalize)(void);
@@ -301,16 +320,25 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&dll_PyList_SetItem},
     {"PyList_Size", (PYTHON_PROC*)&dll_PyList_Size},
     {"PyList_Type", (PYTHON_PROC*)&dll_PyList_Type},
+    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
+    {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
+    {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
+    {"PyDict_Next", (PYTHON_PROC*)&dll_PyDict_Next},
     {"PyDict_New", (PYTHON_PROC*)&dll_PyDict_New},
     {"PyModule_GetDict", (PYTHON_PROC*)&dll_PyModule_GetDict},
     {"PyRun_SimpleString", (PYTHON_PROC*)&dll_PyRun_SimpleString},
+    {"PyRun_String", (PYTHON_PROC*)&dll_PyRun_String},
     {"PyString_AsString", (PYTHON_PROC*)&dll_PyString_AsString},
     {"PyString_FromString", (PYTHON_PROC*)&dll_PyString_FromString},
     {"PyString_FromStringAndSize", (PYTHON_PROC*)&dll_PyString_FromStringAndSize},
     {"PyString_Size", (PYTHON_PROC*)&dll_PyString_Size},
     {"PyString_Type", (PYTHON_PROC*)&dll_PyString_Type},
+    {"PyFloat_Type", (PYTHON_PROC*)&dll_PyFloat_Type},
+    {"PyFloat_AsDouble", (PYTHON_PROC*)&dll_PyFloat_AsDouble},
+    {"PyFloat_FromDouble", (PYTHON_PROC*)&dll_PyFloat_FromDouble},
+    {"PyImport_AddModule", (PYTHON_PROC*)&dll_PyImport_AddModule},
     {"PySys_SetObject", (PYTHON_PROC*)&dll_PySys_SetObject},
     {"PySys_SetArgv", (PYTHON_PROC*)&dll_PySys_SetArgv},
     {"PyType_Type", (PYTHON_PROC*)&dll_PyType_Type},
@@ -434,9 +462,23 @@ get_exceptions(void)
 
 static PyObject *BufferNew (buf_T *);
 static PyObject *WindowNew(win_T *);
+static PyObject *DictionaryNew(dict_T *);
 static PyObject *LineToString(const char *);
 
 static PyTypeObject RangeType;
+
+static int initialised = 0;
+#define PYINITIALISED initialised
+
+/* Add conversion from PyInt? */
+#define DICTKEY_GET(err) \
+    if(!PyString_Check(keyObject)) \
+    { \
+	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed")); \
+	return err; \
+    } \
+    key = (char_u *) PyString_AsString(keyObject);
+#define DICTKEY_UNREF
 
 /*
  * Include the code shared with if_python3.c
@@ -450,6 +492,8 @@ static PyTypeObject RangeType;
 
 static PyInt RangeStart;
 static PyInt RangeEnd;
+
+static PyObject *globals;
 
 static void PythonIO_Flush(void);
 static int PythonIO_Init(void);
@@ -465,8 +509,6 @@ static int SetBufferLineList(buf_T *, PyInt, PyInt, PyObject *, PyInt *);
 /******************************************************
  * 1. Python interpreter main program.
  */
-
-static int initialised = 0;
 
 #if PYTHON_API_VERSION < 1007 /* Python 1.4 */
 typedef PyObject PyThreadState;
@@ -581,6 +623,8 @@ Python_Init(void)
 	if (PythonMod_Init())
 	    goto fail;
 
+	globals = PyModule_GetDict(PyImport_AddModule("__main__"));
+
 	/* Remove the element from sys.path that was added because of our
 	 * argv[0] value in PythonMod_Init().  Previously we used an empty
 	 * string, but dependinding on the OS we then get an empty entry or
@@ -609,7 +653,7 @@ fail:
  * External interface
  */
     static void
-DoPythonCommand(exarg_T *eap, const char *cmd)
+DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
 {
 #ifndef PY_CAN_RECURSE
     static int		recursive = 0;
@@ -639,8 +683,16 @@ DoPythonCommand(exarg_T *eap, const char *cmd)
     if (Python_Init())
 	goto theend;
 
-    RangeStart = eap->line1;
-    RangeEnd = eap->line2;
+    if(rettv == NULL)
+    {
+	RangeStart = eap->line1;
+	RangeEnd = eap->line2;
+    }
+    else
+    {
+	RangeStart = (PyInt) curwin->w_cursor.lnum;
+	RangeEnd = RangeStart;
+    }
     Python_Release_Vim();	    /* leave vim */
 
 #if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
@@ -658,7 +710,18 @@ DoPythonCommand(exarg_T *eap, const char *cmd)
 
     Python_RestoreThread();	    /* enter python */
 
-    PyRun_SimpleString((char *)(cmd));
+    if(rettv == NULL)
+	PyRun_SimpleString((char *)(cmd));
+    else
+    {
+	PyObject	*r;
+	r = PyRun_String((char *)(cmd), Py_eval_input, globals, globals);
+	if(r == NULL)
+	    EMSG(_("E858: Eval did not return a valid python object"));
+	else if(ConvertFromPyObject(r, rettv) == -1)
+	    EMSG(_("E859: Failed to convert returned python object to vim value"));
+	PyErr_Clear();
+    }
 
     Python_SaveThread();	    /* leave python */
 
@@ -680,7 +743,7 @@ theend:
 #ifndef PY_CAN_RECURSE
     --recursive;
 #endif
-    return;	    /* keeps lint happy */
+    return;
 }
 
 /*
@@ -695,9 +758,9 @@ ex_python(exarg_T *eap)
     if (!eap->skip)
     {
 	if (script == NULL)
-	    DoPythonCommand(eap, (char *)eap->arg);
+	    DoPythonCommand(eap, (char *)eap->arg, NULL);
 	else
-	    DoPythonCommand(eap, (char *)script);
+	    DoPythonCommand(eap, (char *)script, NULL);
     }
     vim_free(script);
 }
@@ -743,7 +806,7 @@ ex_pyfile(exarg_T *eap)
     *p++ = '\0';
 
     /* Execute the file */
-    DoPythonCommand(eap, buffer);
+    DoPythonCommand(eap, buffer, NULL);
 }
 
 /******************************************************
@@ -765,14 +828,16 @@ OutputGetattr(PyObject *self, char *name)
     static int
 OutputSetattr(PyObject *self, char *name, PyObject *val)
 {
-    if (val == NULL) {
+    if (val == NULL)
+    {
 	PyErr_SetString(PyExc_AttributeError, _("can't delete OutputObject attributes"));
 	return -1;
     }
 
     if (strcmp(name, "softspace") == 0)
     {
-	if (!PyInt_Check(val)) {
+	if (!PyInt_Check(val))
+	{
 	    PyErr_SetString(PyExc_TypeError, _("softspace must be an integer"));
 	    return -1;
 	}
@@ -799,6 +864,9 @@ PythonIO_Init(void)
 /******************************************************
  * 3. Implementation of the Vim module for Python
  */
+
+static PyObject *ConvertToPyObject(typval_T *);
+static int ConvertFromPyObject(PyObject *, typval_T *);
 
 /* Window type - Implementation functions
  * --------------------------------------
@@ -1441,6 +1509,352 @@ LineToString(const char *str)
     return result;
 }
 
+static void DictionaryDestructor(PyObject *);
+
+static PyMappingMethods DictionaryAsMapping = {
+    (PyInquiry)		DictionaryLength,
+    (binaryfunc)	DictionaryItem,
+    (objobjargproc)	DictionaryAssItem,
+};
+
+static PyTypeObject DictionaryType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "vimdictionary",
+    sizeof(DictionaryObject),
+    0,
+
+    (destructor)  DictionaryDestructor,
+    (printfunc)   0,
+    (getattrfunc) 0,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    0,                      /* as sequence */
+    &DictionaryAsMapping,   /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) 0,
+    (reprfunc)    0,
+};
+
+    static void
+DictionaryDestructor(PyObject *self)
+{
+    void	**hi = NULL;
+    DictionaryObject	*this = ((DictionaryObject *) (self));
+
+    pyll_remove(&this->ref, &lastdict);
+    dict_unref(this->dict);
+
+    Py_DECREF(self);
+}
+
+static void ListDestructor(PyObject *);
+static PyObject *ListGetattr(PyObject *, char *);
+
+static PySequenceMethods ListAsSeq = {
+    (PyInquiry)			ListLength,
+    (binaryfunc)		0,
+    (PyIntArgFunc)		0,
+    (PyIntArgFunc)		ListItem,
+    (PyIntIntArgFunc)		ListSlice,
+    (PyIntObjArgProc)		ListAssItem,
+    (PyIntIntObjArgProc)	ListAssSlice,
+    (objobjproc)		0,
+#if PY_MAJOR_VERSION >= 2
+    (binaryfunc)		ListConcatInPlace,
+    0,
+#endif
+};
+
+static PyTypeObject ListType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "vimlist",
+    sizeof(ListObject),
+    0,
+
+    (destructor)  ListDestructor,
+    (printfunc)   0,
+    (getattrfunc) ListGetattr,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    &ListAsSeq,             /* as sequence */
+    0,                      /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) 0,
+    (reprfunc)    0,
+};
+
+    static void
+ListDestructor(PyObject *self)
+{
+    void	**hi = NULL;
+    ListObject	*this = ((ListObject *) (self));
+
+    pyll_remove(&this->ref, &lastlist);
+    list_unref(this->list);
+
+    Py_DECREF(self);
+}
+
+    static PyObject *
+ListGetattr(PyObject *self, char *name)
+{
+    return Py_FindMethod(ListMethods, self, name);
+}
+
+static void FunctionDestructor(PyObject *);
+static PyObject *FunctionGetattr(PyObject *, char *);
+
+static PyTypeObject FunctionType = {
+    PyObject_HEAD_INIT(0)
+    0,
+    "vimfunction",
+    sizeof(FunctionObject),
+    0,
+
+    (destructor)  FunctionDestructor,
+    (printfunc)   0,
+    (getattrfunc) FunctionGetattr,
+    (setattrfunc) 0,
+    (cmpfunc)     0,
+    (reprfunc)    0,
+
+    0,                      /* as number */
+    0,                      /* as sequence */
+    0,                      /* as mapping */
+
+    (hashfunc)    0,
+    (ternaryfunc) FunctionCall,
+    (reprfunc)    0,
+};
+
+    static PyObject *
+FunctionNew(char_u *name)
+{
+    FunctionObject	*self;
+
+    self = PyObject_NEW(FunctionObject, &FunctionType);
+    if(self == NULL)
+	return NULL;
+    self->name = (char_u *) alloc((char_u) sizeof(char_u)*STRLEN(name));
+    if(self->name == NULL)
+    {
+	PyErr_NoMemory();
+	return NULL;
+    }
+    STRCPY(self->name, name);
+    func_ref(name);
+    return (PyObject *)(self);
+}
+
+    static void
+FunctionDestructor(PyObject *self)
+{
+    FunctionObject	*this = (FunctionObject *) (self);
+
+    func_unref(this->name);
+    vim_free(this->name);
+
+    Py_DECREF(self);
+}
+
+    static PyObject *
+FunctionGetattr(PyObject *self, char *name)
+{
+    FunctionObject	*this = (FunctionObject *)(self);
+
+    if(strcmp(name, "name") == 0)
+	return PyString_FromString((char *)(this->name));
+    else
+	return Py_FindMethod(FunctionMethods, self, name);
+}
+
+    static PyObject *
+ConvertToPyObject(typval_T *tv)
+{
+    if(tv == NULL)
+    {
+	PyErr_SetVim(_("NULL reference passed"));
+	return NULL;
+    }
+    switch (tv->v_type)
+    {
+	case VAR_STRING:
+	    return PyString_FromString((char *) tv->vval.v_string);
+	case VAR_NUMBER:
+	    return PyInt_FromLong((long) tv->vval.v_number);
+#ifdef FEAT_FLOAT
+	case VAR_FLOAT:
+	    return PyFloat_FromDouble((double) tv->vval.v_float);
+#endif
+	case VAR_LIST:
+	    return ListNew(tv->vval.v_list);
+	case VAR_DICT:
+	    return DictionaryNew(tv->vval.v_dict);
+	case VAR_FUNC:
+	    return FunctionNew(tv->vval.v_string);
+	default:
+	    PyErr_SetVim(_("internal error: invalid value type"));
+	    return NULL;
+    }
+}
+
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
+
+    static int
+ConvertFromPyObject(PyObject *obj, typval_T *tv)
+{
+    if(obj->ob_type == &DictionaryType)
+    {
+	tv->v_type = VAR_DICT;
+	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
+    }
+    else if(obj->ob_type == &ListType)
+    {
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = (((ListObject *)(obj))->list);
+    }
+    else if(obj->ob_type == &FunctionType)
+    {
+	char_u	*retval = NULL;
+
+	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
+	    return -1;
+
+	tv->v_type = VAR_FUNC;
+    }
+    else if(PyString_Check(obj))
+    {
+	char_u	*retval = NULL;
+	char_u	*result = (char_u *) PyString_AsString(obj);
+
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv) == -1)
+	    return -1;
+
+	tv->v_type = VAR_STRING;
+    }
+    else if(PyInt_Check(obj))
+    {
+	tv->v_type = VAR_NUMBER;
+	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
+    }
+    else if(PyDict_Check(obj))
+    {
+	dict_T	*d;
+	char_u	*key;
+	dictitem_T	*di;
+	PyObject	*keyObject;
+	PyObject	*valObject;
+	Py_ssize_t	iter = 0;
+	typval_T	v;
+	PyObject	*bytes;
+
+	d = dict_alloc();
+	if(d == NULL)
+	{
+	    PyErr_NoMemory();
+	    return -1;
+	}
+	while(PyDict_Next(obj, &iter, &keyObject, &valObject))
+	{
+	    bytes = NULL;
+	    OBJ_NULL_ERR(keyObject, "internal error: no dict key")
+	    OBJ_NULL_ERR(valObject, "internal error: no dict value")
+
+	    if(!PyString_Check(keyObject))
+	    {
+		PyErr_SetString(PyExc_TypeError, _("key is not a string"));
+		return -1;
+	    }
+	    key = (char_u *) PyString_AsString(keyObject);
+
+	    di = dictitem_alloc(key);
+	    if(bytes != NULL)
+		Py_XDECREF(bytes);
+	    if(di == NULL)
+	    {
+		if(raise)
+		    PyErr_NoMemory();
+		return -1;
+	    }
+	    if(ConvertFromPyObject(valObject, &v) == -1)
+	    {
+		vim_free(di);
+		return -1;
+	    }
+	    if(dict_add(d, di) == FAIL)
+	    {
+		vim_free(di);
+		if(raise)
+		    PyErr_SetVim(_("failed to add key to dictionary"));
+		return -1;
+	    }
+	    copy_tv(&v, &di->di_tv);
+	}
+
+	tv->v_type = VAR_DICT;
+	tv->vval.v_dict = d;
+    }
+    else if(PyList_Check(obj))
+    {
+	list_T	*l;
+
+	l = list_alloc();
+	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
+	    return -1;
+
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = l;
+    }
+    else if(PyTuple_Check(obj))
+    {
+	list_T	*l;
+
+	l = list_alloc();
+	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
+	    return -1;
+
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = l;
+    }
+#ifdef FEAT_FLOAT
+    else if(PyFloat_Check(obj))
+    {
+	tv->v_type = VAR_FLOAT;
+	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
+    }
+#endif
+    else
+    {
+	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
+	return -1;
+    }
+    return 0;
+}
+
+    void
+do_pyeval (char_u *str, typval_T *rettv)
+{
+    DoPythonCommand(NULL, (char *) str, rettv);
+    switch(rettv->v_type)
+    {
+	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
+	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
+	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
+    }
+}
 
 /* Don't generate a prototype for the next function, it generates an error on
  * newer Python versions. */
@@ -1452,6 +1866,12 @@ Py_GetProgramName(void)
     return "vim";
 }
 #endif /* Python 1.4 */
+
+    void
+set_ref_in_python (int copyID)
+{
+    set_ref_in_py(copyID);
+}
 
     static void
 init_structs(void)

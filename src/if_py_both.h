@@ -100,7 +100,8 @@ OutputWritelines(PyObject *self, PyObject *args)
 	return NULL;
     Py_INCREF(list);
 
-    if (!PyList_Check(list)) {
+    if (!PyList_Check(list))
+    {
 	PyErr_SetString(PyExc_TypeError, _("writelines() requires list of strings"));
 	Py_DECREF(list);
 	return NULL;
@@ -114,7 +115,8 @@ OutputWritelines(PyObject *self, PyObject *args)
 	char *str = NULL;
 	PyInt len;
 
-	if (!PyArg_Parse(line, "et#", ENC_OPT, &str, &len)) {
+	if (!PyArg_Parse(line, "et#", ENC_OPT, &str, &len))
+	{
 	    PyErr_SetString(PyExc_TypeError, _("writelines() requires list of strings"));
 	    Py_DECREF(list);
 	    return NULL;
@@ -396,7 +398,7 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
 #endif
 
     static PyObject *
-VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
+VimEval(PyObject *self UNUSED, PyObject *args)
 {
 #ifdef FEAT_EVAL
     char	*expr;
@@ -440,6 +442,47 @@ VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
 #endif
 }
 
+static PyObject *ConvertToPyObject(typval_T *);
+
+    static PyObject *
+VimEvalPy(PyObject *self UNUSED, PyObject *args)
+{
+#ifdef FEAT_EVAL
+    char	*expr;
+    typval_T	*our_tv;
+    PyObject	*result;
+    PyObject    *lookup_dict;
+
+    if (!PyArg_ParseTuple(args, "s", &expr))
+	return NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    Python_Lock_Vim();
+    our_tv = eval_expr((char_u *)expr, NULL);
+
+    Python_Release_Vim();
+    Py_END_ALLOW_THREADS
+
+    if (our_tv == NULL)
+    {
+	PyErr_SetVim(_("invalid expression"));
+	return NULL;
+    }
+
+    result = ConvertToPyObject(our_tv);
+    Py_BEGIN_ALLOW_THREADS
+    Python_Lock_Vim();
+    free_tv(our_tv);
+    Python_Release_Vim();
+    Py_END_ALLOW_THREADS
+
+    return result;
+#else
+    PyErr_SetVim(_("expressions disabled at compile time"));
+    return NULL;
+#endif
+}
+
 /*
  * Vim module - Definitions
  */
@@ -448,6 +491,7 @@ static struct PyMethodDef VimMethods[] = {
     /* name,	     function,		calling,    documentation */
     {"command",	     VimCommand,	1,	    "Execute a Vim ex-mode command" },
     {"eval",	     VimEval,		1,	    "Evaluate an expression using Vim evaluator" },
+    {"bindeval",     VimEvalPy,         1,          "Like eval(), but returns objects attached to vim ones"},
     { NULL,	     NULL,		0,	    NULL }
 };
 
@@ -455,8 +499,7 @@ typedef struct
 {
     PyObject_HEAD
     buf_T *buf;
-}
-BufferObject;
+} BufferObject;
 
 #define INVALID_BUFFER_VALUE ((buf_T *)(-1))
 
@@ -499,6 +542,499 @@ typedef struct
     PyObject_HEAD
     win_T	*win;
 } WindowObject;
+
+static int ConvertFromPyObject(PyObject *, typval_T *);
+
+typedef struct pylinkedlist_S {
+    struct pylinkedlist_S	*pll_next;
+    struct pylinkedlist_S	*pll_prev;
+    PyObject			*pll_obj;
+} pylinkedlist_T;
+
+static pylinkedlist_T *lastdict = NULL;
+static pylinkedlist_T *lastlist = NULL;
+
+    static void
+pyll_remove(pylinkedlist_T *ref, pylinkedlist_T **last)
+{
+    if(ref->pll_prev == NULL)
+    {
+	if(ref->pll_next == NULL)
+	{
+	    *last = NULL;
+	    return;
+	}
+    }
+    else
+	ref->pll_prev->pll_next = ref->pll_next;
+
+    if(ref->pll_next == NULL)
+	*last = ref->pll_prev;
+    else
+	ref->pll_next->pll_prev = ref->pll_prev;
+}
+
+    static void
+pyll_add(PyObject *self, pylinkedlist_T *ref, pylinkedlist_T **last)
+{
+    if(*last == NULL)
+	ref->pll_prev = NULL;
+    else
+    {
+	(*last)->pll_next = ref;
+	ref->pll_prev = *last;
+    }
+    ref->pll_next = NULL;
+    ref->pll_obj = self;
+    *last = ref;
+}
+
+static PyTypeObject DictionaryType;
+
+typedef struct
+{
+    PyObject_HEAD
+    dict_T	*dict;
+    pylinkedlist_T	ref;
+} DictionaryObject;
+
+    static PyObject *
+DictionaryNew(dict_T *dict)
+{
+    DictionaryObject	*self;
+
+    self = PyObject_NEW(DictionaryObject, &DictionaryType);
+    if (self == NULL)
+	return NULL;
+    self->dict = dict;
+    ++dict->dv_refcount;
+
+    pyll_add((PyObject *)(self), &self->ref, &lastdict);
+
+    return (PyObject *)(self);
+}
+
+    static PyInt
+DictionaryLength(PyObject *self)
+{
+    return ((PyInt) ((((DictionaryObject *)(self))->dict->dv_hashtab.ht_used)));
+}
+
+    static PyObject *
+DictionaryItem(PyObject *self, PyObject *keyObject)
+{
+    char_u	*key;
+    dictitem_T	*val;
+    PyObject	*bytes = NULL;
+
+    DICTKEY_GET(NULL)
+
+    val = dict_find(((DictionaryObject *) (self))->dict, key, -1);
+
+    DICTKEY_UNREF
+
+    return ConvertToPyObject(&val->di_tv);
+}
+
+    static PyInt
+DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
+{
+    char_u	*key;
+    typval_T	tv;
+    dict_T	*d = ((DictionaryObject *)(self))->dict;
+    dictitem_T	*di;
+    PyObject	*bytes = NULL;
+
+    if(d->dv_lock)
+    {
+	PyErr_SetVim(_("dict is locked"));
+	return -1;
+    }
+
+    DICTKEY_GET(-1)
+
+    di = dict_find(d, key, -1);
+
+    if(valObject == NULL)
+    {
+	if(di == NULL)
+	{
+	    PyErr_SetString(PyExc_IndexError, _("no such key in dictionary"));
+	    return -1;
+	}
+	hashitem_T	*hi = hash_find(&d->dv_hashtab, di->di_key);
+	hash_remove(&d->dv_hashtab, hi);
+	dictitem_free(di);
+	return 0;
+    }
+
+    if(ConvertFromPyObject(valObject, &tv) == -1)
+    {
+	return -1;
+    }
+
+    if(di == NULL)
+    {
+	di = dictitem_alloc(key);
+	if(di == NULL)
+	{
+	    PyErr_NoMemory();
+	    return -1;
+	}
+	if(dict_add(d, di) == FAIL)
+	{
+	    vim_free(di);
+	    PyErr_SetVim(_("failed to add key to dictionary"));
+	    return -1;
+	}
+    }
+    else
+	clear_tv(&di->di_tv);
+
+    DICTKEY_UNREF
+
+    copy_tv(&tv, &di->di_tv);
+    return 0;
+}
+
+static PyTypeObject ListType;
+
+typedef struct
+{
+    PyObject_HEAD
+    list_T	*list;
+    pylinkedlist_T	ref;
+} ListObject;
+
+    static PyObject *
+ListNew(list_T *list)
+{
+    ListObject	*self;
+    void	**hi = NULL;
+
+    self = PyObject_NEW(ListObject, &ListType);
+    if (self == NULL)
+	return NULL;
+    self->list = list;
+    ++list->lv_refcount;
+
+    pyll_add((PyObject *)(self), &self->ref, &lastlist);
+
+    return (PyObject *)(self);
+}
+
+    static int
+list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
+{
+    Py_ssize_t	i;
+    Py_ssize_t	lsize = Size(obj);
+    PyObject	*litem;
+    typval_T	v;
+
+    for(i=0; i<lsize; i++)
+    {
+	litem = Item(obj, i);
+	if(obj == NULL)
+	{
+	    if(raise)
+		PyErr_SetVim(_("internal error: no list item"));
+	    return -1;
+	}
+	if(ConvertFromPyObject(litem, &v) == -1)
+	    return -1;
+
+	if(list_append_tv(l, &v) == FAIL)
+	{
+	    PyErr_SetVim(_("failed to add item to list"));
+	    return -1;
+	}
+    }
+    return 0;
+}
+
+    static PyInt
+ListLength(PyObject *self)
+{
+    return ((PyInt) (((ListObject *) (self))->list->lv_len));
+}
+
+    static PyObject *
+ListItem(PyObject *self, Py_ssize_t index)
+{
+    listitem_T	*li;
+
+    if(index>=ListLength(self))
+    {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+	return NULL;
+    }
+    li = list_find(((ListObject *) (self))->list, (long) index);
+    if(li == NULL)
+    {
+	PyErr_SetVim(_("internal error: failed to get vim list item"));
+	return NULL;
+    }
+    return ConvertToPyObject(&li->li_tv);
+}
+
+#define PROC_RANGE \
+    if(last < 0) {\
+	if(last < -size) \
+	    last = 0; \
+	else \
+	    last += size; \
+    } \
+    if(first < 0) \
+	first = 0; \
+    if(first > size) \
+	first = size; \
+    if(last > size) \
+	last = size;
+
+    static PyObject *
+ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
+{
+    PyInt	i;
+    PyInt	size = ListLength(self);
+    PyInt	n;
+    PyObject	*list;
+    int		reversed = 0;
+
+    PROC_RANGE
+    if(first >= last)
+	first = last;
+
+    n = last-first;
+    list = PyList_New(n);
+    if(list == NULL)
+	return NULL;
+
+    for (i = 0; i < n; ++i)
+    {
+	PyObject	*item = ListItem(self, i);
+	if(item == NULL)
+	{
+	    Py_DECREF(list);
+	    return NULL;
+	}
+
+	if((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item)))
+	{
+	    Py_DECREF(item);
+	    Py_DECREF(list);
+	    return NULL;
+	}
+    }
+
+    return list;
+}
+
+    static int
+ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
+{
+    typval_T	tv;
+    list_T	*l = ((ListObject *) (self))->list;
+    listitem_T	*li;
+    Py_ssize_t	length = ListLength(self);
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
+    if(index>length || (index==length && obj==NULL))
+    {
+	PyErr_SetString(PyExc_IndexError, "list index out of range");
+	return -1;
+    }
+
+    if(obj == NULL)
+    {
+	li = list_find(l, (long) index);
+	list_remove(l, li, li);
+	clear_tv(&li->li_tv);
+	vim_free(li);
+	return 0;
+    }
+
+    if(ConvertFromPyObject(obj, &tv) == -1)
+	return -1;
+
+    if(index == length)
+    {
+	if(list_append_tv(l, &tv) == FAIL)
+	{
+	    PyErr_SetVim(_("internal error: failed to add item to list"));
+	    return -1;
+	}
+    }
+    else
+    {
+	li = list_find(l, (long) index);
+	clear_tv(&li->li_tv);
+	copy_tv(&tv, &li->li_tv);
+    }
+    return 0;
+}
+
+    static int
+ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
+{
+    PyInt	size = ListLength(self);
+    Py_ssize_t	i;
+    Py_ssize_t	lsize;
+    PyObject	*litem;
+    listitem_T	*li;
+    listitem_T	*next;
+    typval_T	v;
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return -1;
+    }
+
+    PROC_RANGE
+
+    if(first == size)
+	li = NULL;
+    else
+    {
+	li = list_find(l, (long) first);
+	if(li == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no vim list item"));
+	    return -1;
+	}
+	if(last > first)
+	{
+	    i = last - first;
+	    while(i-- && li != NULL)
+	    {
+		next = li->li_next;
+		listitem_remove(l, li);
+		li = next;
+	    }
+	}
+    }
+
+    if(obj == NULL)
+	return 0;
+
+    if(!PyList_Check(obj))
+    {
+	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
+	return -1;
+    }
+
+    lsize = PyList_Size(obj);
+
+    for(i=0; i<lsize; i++)
+    {
+	litem = PyList_GetItem(obj, i);
+	if(litem == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no list item"));
+	    return -1;
+	}
+	if(ConvertFromPyObject(litem, &v) == -1)
+	    return -1;
+	if(list_insert_tv(l, &v, li) == FAIL)
+	{
+	    PyErr_SetVim(_("failed to add item to list"));
+	    return -1;
+	}
+    }
+    return 0;
+}
+
+    static PyObject *
+ListConcatInPlace(PyObject *self, PyObject *obj)
+{
+    list_T	*l = ((ListObject *) (self))->list;
+
+    if(l->lv_lock)
+    {
+	PyErr_SetVim(_("list is locked"));
+	return NULL;
+    }
+
+    if(!PyList_Check(obj))
+    {
+	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
+	return NULL;
+    }
+
+    if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
+	return NULL;
+
+    Py_INCREF(self);
+
+    return self;
+}
+
+static struct PyMethodDef ListMethods[] = {
+    {"extend", (PyCFunction)ListConcatInPlace, METH_O, ""},
+    { NULL,	    NULL,		0,	    NULL }
+};
+
+typedef struct
+{
+    PyObject_HEAD
+    char_u	*name;
+} FunctionObject;
+
+    static PyObject *
+FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
+{
+    FunctionObject	*this = (FunctionObject *)(self);
+    char_u	*name = this->name;
+    typval_T	args;
+    typval_T	selfdicttv;
+    typval_T	rettv;
+    dict_T	*selfdict = NULL;
+    PyObject	*selfdictObject;
+    PyObject	*result;
+
+    if(ConvertFromPyObject(argsObject, &args) == -1)
+	return NULL;
+
+    if(kwargs != NULL)
+    {
+	selfdictObject = PyDict_GetItemString(kwargs, "self");
+	if(selfdictObject != NULL)
+	{
+	    if(!PyDict_Check(selfdictObject))
+	    {
+		PyErr_SetString(PyExc_TypeError, _("'self' argument must be a dictionary"));
+		clear_tv(&args);
+		return NULL;
+	    }
+	    if(ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
+		return NULL;
+	    selfdict = selfdicttv.vval.v_dict;
+	}
+    }
+
+    func_call(name, &args, selfdict, &rettv);
+    result = ConvertToPyObject(&rettv);
+
+    /* FIXME Check what should really be cleared. */
+    clear_tv(&args);
+    clear_tv(&rettv);
+    /*
+     * if(selfdict!=NULL)
+     *     clear_tv(selfdicttv);
+     */
+
+    return result;
+}
+
+static struct PyMethodDef FunctionMethods[] = {
+    {"__call__",    (PyCFunction)FunctionCall, METH_VARARGS|METH_KEYWORDS, ""},
+    { NULL,	    NULL,		0,	    NULL }
+};
 
 #define INVALID_WINDOW_VALUE ((win_T *)(-1))
 
@@ -1562,3 +2098,50 @@ static struct PyMethodDef RangeMethods[] = {
     { NULL,	    NULL,		0,	    NULL }
 };
 
+    static void
+set_ref_in_py(const int copyID)
+{
+    pylinkedlist_T	*cur;
+    dict_T	*dd;
+    list_T	*ll;
+
+    if(lastdict != NULL)
+	for(cur = lastdict ; cur != NULL ; cur = cur->pll_prev)
+	{
+	    dd = ((DictionaryObject *) (cur->pll_obj))->dict;
+	    if(dd->dv_copyID != copyID)
+	    {
+		dd->dv_copyID = copyID;
+		set_ref_in_ht(&dd->dv_hashtab, copyID);
+	    }
+	}
+
+    if(lastlist != NULL)
+	for(cur = lastlist ; cur != NULL ; cur = cur->pll_prev)
+	{
+	    ll = ((ListObject *) (cur->pll_obj))->list;
+	    if(ll->lv_copyID != copyID)
+	    {
+		ll->lv_copyID = copyID;
+		set_ref_in_list(ll, copyID);
+	    }
+	}
+}
+
+    static int
+set_string_copy(char_u *str, typval_T *tv)
+{
+    char_u	*copy;
+
+    copy = (char_u *) alloc(STRLEN(str)+1);
+    if(copy == NULL)
+    {
+	if(raise)
+	    PyErr_NoMemory();
+	return -1;
+    }
+
+    STRCPY(copy, str);
+    tv->vval.v_string = copy;
+    return 0;
+}
