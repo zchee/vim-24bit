@@ -171,23 +171,23 @@ STARTTEST
 :   $put ='[0.0, 0.0]'
 :endif
 :"
-:" pythreeeval()
-:let l=pythreeeval('[0, 1, 2]')
+:" py3eval()
+:let l=py3eval('[0, 1, 2]')
 :$put =string(l)
-:let d=pythreeeval('{"a": "b", "c": 1, "d": ["e"]}')
+:let d=py3eval('{"a": "b", "c": 1, "d": ["e"]}')
 :$put =sort(items(d))
 :try
-:   let undef=pythreeeval('undefined_name')
+:   let undef=py3eval('undefined_name')
 :catch
 :   $put =v:exception[:13]
 :endtry
 :try
-:   let vim=pythreeeval('vim')
+:   let vim=py3eval('vim')
 :catch
 :   $put =v:exception[:13]
 :endtry
 :if has('float')
-:   let f=pythreeeval('0.0')
+:   let f=py3eval('0.0')
 :   $put =string(f)
 :else
 :   $put ='0.0'
