@@ -654,8 +654,6 @@ Python3_Init(void)
 	PyImport_AppendInittab("vim", Py3Init_vim);
 
 	globals = PyModule_GetDict(PyImport_AddModule("__main__"));
-	pyhash_init(&dictrefs);
-	pyhash_init(&listrefs);
 
 	/* Remove the element from sys.path that was added because of our
 	 * argv[0] value in Py3Init_vim().  Previously we used an empty
@@ -1515,41 +1513,9 @@ DictionaryDestructor(PyObject *self)
     void	**hi = NULL;
     DictionaryObject *this = (DictionaryObject *)(self);
 
-    hi = pyhash_lookup(&dictrefs, (void *) this->dict);
-    if(hi != NULL && *hi == this->dict)
-	pyhash_remove(&dictrefs, hi);
-    dict_unref(this->dict);
+    pyll_remove(&this->ref, &lastdict);
 
     Py_TYPE(self)->tp_free((PyObject*)self);
-}
-
-/* FIXME Copy-paste from if_python.c, with s/PYOBJ_DELETED/PY3OBJ_DELETED */
-    static PyObject *
-DictionaryNew(dict_T *dict)
-{
-    DictionaryObject	*self;
-    void	**hi = NULL;
-
-    hi = pyhash_lookup(&dictrefs, (void *) dict);
-    if(hi == NULL)
-    {
-	PyErr_SetVim(_("internal error: failed to find a place for dictionary"));
-	return NULL;
-    }
-    if(*hi != NULL)
-	self = (DictionaryObject *) PHVAL(dictrefs, hi);
-    if(*hi == NULL || PY3OBJ_DELETED(self))
-    {
-	self = PyObject_NEW(DictionaryObject, &DictionaryType);
-	if (self == NULL)
-	    return NULL;
-	self->dict = dict;
-	++dict->dv_refcount;
-	pyhash_add_item(&dictrefs, hi, (void *) dict, (PyObject *) self);
-    }
-    else
-	Py_INCREF(self);
-    return (PyObject *)(self);
 }
 
 /* List object - Definitions
@@ -1636,41 +1602,9 @@ ListDestructor(PyObject *self)
     void	**hi = NULL;
     ListObject *this = (ListObject *)(self);
 
-    hi = pyhash_lookup(&listrefs, (void *) this->list);
-    if(hi != NULL && *hi == this->list)
-	pyhash_remove(&listrefs, hi);
-    list_unref(this->list);
+    pyll_remove(&this->ref, &lastlist);
 
     Py_TYPE(self)->tp_free((PyObject*)self);
-}
-
-/* FIXME Copy-paste from if_python.c, with s/PYOBJ_DELETED/PY3OBJ_DELETED */
-    static PyObject *
-ListNew(list_T *list)
-{
-    ListObject	*self;
-    void	**hi = NULL;
-
-    hi = pyhash_lookup(&listrefs, (void *) list);
-    if(hi == NULL)
-    {
-	PyErr_SetVim(_("internal error: failed to find a place for list"));
-	return NULL;
-    }
-    if(*hi != NULL)
-	self = (ListObject *) PHVAL(listrefs, hi);
-    if(*hi == NULL || PY3OBJ_DELETED(self))
-    {
-	self = PyObject_NEW(ListObject, &ListType);
-	if (self == NULL)
-	    return NULL;
-	self->list = list;
-	++list->lv_refcount;
-	pyhash_add_item(&listrefs, hi, (void *) list, (PyObject *) self);
-    }
-    else
-	Py_INCREF(self);
-    return (PyObject *)(self);
 }
 
 /* Function object - Definitions
@@ -1698,7 +1632,7 @@ FunctionNew(char_u *name)
     self = PyObject_NEW(FunctionObject, &FunctionType);
     if(self == NULL)
 	return NULL;
-    self->name = (char_u *) alloc((char_u) sizeof(char_u)*STRLEN(name));
+    self->name = (char_u *) alloc(sizeof(char_u)*STRLEN(name));
     if(self->name == NULL)
     {
 	PyErr_NoMemory();
