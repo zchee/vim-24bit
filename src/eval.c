@@ -648,7 +648,7 @@ static void f_printf __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_pumvisible __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_PYTHON
 static void f_pyeval __ARGS((typval_T *argvars, typval_T *rettv));
-static void f_pythreeeval __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_py3eval __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
 static void f_range __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_readfile __ARGS((typval_T *argvars, typval_T *rettv));
@@ -7987,11 +7987,11 @@ static struct fst
     {"prevnonblank",	1, 1, f_prevnonblank},
     {"printf",		2, 19, f_printf},
     {"pumvisible",	0, 0, f_pumvisible},
+#ifdef FEAT_PYTHON3
+    {"py3eval",		1, 1, f_py3eval},
+#endif
 #ifdef FEAT_PYTHON
     {"pyeval",		1, 1, f_pyeval},
-#endif
-#ifdef FEAT_PYTHON3
-    {"pythreeeval",		1, 1, f_pythreeeval},
 #endif
     {"range",		1, 3, f_range},
     {"readfile",	1, 3, f_readfile},
@@ -14461,10 +14461,10 @@ f_pyeval(argvars, rettv)
 
 #ifdef FEAT_PYTHON3
 /*
- * "pythreeeval()" function
+ * "py3eval()" function
  */
     static void
-f_pythreeeval(argvars, rettv)
+f_py3eval(argvars, rettv)
     typval_T	*argvars;
     typval_T	*rettv;
 {

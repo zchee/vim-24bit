@@ -11,7 +11,7 @@ The Python Interface to Vim				*python* *Python*
 3. Buffer objects				|python-buffer|
 4. Range objects				|python-range|
 5. Window objects				|python-window|
-6. pyeval(), pythreeeval() Vim functions	|python-pyeval|
+6. pyeval(), py3eval() Vim functions		|python-pyeval|
 7. Dynamic loading				|python-dynamic|
 8. Python 3					|python3|
 
@@ -336,11 +336,10 @@ The height attribute is writable only if the screen is split horizontally.
 The width attribute is writable only if the screen is split vertically.
 
 ==============================================================================
-6. pyeval() and pythreeeval() Vim functions		*python-pyeval*
+6. pyeval() and py3eval() Vim functions			*python-pyeval*
 
-To facilitate bi-directional interface, you can use |pyeval()| and 
-|pythreeeval()| functions to evaluate Python expressions and pass their values 
-to VimL.
+To facilitate bi-directional interface, you can use |pyeval()| and |py3eval()| 
+functions to evaluate Python expressions and pass their values to VimL.
 
 ==============================================================================
 7. Dynamic loading					*python-dynamic*
