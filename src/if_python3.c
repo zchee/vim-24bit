@@ -136,7 +136,7 @@ static void init_structs(void);
 # define PyObject_Init py3__PyObject_Init
 # define PyDict_New py3_PyDict_New
 # define PyDict_GetItemString py3_PyDict_GetItemString
-# define PyDict_Items py3_PyDict_Items
+# define PyDict_Next py3_PyDict_Next
 # define PyModule_GetDict py3_PyModule_GetDict
 #undef PyRun_SimpleString
 # define PyRun_SimpleString py3_PyRun_SimpleString
@@ -224,7 +224,7 @@ static PyObject* (*py3_PyErr_Occurred)(void);
 static PyObject* (*py3_PyModule_GetDict)(PyObject *);
 static int (*py3_PyList_SetItem)(PyObject *, Py_ssize_t, PyObject *);
 static PyObject* (*py3_PyDict_GetItemString)(PyObject *, const char *);
-static PyObject* (*py3_PyDict_Items)(PyObject *);
+static int (*py3_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
 static PyObject* (*py3_PyLong_FromLong)(long);
 static PyObject* (*py3_PyDict_New)(void);
 static PyObject* (*py3_Py_BuildValue)(char *, ...);
@@ -325,7 +325,7 @@ static struct
     {"PyModule_GetDict", (PYTHON_PROC*)&py3_PyModule_GetDict},
     {"PyList_SetItem", (PYTHON_PROC*)&py3_PyList_SetItem},
     {"PyDict_GetItemString", (PYTHON_PROC*)&py3_PyDict_GetItemString},
-    {"PyDict_Items", (PYTHON_PROC*)&py3_PyDict_Items},
+    {"PyDict_Next", (PYTHON_PROC*)&py3_PyDict_Next},
     {"PyLong_FromLong", (PYTHON_PROC*)&py3_PyLong_FromLong},
     {"PyDict_New", (PYTHON_PROC*)&py3_PyDict_New},
     {"Py_BuildValue", (PYTHON_PROC*)&py3_Py_BuildValue},
@@ -1884,10 +1884,9 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	dict_T	*d;
 	char_u	*key;
 	dictitem_T	*di;
-	PyObject	*lst;
-	PyObject	*litem;
-	PyObject	*lobj;
-	Py_ssize_t	lsize;
+	PyObject	*keyObject;
+	PyObject	*valObject;
+	Py_ssize_t	iter = 0;
 	typval_T	v;
 	PyObject	*bytes;
 
@@ -1897,21 +1896,17 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 	    PyErr_NoMemory();
 	    return -1;
 	}
-	lst = PyDict_Items(obj);
-	lsize = PyList_Size(lst);
-	while(lsize--)
+	while(PyDict_Next(obj, &iter, &keyObject, &valObject))
 	{
 	    bytes = NULL;
-	    litem = PyList_GetItem(lst, lsize);
-	    OBJ_NULL_ERR(litem, "internal error: no dict item")
+	    OBJ_NULL_ERR(keyObject, "internal error: no dict key")
+	    OBJ_NULL_ERR(valObject, "internal error: no dict value")
 
-	    lobj = PyTuple_GetItem(litem, 0);
-	    OBJ_NULL_ERR(lobj, "internal error: no key")
-	    if(PyBytes_Check(lobj))
-		key = (char_u *) PyBytes_AsString(lobj);
-	    else if(PyUnicode_Check(lobj))
+	    if(PyBytes_Check(keyObject))
+		key = (char_u *) PyBytes_AsString(keyObject);
+	    else if(PyUnicode_Check(keyObject))
 	    {
-		bytes = PyString_AsBytes(lobj);
+		bytes = PyString_AsBytes(keyObject);
 		if(bytes == NULL)
 		    return -1;
 
@@ -1926,9 +1921,6 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 		return -1;
 	    }
 
-	    lobj = PyTuple_GetItem(litem, 1);
-	    OBJ_NULL_ERR(lobj, "internal error: no value")
-
 	    di = dictitem_alloc(key);
 	    if(bytes != NULL)
 		Py_XDECREF(bytes);
@@ -1938,7 +1930,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 		    PyErr_NoMemory();
 		return -1;
 	    }
-	    if(ConvertFromPyObject(lobj, &v) == -1)
+	    if(ConvertFromPyObject(valObject, &v) == -1)
 	    {
 		vim_free(di);
 		return -1;
