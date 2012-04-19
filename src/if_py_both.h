@@ -670,6 +670,92 @@ pydict_to_tv(PyObject *obj, typval_T *tv)
     return 0;
 }
 
+    static int
+pymap_to_tv(PyObject *obj, typval_T *tv)
+{
+    dict_T	*d;
+    char_u	*key;
+    dictitem_T	*di;
+    PyObject	*list;
+    PyObject	*litem;
+    PyObject	*keyObject;
+    PyObject	*valObject;
+    PyObject	*lobj;
+    Py_ssize_t	lsize;
+    typval_T	v;
+    PyObject	*bytes;
+
+    d = dict_alloc();
+    if(d == NULL)
+    {
+	PyErr_NoMemory();
+	return -1;
+    }
+    list = PyMapping_Items(obj);
+    lsize = PyList_Size(list);
+    while(lsize--)
+    {
+	litem = PyList_GetItem(list, lsize);
+	if(litem == NULL)
+	{
+	    Py_DECREF(list);
+	    return -1;
+	}
+
+	keyObject = PyTuple_GetItem(litem, 0);
+	if(keyObject == NULL)
+	{
+	    Py_DECREF(list);
+	    Py_DECREF(litem);
+	    return -1;
+	}
+
+	DICTKEY_GET(-1)
+
+	valObject = PyTuple_GetItem(litem, 1);
+	if(valObject == NULL)
+	{
+	    Py_DECREF(list);
+	    Py_DECREF(litem);
+	    return -1;
+	}
+
+	di = dictitem_alloc(key);
+
+	DICTKEY_UNREF
+
+	if(di == NULL)
+	{
+	    Py_DECREF(list);
+	    Py_DECREF(litem);
+	    PyErr_NoMemory();
+	    return -1;
+	}
+	if(ConvertFromPyObject(valObject, &v) == -1)
+	{
+	    vim_free(di);
+	    Py_DECREF(list);
+	    Py_DECREF(litem);
+	    return -1;
+	}
+	if(dict_add(d, di) == FAIL)
+	{
+	    vim_free(di);
+	    Py_DECREF(list);
+	    Py_DECREF(litem);
+	    PyErr_SetVim(_("failed to add key to dictionary"));
+	    return -1;
+	}
+	copy_tv(&v, &di->di_tv);
+	Py_DECREF(litem);
+    }
+    Py_DECREF(list);
+
+    tv->v_type = VAR_DICT;
+    tv->vval.v_dict = d;
+    return 0;
+}
+
     static PyInt
 DictionaryLength(PyObject *self)
 {
@@ -2391,88 +2477,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
     else if(PySequence_Check(obj))
 	return pyseq_to_tv(obj, tv, PySequence_Size, PySequence_GetItem);
     else if(PyMapping_Check(obj))
-    {
-	dict_T	*d;
-	char_u	*key;
-	dictitem_T	*di;
-	PyObject	*list;
-	PyObject	*litem;
-	PyObject	*keyObject;
-	PyObject	*valObject;
-	PyObject	*lobj;
-	Py_ssize_t	lsize;
-	typval_T	v;
-	PyObject	*bytes;
-
-	d = dict_alloc();
-	if(d == NULL)
-	{
-	    PyErr_NoMemory();
-	    return -1;
-	}
-	list = PyMapping_Items(obj);
-	lsize = PyList_Size(list);
-	while(lsize--)
-	{
-	    litem = PyList_GetItem(list, lsize);
-	    if(litem == NULL)
-	    {
-		Py_DECREF(list);
-		return -1;
-	    }
-
-	    keyObject = PyTuple_GetItem(litem, 0);
-	    if(keyObject == NULL)
-	    {
-		Py_DECREF(list);
-		Py_DECREF(litem);
-		return -1;
-	    }
-
-	    DICTKEY_GET(-1)
-
-	    valObject = PyTuple_GetItem(litem, 1);
-	    if(valObject == NULL)
-	    {
-		Py_DECREF(list);
-		Py_DECREF(litem);
-		return -1;
-	    }
-
-	    di = dictitem_alloc(key);
-
-	    DICTKEY_UNREF
-
-	    if(di == NULL)
-	    {
-		Py_DECREF(list);
-		Py_DECREF(litem);
-		PyErr_NoMemory();
-		return -1;
-	    }
-	    if(ConvertFromPyObject(valObject, &v) == -1)
-	    {
-		vim_free(di);
-		Py_DECREF(list);
-		Py_DECREF(litem);
-		return -1;
-	    }
-	    if(dict_add(d, di) == FAIL)
-	    {
-		vim_free(di);
-		Py_DECREF(list);
-		Py_DECREF(litem);
-		PyErr_SetVim(_("failed to add key to dictionary"));
-		return -1;
-	    }
-	    copy_tv(&v, &di->di_tv);
-	    Py_DECREF(litem);
-	}
-	Py_DECREF(list);
-
-	tv->v_type = VAR_DICT;
-	tv->vval.v_dict = d;
-    }
+	return pymap_to_tv(obj, tv);
     else
     {
 	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
