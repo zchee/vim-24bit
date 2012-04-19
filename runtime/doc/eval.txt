@@ -4594,16 +4594,6 @@ pumvisible()						*pumvisible()*
 		This can be used to avoid some things that would remove the
 		popup menu.
 
-							*E858* *E859*
-pyeval({expr})						*pyeval()*
-		Evaluate Python expression {expr} and return its result
-		converted to Vim data structures.
-		Numbers and strings are returned as they are (strings are 
-		copied though).
-		Lists are represented as Vim |List| type.
-		Dictionaries are represented as Vim |Dictionary| type with 
-		keys converted to strings.
-
 							*E860* *E861*
 py3eval({expr})						*py3eval()*
 		Evaluate Python expression {expr} and return its result
@@ -4611,6 +4601,16 @@ py3eval({expr})						*py3eval()*
 		Numbers and strings are returned as they are (strings are 
 		copied though, unicode strings are additionally converted to 
 		'encoding').
+		Lists are represented as Vim |List| type.
+		Dictionaries are represented as Vim |Dictionary| type with 
+		keys converted to strings.
+
+							*E858* *E859*
+pyeval({expr})						*pyeval()*
+		Evaluate Python expression {expr} and return its result
+		converted to Vim data structures.
+		Numbers and strings are returned as they are (strings are 
+		copied though).
 		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type with 
 		keys converted to strings.

@@ -137,6 +137,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyArg_Parse dll_PyArg_Parse
 # define PyArg_ParseTuple dll_PyArg_ParseTuple
 # define PyMem_Free dll_PyMem_Free
+# define PyMem_Malloc dll_PyMem_Malloc
 # define PyDict_SetItemString dll_PyDict_SetItemString
 # define PyErr_BadArgument dll_PyErr_BadArgument
 # define PyErr_Clear dll_PyErr_Clear
@@ -207,6 +208,7 @@ struct PyMethodDef { Py_ssize_t a; };
 static int(*dll_PyArg_Parse)(PyObject *, char *, ...);
 static int(*dll_PyArg_ParseTuple)(PyObject *, char *, ...);
 static int(*dll_PyMem_Free)(void *);
+static void* (*dll_PyMem_Malloc)(size_t);
 static int(*dll_PyDict_SetItemString)(PyObject *dp, char *key, PyObject *item);
 static int(*dll_PyErr_BadArgument)(void);
 static void(*dll_PyErr_Clear)(void);
@@ -299,6 +301,7 @@ static struct
     {"PyArg_Parse", (PYTHON_PROC*)&dll_PyArg_Parse},
     {"PyArg_ParseTuple", (PYTHON_PROC*)&dll_PyArg_ParseTuple},
     {"PyMem_Free", (PYTHON_PROC*)&dll_PyMem_Free},
+    {"PyMem_Malloc", (PYTHON_PROC*)&dll_PyMem_Malloc},
     {"PyDict_SetItemString", (PYTHON_PROC*)&dll_PyDict_SetItemString},
     {"PyErr_BadArgument", (PYTHON_PROC*)&dll_PyErr_BadArgument},
     {"PyErr_Clear", (PYTHON_PROC*)&dll_PyErr_Clear},
@@ -1646,32 +1649,13 @@ static PyTypeObject FunctionType = {
     (reprfunc)    0,
 };
 
-    static PyObject *
-FunctionNew(char_u *name)
-{
-    FunctionObject	*self;
-
-    self = PyObject_NEW(FunctionObject, &FunctionType);
-    if(self == NULL)
-	return NULL;
-    self->name = (char_u *) alloc((char_u) sizeof(char_u)*STRLEN(name));
-    if(self->name == NULL)
-    {
-	PyErr_NoMemory();
-	return NULL;
-    }
-    STRCPY(self->name, name);
-    func_ref(name);
-    return (PyObject *)(self);
-}
-
     static void
 FunctionDestructor(PyObject *self)
 {
     FunctionObject	*this = (FunctionObject *) (self);
 
     func_unref(this->name);
-    vim_free(this->name);
+    PyMem_Del(this->name);
 
     Py_DECREF(self);
 }

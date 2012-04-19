@@ -647,8 +647,8 @@ static void f_prevnonblank __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_printf __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_pumvisible __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_PYTHON
-static void f_pyeval __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_py3eval __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_pyeval __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
 static void f_range __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_readfile __ARGS((typval_T *argvars, typval_T *rettv));
@@ -9157,7 +9157,7 @@ f_byteidx(argvars, rettv)
 #endif
 }
 
-    void
+    int
 func_call(name, args, selfdict, rettv)
     char_u	*name;
     typval_T	*args;
@@ -9168,6 +9168,7 @@ func_call(name, args, selfdict, rettv)
     typval_T	argv[MAX_FUNC_ARGS + 1];
     int		argc = 0;
     int		dummy;
+    int		r;
 
     for (item = args->vval.v_list->lv_first; item != NULL;
 							 item = item->li_next)
@@ -9184,13 +9185,15 @@ func_call(name, args, selfdict, rettv)
     }
 
     if (item == NULL)
-	(void)call_func(name, (int)STRLEN(name), rettv, argc, argv,
+	r = call_func(name, (int)STRLEN(name), rettv, argc, argv,
 				 curwin->w_cursor.lnum, curwin->w_cursor.lnum,
 						      &dummy, TRUE, selfdict);
 
     /* Free the arguments. */
     while (argc > 0)
 	clear_tv(&argv[--argc]);
+
+    return r;
 }
 
 /*
@@ -9229,7 +9232,7 @@ f_call(argvars, rettv)
 	selfdict = argvars[2].vval.v_dict;
     }
 
-    func_call(func, &argvars[1], selfdict, rettv);
+    (void)func_call(func, &argvars[1], selfdict, rettv);
 }
 
 #ifdef FEAT_FLOAT
@@ -14442,23 +14445,6 @@ f_pumvisible(argvars, rettv)
 #endif
 }
 
-#ifdef FEAT_PYTHON
-/*
- * "pyeval()" function
- */
-    static void
-f_pyeval(argvars, rettv)
-    typval_T	*argvars;
-    typval_T	*rettv;
-{
-    char_u	*str;
-    char_u	buf[NUMBUFLEN];
-
-    str = get_tv_string_buf(&argvars[0], buf);
-    do_pyeval(str, rettv);
-}
-#endif
-
 #ifdef FEAT_PYTHON3
 /*
  * "py3eval()" function
@@ -14473,6 +14459,23 @@ f_py3eval(argvars, rettv)
 
     str = get_tv_string_buf(&argvars[0], buf);
     do_py3eval(str, rettv);
+}
+#endif
+
+#ifdef FEAT_PYTHON
+/*
+ * "pyeval()" function
+ */
+    static void
+f_pyeval(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    char_u	*str;
+    char_u	buf[NUMBUFLEN];
+
+    str = get_tv_string_buf(&argvars[0], buf);
+    do_pyeval(str, rettv);
 }
 #endif
 
