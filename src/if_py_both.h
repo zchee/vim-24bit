@@ -843,6 +843,51 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
     return 0;
 }
 
+    static int
+pyseq_to_tv(PyObject *obj, typval_T *tv, lenfunc Size, ssizeargfunc Item)
+{
+    list_T	*l;
+
+    l = list_alloc();
+    if(list_py_concat(l, obj, Size, Item) == -1)
+	return -1;
+
+    tv->v_type = VAR_LIST;
+    tv->vval.v_list = l;
+
+    return 0;
+}
+
+    static int
+pyiter_to_tv(PyObject *obj, typval_T *tv)
+{
+    PyObject	*iterator = PyObject_GetIter(obj);
+    PyObject	*item;
+    typval_T	v;
+    list_T	*l;
+
+    l = list_alloc();
+
+    if(iterator == NULL)
+	return -1;
+
+    while((item = PyIter_Next(obj)))
+    {
+	if(ConvertFromPyObject(item, &v) == -1)
+	    return -1;
+
+	LIST_APPEND(l, v)
+
+	Py_DECREF(item);
+    }
+
+    Py_DECREF(iterator);
+
+    tv->vval.v_list = l;
+    tv->v_type = VAR_LIST;
+    return 0;
+}
+
     static PyInt
 ListLength(PyObject *self)
 {
@@ -2254,3 +2299,116 @@ set_string_copy(char_u *str, typval_T *tv)
     }
     return 0;
 }
+
+#ifdef FEAT_EVAL
+
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
+
+    static int
+ConvertFromPyObject(PyObject *obj, typval_T *tv)
+{
+    if(obj->ob_type == &DictionaryType)
+    {
+	tv->v_type = VAR_DICT;
+	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
+    }
+    else if(obj->ob_type == &ListType)
+    {
+	tv->v_type = VAR_LIST;
+	tv->vval.v_list = (((ListObject *)(obj))->list);
+    }
+    else if(obj->ob_type == &FunctionType)
+    {
+	char_u	*retval = NULL;
+
+	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
+	    return -1;
+
+	tv->v_type = VAR_FUNC;
+    }
+#if PY_MAJOR_VERSION >= 3
+    else if(PyBytes_Check(obj))
+    {
+	char_u	*retval = NULL;
+	char_u	*result = (char_u *) PyBytes_AsString(obj);
+
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv) == -1)
+	    return -1;
+
+	tv->v_type = VAR_STRING;
+    }
+    else if(PyUnicode_Check(obj))
+    {
+	PyObject	*bytes;
+	char_u	*result;
+
+	bytes = PyString_AsBytes(obj);
+	if(bytes == NULL)
+	    return -1;
+
+	result = (char_u *) PyBytes_AsString(bytes);
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv) == -1)
+	{
+	    Py_XDECREF(bytes);
+	    return -1;
+	}
+	Py_XDECREF(bytes);
+
+	tv->v_type = VAR_STRING;
+    }
+    else if(PyLong_Check(obj))
+    {
+	tv->v_type = VAR_NUMBER;
+	tv->vval.v_number = (varnumber_T) PyLong_AsLong(obj);
+    }
+#else
+    else if(PyString_Check(obj))
+    {
+	char_u	*retval = NULL;
+	char_u	*result = (char_u *) PyString_AsString(obj);
+
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv) == -1)
+	    return -1;
+
+	tv->v_type = VAR_STRING;
+    }
+    else if(PyInt_Check(obj))
+    {
+	tv->v_type = VAR_NUMBER;
+	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
+    }
+#endif
+    else if(PyDict_Check(obj))
+	return pydict_to_tv(obj, tv);
+    else if(PyList_Check(obj))
+	return pyseq_to_tv(obj, tv, PyList_Size, PyList_GetItem);
+    else if(PyTuple_Check(obj))
+	return pyseq_to_tv(obj, tv, PyTuple_Size, PyTuple_GetItem);
+#ifdef FEAT_FLOAT
+    else if(PyFloat_Check(obj))
+    {
+	tv->v_type = VAR_FLOAT;
+	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
+    }
+#endif
+    else if(PyIter_Check(obj))
+	return pyiter_to_tv(obj, tv);
+    else if(PySequence_Check(obj))
+	return pyseq_to_tv(obj, tv, PySequence_Size, PySequence_GetItem);
+    else
+    {
+	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
+	return -1;
+    }
+    return 0;
+}
+#endif

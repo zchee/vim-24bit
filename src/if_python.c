@@ -161,6 +161,9 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyList_SetItem dll_PyList_SetItem
 # define PyList_Size dll_PyList_Size
 # define PyList_Type (*dll_PyList_Type)
+# define PySequence_Check dll_PySequence_Check
+# define PySequence_Size dll_PySequence_Size
+# define PySequence_GetItem dll_PySequence_GetItem
 # define PyTuple_Size dll_PyTuple_Size
 # define PyTuple_GetItem dll_PyTuple_GetItem
 # define PyTuple_Type (*dll_PyTuple_Type)
@@ -168,6 +171,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyDict_New dll_PyDict_New
 # define PyDict_GetItemString dll_PyDict_GetItemString
 # define PyDict_Next dll_PyDict_Next
+# define PyIter_Next dll_PyIter_Next
 # define PyModule_GetDict dll_PyModule_GetDict
 # define PyRun_SimpleString dll_PyRun_SimpleString
 # define PyRun_String dll_PyRun_String
@@ -192,8 +196,10 @@ struct PyMethodDef { Py_ssize_t a; };
 # define Py_Finalize dll_Py_Finalize
 # define Py_IsInitialized dll_Py_IsInitialized
 # define _PyObject_New dll__PyObject_New
+# define _PyObject_NextNotImplemented (*dll__PyObject_NextNotImplemented)
 # define _Py_NoneStruct (*dll__Py_NoneStruct)
 # define PyObject_Init dll__PyObject_Init
+# define PyObject_GetIter dll_PyObject_GetIter
 # if defined(PY_VERSION_HEX) && PY_VERSION_HEX >= 0x02020000
 #  define PyType_IsSubtype dll_PyType_IsSubtype
 # endif
@@ -232,6 +238,9 @@ static PyObject*(*dll_PyList_New)(PyInt size);
 static int(*dll_PyList_SetItem)(PyObject *, PyInt, PyObject *);
 static PyInt(*dll_PyList_Size)(PyObject *);
 static PyTypeObject* dll_PyList_Type;
+static int (*dll_PySequence_Check)(PyObject *);
+static PyInt(*dll_PySequence_Size)(PyObject *);
+static PyObject*(*dll_PySequence_GetItem)(PyObject *, PyInt);
 static PyInt(*dll_PyTuple_Size)(PyObject *);
 static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
 static PyTypeObject* dll_PyTuple_Type;
@@ -239,6 +248,7 @@ static PyObject*(*dll_PyImport_ImportModule)(const char *);
 static PyObject*(*dll_PyDict_New)(void);
 static PyObject*(*dll_PyDict_GetItemString)(PyObject *, const char *);
 static int (*dll_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
+static PyObject* (*dll_PyIter_Next)(PyObject *);
 static PyObject*(*dll_PyModule_GetDict)(PyObject *);
 static int(*dll_PyRun_SimpleString)(char *);
 static PyObject *(*dll_PyRun_String)(char *, int, PyObject *, PyObject *);
@@ -264,6 +274,8 @@ static void(*dll_Py_Finalize)(void);
 static int(*dll_Py_IsInitialized)(void);
 static PyObject*(*dll__PyObject_New)(PyTypeObject *, PyObject *);
 static PyObject*(*dll__PyObject_Init)(PyObject *, PyTypeObject *);
+static PyObject* (*dll_PyObject_GetIter)(PyObject *);
+static iternextfunc dll__PyObject_NextNotImplemented;
 static PyObject* dll__Py_NoneStruct;
 # if defined(PY_VERSION_HEX) && PY_VERSION_HEX >= 0x02020000
 static int (*dll_PyType_IsSubtype)(PyTypeObject *, PyTypeObject *);
@@ -325,13 +337,17 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&dll_PyList_SetItem},
     {"PyList_Size", (PYTHON_PROC*)&dll_PyList_Size},
     {"PyList_Type", (PYTHON_PROC*)&dll_PyList_Type},
-    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
+    {"PySequence_GetItem", (PYTHON_PROC*)&dll_PySequence_GetItem},
+    {"PySequence_Size", (PYTHON_PROC*)&dll_PySequence_Size},
+    {"PySequence_Check", (PYTHON_PROC*)&dll_PySequence_Check},
     {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
+    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
     {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
     {"PyDict_Next", (PYTHON_PROC*)&dll_PyDict_Next},
     {"PyDict_New", (PYTHON_PROC*)&dll_PyDict_New},
+    {"PyIter_Next", (PYTHON_PROC*)&dll_PyIter_Next},
     {"PyModule_GetDict", (PYTHON_PROC*)&dll_PyModule_GetDict},
     {"PyRun_SimpleString", (PYTHON_PROC*)&dll_PyRun_SimpleString},
     {"PyRun_String", (PYTHON_PROC*)&dll_PyRun_String},
@@ -361,6 +377,8 @@ static struct
     {"Py_IsInitialized", (PYTHON_PROC*)&dll_Py_IsInitialized},
     {"_PyObject_New", (PYTHON_PROC*)&dll__PyObject_New},
     {"PyObject_Init", (PYTHON_PROC*)&dll__PyObject_Init},
+    {"PyObject_GetIter", (PYTHON_PROC*)&dll_PyObject_GetIter},
+    {"_PyObject_NextNotImplemented", (PYTHON_PROC*)&dll__PyObject_NextNotImplemented},
     {"_Py_NoneStruct", (PYTHON_PROC*)&dll__Py_NoneStruct},
 # if defined(PY_VERSION_HEX) && PY_VERSION_HEX >= 0x02020000
     {"PyType_IsSubtype", (PYTHON_PROC*)&dll_PyType_IsSubtype},
@@ -1699,89 +1717,6 @@ ConvertToPyObject(typval_T *tv)
 	    PyErr_SetVim(_("internal error: invalid value type"));
 	    return NULL;
     }
-}
-
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
-
-    static int
-ConvertFromPyObject(PyObject *obj, typval_T *tv)
-{
-    if(obj->ob_type == &DictionaryType)
-    {
-	tv->v_type = VAR_DICT;
-	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
-    }
-    else if(obj->ob_type == &ListType)
-    {
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = (((ListObject *)(obj))->list);
-    }
-    else if(obj->ob_type == &FunctionType)
-    {
-	char_u	*retval = NULL;
-
-	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
-	    return -1;
-
-	tv->v_type = VAR_FUNC;
-    }
-    else if(PyString_Check(obj))
-    {
-	char_u	*retval = NULL;
-	char_u	*result = (char_u *) PyString_AsString(obj);
-
-	if(result == NULL)
-	    return -1;
-
-	if(set_string_copy(result, tv) == -1)
-	    return -1;
-
-	tv->v_type = VAR_STRING;
-    }
-    else if(PyInt_Check(obj))
-    {
-	tv->v_type = VAR_NUMBER;
-	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
-    }
-    else if(PyDict_Check(obj))
-    {
-	return pydict_to_tv(obj, tv);
-    }
-    else if(PyList_Check(obj))
-    {
-	list_T	*l;
-
-	l = list_alloc();
-	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
-	    return -1;
-
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = l;
-    }
-    else if(PyTuple_Check(obj))
-    {
-	list_T	*l;
-
-	l = list_alloc();
-	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
-	    return -1;
-
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = l;
-    }
-#ifdef FEAT_FLOAT
-    else if(PyFloat_Check(obj))
-    {
-	tv->v_type = VAR_FLOAT;
-	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
-    }
-#endif
-    else
-    {
-	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
-	return -1;
-    }
-    return 0;
 }
 
     void
