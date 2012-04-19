@@ -814,6 +814,13 @@ ListNew(list_T *list)
     return (PyObject *)(self);
 }
 
+#define LIST_APPEND(l, tv) \
+    if(list_append_tv(l, &tv) == FAIL) \
+    { \
+	PyErr_SetVim(_("internal error: failed to add item to list")); \
+	return -1; \
+    }
+
     static int
 list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
 {
@@ -831,15 +838,9 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
 	    return -1;
 	}
 	if(ConvertFromPyObject(litem, &v) == -1)
-	{
 	    return -1;
-	}
 
-	if(list_append_tv(l, &v) == FAIL)
-	{
-	    PyErr_SetVim(_("failed to add item to list"));
-	    return -1;
-	}
+	LIST_APPEND(l, v)
     }
     return 0;
 }
@@ -954,11 +955,7 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 
     if(index == length)
     {
-	if(list_append_tv(l, &tv) == FAIL)
-	{
-	    PyErr_SetVim(_("internal error: failed to add item to list"));
-	    return -1;
-	}
+	LIST_APPEND(l, tv)
     }
     else
     {

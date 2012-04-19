@@ -1736,7 +1736,7 @@ PyMODINIT_FUNC Py3Init_vim(void)
  * 4. Utility functions for handling the interface between Vim and Python.
  */
 
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {if(raise) PyErr_SetVim(_(str)); return -1;}
+#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
 
     static int
 ConvertFromPyObject(PyObject *obj, typval_T *tv)
@@ -1835,8 +1835,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
 #endif
     else
     {
-	if(raise)
-	    PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
+	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
 	return -1;
     }
     return 0;
