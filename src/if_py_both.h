@@ -761,14 +761,15 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
     for(i=0; i<lsize; i++)
     {
 	litem = Item(obj, i);
-	if(obj == NULL)
+	if(litem == NULL)
 	{
-	    if(raise)
-		PyErr_SetVim(_("internal error: no list item"));
+	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
 	}
 	if(ConvertFromPyObject(litem, &v) == -1)
+	{
 	    return -1;
+	}
 
 	if(list_append_tv(l, &v) == FAIL)
 	{
@@ -1012,6 +1013,27 @@ typedef struct
     char_u	*name;
 } FunctionObject;
 
+static PyTypeObject FunctionType;
+
+    static PyObject *
+FunctionNew(char_u *name)
+{
+    FunctionObject	*self;
+
+    self = PyObject_NEW(FunctionObject, &FunctionType);
+    if(self == NULL)
+	return NULL;
+    self->name = PyMem_New(char_u, STRLEN(name));
+    if(self->name == NULL)
+    {
+	PyErr_NoMemory();
+	return NULL;
+    }
+    STRCPY(self->name, name);
+    func_ref(name);
+    return (PyObject *)(self);
+}
+
     static PyObject *
 FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
 {
@@ -1023,6 +1045,7 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     dict_T	*selfdict = NULL;
     PyObject	*selfdictObject;
     PyObject	*result;
+    int		error;
 
     if(ConvertFromPyObject(argsObject, &args) == -1)
 	return NULL;
@@ -1044,8 +1067,14 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
 	}
     }
 
-    func_call(name, &args, selfdict, &rettv);
-    result = ConvertToPyObject(&rettv);
+    error = func_call(name, &args, selfdict, &rettv);
+    if(error != OK)
+    {
+	result = NULL;
+	PyErr_SetVim((char *)get_vim_var_str(VV_ERRMSG));
+    }
+    else
+	result = ConvertToPyObject(&rettv);
 
     /* FIXME Check what should really be cleared. */
     clear_tv(&args);
@@ -2158,17 +2187,11 @@ set_ref_in_py(const int copyID)
     static int
 set_string_copy(char_u *str, typval_T *tv)
 {
-    char_u	*copy;
-
-    copy = (char_u *) alloc(STRLEN(str)+1);
-    if(copy == NULL)
+    tv->vval.v_string = vim_strsave(str);
+    if(tv->vval.v_string == NULL)
     {
-	if(raise)
-	    PyErr_NoMemory();
+	PyErr_NoMemory();
 	return -1;
     }
-
-    STRCPY(copy, str);
-    tv->vval.v_string = copy;
     return 0;
 }

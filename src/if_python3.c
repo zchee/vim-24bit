@@ -109,6 +109,7 @@ static void init_structs(void);
 # undef PyArg_ParseTuple
 # define PyArg_ParseTuple py3_PyArg_ParseTuple
 # define PyMem_Free py3_PyMem_Free
+# define PyMem_Malloc py3_PyMem_Malloc
 # define PyDict_SetItemString py3_PyDict_SetItemString
 # define PyErr_BadArgument py3_PyErr_BadArgument
 # define PyErr_Clear py3_PyErr_Clear
@@ -137,6 +138,7 @@ static void init_structs(void);
 # define PyDict_New py3_PyDict_New
 # define PyDict_GetItemString py3_PyDict_GetItemString
 # define PyDict_Next py3_PyDict_Next
+# define PyObject_GetIter py3_PyObject_GetIter
 # define PyModule_GetDict py3_PyModule_GetDict
 #undef PyRun_SimpleString
 # define PyRun_SimpleString py3_PyRun_SimpleString
@@ -227,6 +229,8 @@ static PyObject* (*py3_PyDict_GetItemString)(PyObject *, const char *);
 static int (*py3_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
 static PyObject* (*py3_PyLong_FromLong)(long);
 static PyObject* (*py3_PyDict_New)(void);
+static PyObject* (*py3_PyMapping_keys)(PyObject *);
+static PyObject* (*py3_PyObject_GetIter)(PyObject *);
 static PyObject* (*py3_Py_BuildValue)(char *, ...);
 static int (*py3_PyType_Ready)(PyTypeObject *type);
 static int (*py3_PyDict_SetItemString)(PyObject *dp, char *key, PyObject *item);
@@ -241,6 +245,7 @@ static PyThreadState*(*py3_PyEval_SaveThread)(void);
 static int (*py3_PyArg_Parse)(PyObject *, char *, ...);
 static int (*py3_PyArg_ParseTuple)(PyObject *, char *, ...);
 static int (*py3_PyMem_Free)(void *);
+static void* (*py3_PyMem_Malloc)(size_t);
 static int (*py3_Py_IsInitialized)(void);
 static void (*py3_PyErr_Clear)(void);
 static PyObject*(*py3__PyObject_Init)(PyObject *, PyTypeObject *);
@@ -302,6 +307,7 @@ static struct
     {"Py_Initialize", (PYTHON_PROC*)&py3_Py_Initialize},
     {"PyArg_ParseTuple", (PYTHON_PROC*)&py3_PyArg_ParseTuple},
     {"PyMem_Free", (PYTHON_PROC*)&py3_PyMem_Free},
+    {"PyMem_Malloc", (PYTHON_PROC*)&py3_PyMem_Malloc},
     {"PyList_New", (PYTHON_PROC*)&py3_PyList_New},
     {"PyGILState_Ensure", (PYTHON_PROC*)&py3_PyGILState_Ensure},
     {"PyGILState_Release", (PYTHON_PROC*)&py3_PyGILState_Release},
@@ -326,6 +332,7 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&py3_PyList_SetItem},
     {"PyDict_GetItemString", (PYTHON_PROC*)&py3_PyDict_GetItemString},
     {"PyDict_Next", (PYTHON_PROC*)&py3_PyDict_Next},
+    {"PyObject_GetIter", (PYTHON_PROC*)&py3_PyObject_GetIter},
     {"PyLong_FromLong", (PYTHON_PROC*)&py3_PyLong_FromLong},
     {"PyDict_New", (PYTHON_PROC*)&py3_PyDict_New},
     {"Py_BuildValue", (PYTHON_PROC*)&py3_Py_BuildValue},
@@ -1612,37 +1619,15 @@ ListDestructor(PyObject *self)
 /* Function object - Definitions
  */
 
-static PyTypeObject FunctionType;
-
     static void
 FunctionDestructor(PyObject *self)
 {
     FunctionObject	*this = (FunctionObject *) (self);
 
     func_unref(this->name);
-    vim_free(this->name);
+    PyMem_Del(this->name);
 
     Py_TYPE(self)->tp_free((PyObject*)self);
-}
-
-/* FIXME Copy-paste from if_python.c, without modifications */
-    static PyObject *
-FunctionNew(char_u *name)
-{
-    FunctionObject	*self;
-
-    self = PyObject_NEW(FunctionObject, &FunctionType);
-    if(self == NULL)
-	return NULL;
-    self->name = (char_u *) alloc(sizeof(char_u)*STRLEN(name));
-    if(self->name == NULL)
-    {
-	PyErr_NoMemory();
-	return NULL;
-    }
-    STRCPY(self->name, name);
-    func_ref(name);
-    return (PyObject *)(self);
 }
 
     static PyObject *

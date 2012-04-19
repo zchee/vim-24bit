@@ -113,7 +113,7 @@ int modify_fname __ARGS((char_u *src, int *usedlen, char_u **fnamep, char_u **bu
 char_u *do_string_sub __ARGS((char_u *str, char_u *pat, char_u *sub, char_u *flags));
 void func_unref __ARGS((char_u *name));
 void func_ref __ARGS((char_u *name));
-void func_call __ARGS((char_u *name, typval_T *args, dict_T *selfdict, typval_T *rettv));
+int func_call __ARGS((char_u *name, typval_T *args, dict_T *selfdict, typval_T *rettv));
 void listitem_remove __ARGS((list_T *l, listitem_T *item));
 int list_insert_tv __ARGS((list_T *l, typval_T *tv, listitem_T *item));
 void set_ref_in_item __ARGS((typval_T *tv, int copyID));
