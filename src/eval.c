@@ -646,8 +646,10 @@ static void f_pow __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_prevnonblank __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_printf __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_pumvisible __ARGS((typval_T *argvars, typval_T *rettv));
-#ifdef FEAT_PYTHON
+#ifdef FEAT_PYTHON3
 static void f_py3eval __ARGS((typval_T *argvars, typval_T *rettv));
+#endif
+#ifdef FEAT_PYTHON
 static void f_pyeval __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
 static void f_range __ARGS((typval_T *argvars, typval_T *rettv));
