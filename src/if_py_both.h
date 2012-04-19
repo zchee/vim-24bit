@@ -636,15 +636,9 @@ pydict_to_tv(PyObject *obj, typval_T *tv)
     {
 	bytes = NULL;
 	if(keyObject == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no dictionary key"));
 	    return -1;
-	}
 	if(valObject == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no dictionary value"));
 	    return -1;
-	}
 
 	DICTKEY_GET(-1)
 
@@ -831,10 +825,7 @@ list_py_concat(list_T *l, PyObject *obj, lenfunc Size, ssizeargfunc Item)
     {
 	litem = Item(obj, i);
 	if(litem == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
-	}
 	if(ConvertFromPyObject(litem, &v) == -1)
 	    return -1;
 
@@ -1066,15 +1057,12 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
     {
 	litem = PyList_GetItem(obj, i);
 	if(litem == NULL)
-	{
-	    PyErr_SetVim(_("internal error: no list item"));
 	    return -1;
-	}
 	if(ConvertFromPyObject(litem, &v) == -1)
 	    return -1;
 	if(list_insert_tv(l, &v, li) == FAIL)
 	{
-	    PyErr_SetVim(_("failed to add item to list"));
+	    PyErr_SetVim(_("internal error: failed to add item to list"));
 	    return -1;
 	}
     }
@@ -2301,8 +2289,6 @@ set_string_copy(char_u *str, typval_T *tv)
 }
 
 #ifdef FEAT_EVAL
-
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
 
     static int
 ConvertFromPyObject(PyObject *obj, typval_T *tv)
