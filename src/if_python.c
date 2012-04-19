@@ -56,6 +56,8 @@
 
 static void init_structs(void);
 
+#define PyBytes_FromString PyString_FromString
+
 /* No-op conversion functions, use with care! */
 #define PyString_AsBytes(obj) (obj)
 #define PyString_FreeBytes(obj)
@@ -1510,6 +1512,7 @@ LineToString(const char *str)
 }
 
 static void DictionaryDestructor(PyObject *);
+static PyObject *DictionaryGetattr(PyObject *, char*);
 
 static PyMappingMethods DictionaryAsMapping = {
     (PyInquiry)		DictionaryLength,
@@ -1526,7 +1529,7 @@ static PyTypeObject DictionaryType = {
 
     (destructor)  DictionaryDestructor,
     (printfunc)   0,
-    (getattrfunc) 0,
+    (getattrfunc) DictionaryGetattr,
     (setattrfunc) 0,
     (cmpfunc)     0,
     (reprfunc)    0,
@@ -1550,6 +1553,12 @@ DictionaryDestructor(PyObject *self)
     dict_unref(this->dict);
 
     Py_DECREF(self);
+}
+
+    static PyObject *
+DictionaryGetattr(PyObject *self, char *name)
+{
+    return Py_FindMethod(DictionaryMethods, self, name);
 }
 
 static void ListDestructor(PyObject *);

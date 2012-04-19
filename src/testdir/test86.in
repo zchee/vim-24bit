@@ -29,6 +29,12 @@ STARTTEST
 :py d['1']='asd'
 :py d['b']=[1, 2, f]
 :py d['-1']={'a': 1}
+:let dkeys = []
+:py dk=vim.bindeval('dkeys')
+:py dkeys=d.keys()
+:py dkeys.sort()
+:py dk.extend(dkeys)
+:$put =string(dkeys)
 :for [key, val] in sort(items(d))
 :  $put =string(key) . ' : ' . string(val)
 :  unlet key val

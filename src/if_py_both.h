@@ -697,6 +697,33 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
     return 0;
 }
 
+    static PyObject *
+DictionaryListKeys(PyObject *self)
+{
+    dict_T	*dict = ((DictionaryObject *)(self))->dict;
+    long_u	todo = dict->dv_hashtab.ht_used;
+    Py_ssize_t	i = 0;
+    PyObject	*r;
+    hashitem_T	*hi;
+
+    r = PyList_New(todo);
+    for (hi = dict->dv_hashtab.ht_array; todo > 0; ++hi)
+    {
+	if(!HASHITEM_EMPTY(hi))
+	{
+	    PyList_SetItem(r, i, PyBytes_FromString((char *)(hi->hi_key)));
+	    --todo;
+	    ++i;
+	}
+    }
+    return r;
+}
+
+static struct PyMethodDef DictionaryMethods[] = {
+    {"keys", (PyCFunction)DictionaryListKeys, METH_NOARGS, ""},
+    { NULL,	    NULL,		0,	    NULL }
+};
+
 static PyTypeObject ListType;
 
 typedef struct
