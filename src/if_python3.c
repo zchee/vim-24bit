@@ -129,6 +129,9 @@ static void init_structs(void);
 # define PyList_New py3_PyList_New
 # define PyList_SetItem py3_PyList_SetItem
 # define PyList_Size py3_PyList_Size
+# define PySequence_Check py3_PySequence_Check
+# define PySequence_Size py3_PySequence_Size
+# define PySequence_GetItem py3_PySequence_GetItem
 # define PyTuple_Size py3_PyTuple_Size
 # define PyTuple_GetItem py3_PyTuple_GetItem
 # define PySlice_GetIndicesEx py3_PySlice_GetIndicesEx
@@ -138,6 +141,7 @@ static void init_structs(void);
 # define PyDict_New py3_PyDict_New
 # define PyDict_GetItemString py3_PyDict_GetItemString
 # define PyDict_Next py3_PyDict_Next
+# define PyIter_Next py3_PyIter_Next
 # define PyObject_GetIter py3_PyObject_GetIter
 # define PyModule_GetDict py3_PyModule_GetDict
 #undef PyRun_SimpleString
@@ -155,6 +159,7 @@ static void init_structs(void);
 # define Py_Finalize py3_Py_Finalize
 # define Py_IsInitialized py3_Py_IsInitialized
 # define _Py_NoneStruct (*py3__Py_NoneStruct)
+# define _PyObject_NextNotImplemented (*py3__PyObject_NextNotImplemented)
 # define PyModule_AddObject py3_PyModule_AddObject
 # define PyImport_AppendInittab py3_PyImport_AppendInittab
 # define _PyUnicode_AsString py3__PyUnicode_AsString
@@ -208,6 +213,9 @@ static void (*py3_PyGILState_Release)(PyGILState_STATE);
 static int (*py3_PySys_SetObject)(char *, PyObject *);
 static PyObject* (*py3_PyList_Append)(PyObject *, PyObject *);
 static Py_ssize_t (*py3_PyList_Size)(PyObject *);
+static int (*py3_PySequence_Check)(PyObject *);
+static Py_ssize_t (*py3_PySequence_Size)(PyObject *);
+static PyObject* (*py3_PySequence_GetItem)(PyObject *, Py_ssize_t);
 static Py_ssize_t (*py3_PyTuple_Size)(PyObject *);
 static PyObject* (*py3_PyTuple_GetItem)(PyObject *, Py_ssize_t);
 static int (*py3_PySlice_GetIndicesEx)(PyObject *r, Py_ssize_t length,
@@ -230,6 +238,8 @@ static int (*py3_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **
 static PyObject* (*py3_PyLong_FromLong)(long);
 static PyObject* (*py3_PyDict_New)(void);
 static PyObject* (*py3_PyMapping_keys)(PyObject *);
+static int (*py3_PyIter_Check)(PyObject *);
+static PyObject* (*py3_PyIter_Next)(PyObject *);
 static PyObject* (*py3_PyObject_GetIter)(PyObject *);
 static PyObject* (*py3_Py_BuildValue)(char *, ...);
 static int (*py3_PyType_Ready)(PyTypeObject *type);
@@ -249,6 +259,7 @@ static void* (*py3_PyMem_Malloc)(size_t);
 static int (*py3_Py_IsInitialized)(void);
 static void (*py3_PyErr_Clear)(void);
 static PyObject*(*py3__PyObject_Init)(PyObject *, PyTypeObject *);
+static iternextfunc py3__PyObject_NextNotImplemented;
 static PyObject* py3__Py_NoneStruct;
 static int (*py3_PyModule_AddObject)(PyObject *m, const char *name, PyObject *o);
 static int (*py3_PyImport_AppendInittab)(const char *name, PyObject* (*initfunc)(void));
@@ -314,6 +325,9 @@ static struct
     {"PySys_SetObject", (PYTHON_PROC*)&py3_PySys_SetObject},
     {"PyList_Append", (PYTHON_PROC*)&py3_PyList_Append},
     {"PyList_Size", (PYTHON_PROC*)&py3_PyList_Size},
+    {"PySequence_Check", (PYTHON_PROC*)&py3_PySequence_Check},
+    {"PySequence_Size", (PYTHON_PROC*)&py3_PySequence_Size},
+    {"PySequence_GetItem", (PYTHON_PROC*)&py3_PySequence_GetItem},
     {"PyTuple_Size", (PYTHON_PROC*)&py3_PyTuple_Size},
     {"PyTuple_GetItem", (PYTHON_PROC*)&py3_PyTuple_GetItem},
     {"PySlice_GetIndicesEx", (PYTHON_PROC*)&py3_PySlice_GetIndicesEx},
@@ -332,6 +346,7 @@ static struct
     {"PyList_SetItem", (PYTHON_PROC*)&py3_PyList_SetItem},
     {"PyDict_GetItemString", (PYTHON_PROC*)&py3_PyDict_GetItemString},
     {"PyDict_Next", (PYTHON_PROC*)&py3_PyDict_Next},
+    {"PyIter_Next", (PYTHON_PROC*)&py3_PyIter_Next},
     {"PyObject_GetIter", (PYTHON_PROC*)&py3_PyObject_GetIter},
     {"PyLong_FromLong", (PYTHON_PROC*)&py3_PyLong_FromLong},
     {"PyDict_New", (PYTHON_PROC*)&py3_PyDict_New},
@@ -345,6 +360,7 @@ static struct
     {"PyEval_SaveThread", (PYTHON_PROC*)&py3_PyEval_SaveThread},
     {"PyArg_Parse", (PYTHON_PROC*)&py3_PyArg_Parse},
     {"Py_IsInitialized", (PYTHON_PROC*)&py3_Py_IsInitialized},
+    {"_PyObject_NextNotImplemented", (PYTHON_PROC*)&py3__PyObject_NextNotImplemented},
     {"_Py_NoneStruct", (PYTHON_PROC*)&py3__Py_NoneStruct},
     {"PyErr_Clear", (PYTHON_PROC*)&py3_PyErr_Clear},
     {"PyObject_Init", (PYTHON_PROC*)&py3__PyObject_Init},
@@ -1735,111 +1751,6 @@ PyMODINIT_FUNC Py3Init_vim(void)
 /*************************************************************************
  * 4. Utility functions for handling the interface between Vim and Python.
  */
-
-#define OBJ_NULL_ERR(obj, str) if(obj==NULL) {PyErr_SetVim(_(str)); return -1;}
-
-    static int
-ConvertFromPyObject(PyObject *obj, typval_T *tv)
-{
-    if(obj->ob_type == &DictionaryType)
-    {
-	tv->v_type = VAR_DICT;
-	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
-    }
-    else if(obj->ob_type == &ListType)
-    {
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = (((ListObject *)(obj))->list);
-    }
-    else if(obj->ob_type == &FunctionType)
-    {
-	char_u	*retval = NULL;
-
-	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
-	    return -1;
-
-	tv->v_type = VAR_FUNC;
-    }
-    else if(PyBytes_Check(obj))
-    {
-	char_u	*retval = NULL;
-	char_u	*result = (char_u *) PyBytes_AsString(obj);
-
-	if(result == NULL)
-	    return -1;
-
-	if(set_string_copy(result, tv) == -1)
-	    return -1;
-
-	tv->v_type = VAR_STRING;
-    }
-    else if(PyUnicode_Check(obj))
-    {
-	PyObject	*bytes;
-	char_u	*result;
-
-	bytes = PyString_AsBytes(obj);
-	if(bytes == NULL)
-	    return -1;
-
-	result = (char_u *) PyBytes_AsString(bytes);
-	if(result == NULL)
-	    return -1;
-
-	if(set_string_copy(result, tv) == -1)
-	{
-	    Py_XDECREF(bytes);
-	    return -1;
-	}
-	Py_XDECREF(bytes);
-
-	tv->v_type = VAR_STRING;
-    }
-    else if(PyLong_Check(obj))
-    {
-	tv->v_type = VAR_NUMBER;
-	tv->vval.v_number = (varnumber_T) PyLong_AsLong(obj);
-    }
-    else if(PyDict_Check(obj))
-    {
-	return pydict_to_tv(obj, tv);
-    }
-    else if(PyList_Check(obj))
-    {
-	list_T	*l;
-
-	l = list_alloc();
-	if(list_py_concat(l, obj, PyList_Size, PyList_GetItem)==-1)
-	    return -1;
-
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = l;
-    }
-    else if(PyTuple_Check(obj))
-    {
-	list_T	*l;
-
-	l = list_alloc();
-	if(list_py_concat(l, obj, PyTuple_Size, PyTuple_GetItem)==-1)
-	    return -1;
-
-	tv->v_type = VAR_LIST;
-	tv->vval.v_list = l;
-    }
-#ifdef FEAT_FLOAT
-    else if(PyFloat_Check(obj))
-    {
-	tv->v_type = VAR_FLOAT;
-	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
-    }
-#endif
-    else
-    {
-	PyErr_SetString(PyExc_TypeError, _("unable to convert to vim structure"));
-	return -1;
-    }
-    return 0;
-}
 
     static PyObject *
 ConvertToPyObject(typval_T *tv)
