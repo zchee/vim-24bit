@@ -1745,60 +1745,7 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
     }
     else if(PyDict_Check(obj))
     {
-	dict_T	*d;
-	char_u	*key;
-	dictitem_T	*di;
-	PyObject	*keyObject;
-	PyObject	*valObject;
-	Py_ssize_t	iter = 0;
-	typval_T	v;
-	PyObject	*bytes;
-
-	d = dict_alloc();
-	if(d == NULL)
-	{
-	    PyErr_NoMemory();
-	    return -1;
-	}
-	while(PyDict_Next(obj, &iter, &keyObject, &valObject))
-	{
-	    bytes = NULL;
-	    OBJ_NULL_ERR(keyObject, "internal error: no dict key")
-	    OBJ_NULL_ERR(valObject, "internal error: no dict value")
-
-	    if(!PyString_Check(keyObject))
-	    {
-		PyErr_SetString(PyExc_TypeError, _("key is not a string"));
-		return -1;
-	    }
-	    key = (char_u *) PyString_AsString(keyObject);
-
-	    di = dictitem_alloc(key);
-	    if(bytes != NULL)
-		Py_XDECREF(bytes);
-	    if(di == NULL)
-	    {
-		if(raise)
-		    PyErr_NoMemory();
-		return -1;
-	    }
-	    if(ConvertFromPyObject(valObject, &v) == -1)
-	    {
-		vim_free(di);
-		return -1;
-	    }
-	    if(dict_add(d, di) == FAIL)
-	    {
-		vim_free(di);
-		if(raise)
-		    PyErr_SetVim(_("failed to add key to dictionary"));
-		return -1;
-	    }
-	    copy_tv(&v, &di->di_tv);
-	}
-
-	tv->v_type = VAR_DICT;
-	tv->vval.v_dict = d;
+	return pydict_to_tv(obj, tv);
     }
     else if(PyList_Check(obj))
     {

@@ -614,6 +614,70 @@ DictionaryNew(dict_T *dict)
     return (PyObject *)(self);
 }
 
+    static int
+pydict_to_tv(PyObject *obj, typval_T *tv)
+{
+    dict_T	*d;
+    char_u	*key;
+    dictitem_T	*di;
+    PyObject	*keyObject;
+    PyObject	*valObject;
+    Py_ssize_t	iter = 0;
+    typval_T	v;
+    PyObject	*bytes;
+
+    d = dict_alloc();
+    if(d == NULL)
+    {
+	PyErr_NoMemory();
+	return -1;
+    }
+    while(PyDict_Next(obj, &iter, &keyObject, &valObject))
+    {
+	bytes = NULL;
+	if(keyObject == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no dictionary key"));
+	    return -1;
+	}
+	if(valObject == NULL)
+	{
+	    PyErr_SetVim(_("internal error: no dictionary value"));
+	    return -1;
+	}
+
+	DICTKEY_GET(-1)
+
+	di = dictitem_alloc(key);
+
+	DICTKEY_UNREF
+
+	if(di == NULL)
+	{
+	    if(raise)
+		PyErr_NoMemory();
+	    return -1;
+	}
+	if(ConvertFromPyObject(valObject, &v) == -1)
+	{
+	    vim_free(di);
+	    return -1;
+	}
+	if(dict_add(d, di) == FAIL)
+	{
+	    vim_free(di);
+	    if(raise)
+		PyErr_SetVim(_("failed to add key to dictionary"));
+	    return -1;
+	}
+	copy_tv(&v, &di->di_tv);
+    }
+
+    tv->v_type = VAR_DICT;
+    tv->vval.v_dict = d;
+    return 0;
+}
+
     static PyInt
 DictionaryLength(PyObject *self)
 {
@@ -1071,7 +1135,7 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     if(error != OK)
     {
 	result = NULL;
-	PyErr_SetVim((char *)get_vim_var_str(VV_ERRMSG));
+	PyErr_SetVim(_("failed to run function"));
     }
     else
 	result = ConvertToPyObject(&rettv);
