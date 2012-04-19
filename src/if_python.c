@@ -171,6 +171,14 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyDict_New dll_PyDict_New
 # define PyDict_GetItemString dll_PyDict_GetItemString
 # define PyDict_Next dll_PyDict_Next
+# ifdef PyMapping_Items
+#  define PY_NO_MAPPING_ITEMS
+# else
+#  define PyMapping_Items dll_PyMapping_Items
+# endif
+# undef PyObject_CallMethod
+# define PyObject_CallMethod dll_PyObject_CallMethod
+# define PyMapping_Check dll_PyMapping_Check
 # define PyIter_Next dll_PyIter_Next
 # define PyModule_GetDict dll_PyModule_GetDict
 # define PyRun_SimpleString dll_PyRun_SimpleString
@@ -228,7 +236,7 @@ static PyThreadState*(*dll_PyEval_SaveThread)(void);
 # ifdef PY_CAN_RECURSE
 static PyGILState_STATE	(*dll_PyGILState_Ensure)(void);
 static void (*dll_PyGILState_Release)(PyGILState_STATE);
-#endif
+# endif
 static long(*dll_PyInt_AsLong)(PyObject *);
 static PyObject*(*dll_PyInt_FromLong)(long);
 static PyTypeObject* dll_PyInt_Type;
@@ -248,6 +256,11 @@ static PyObject*(*dll_PyImport_ImportModule)(const char *);
 static PyObject*(*dll_PyDict_New)(void);
 static PyObject*(*dll_PyDict_GetItemString)(PyObject *, const char *);
 static int (*dll_PyDict_Next)(PyObject *, Py_ssize_t *, PyObject **, PyObject **);
+# ifndef PY_NO_MAPPING_ITEMS
+static PyObject* (*dll_PyMapping_Items)(PyObject *);
+# endif
+static PyObject* (*dll_PyObject_CallMethod)(PyObject *, char *, PyObject *);
+static int (*dll_PyMapping_Check)(PyObject *);
 static PyObject* (*dll_PyIter_Next)(PyObject *);
 static PyObject*(*dll_PyModule_GetDict)(PyObject *);
 static int(*dll_PyRun_SimpleString)(char *);
@@ -340,13 +353,18 @@ static struct
     {"PySequence_GetItem", (PYTHON_PROC*)&dll_PySequence_GetItem},
     {"PySequence_Size", (PYTHON_PROC*)&dll_PySequence_Size},
     {"PySequence_Check", (PYTHON_PROC*)&dll_PySequence_Check},
-    {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
     {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
+    {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
     {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
     {"PyDict_Next", (PYTHON_PROC*)&dll_PyDict_Next},
     {"PyDict_New", (PYTHON_PROC*)&dll_PyDict_New},
+# ifndef PY_NO_MAPPING_ITEMS
+    {"PyMapping_Items", (PYTHON_PROC*)&dll_PyMapping_Items},
+# endif
+    {"PyObject_CallMethod", (PYTHON_PROC*)&dll_PyObject_CallMethod},
+    {"PyMapping_Check", (PYTHON_PROC*)&dll_PyMapping_Check},
     {"PyIter_Next", (PYTHON_PROC*)&dll_PyIter_Next},
     {"PyModule_GetDict", (PYTHON_PROC*)&dll_PyModule_GetDict},
     {"PyRun_SimpleString", (PYTHON_PROC*)&dll_PyRun_SimpleString},
