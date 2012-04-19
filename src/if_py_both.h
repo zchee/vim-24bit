@@ -654,8 +654,7 @@ pydict_to_tv(PyObject *obj, typval_T *tv)
 
 	if(di == NULL)
 	{
-	    if(raise)
-		PyErr_NoMemory();
+	    PyErr_NoMemory();
 	    return -1;
 	}
 	if(ConvertFromPyObject(valObject, &v) == -1)
@@ -666,8 +665,7 @@ pydict_to_tv(PyObject *obj, typval_T *tv)
 	if(dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
-	    if(raise)
-		PyErr_SetVim(_("failed to add key to dictionary"));
+	    PyErr_SetVim(_("failed to add key to dictionary"));
 	    return -1;
 	}
 	copy_tv(&v, &di->di_tv);
