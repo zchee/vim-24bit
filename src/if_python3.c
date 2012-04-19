@@ -2096,6 +2096,7 @@ init_structs(void)
     DictionaryType.tp_as_mapping = &DictionaryAsMapping;
     DictionaryType.tp_flags = Py_TPFLAGS_DEFAULT;
     DictionaryType.tp_doc = "dictionary pushing modifications to vim structure";
+    DictionaryType.tp_methods = DictionaryMethods;
 
     vim_memset(&ListType, 0, sizeof(ListType));
     ListType.tp_name = "vim.list";
