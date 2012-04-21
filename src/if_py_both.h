@@ -294,7 +294,7 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
 {
     PyObject	*result;
     PyObject	*newObj;
-    char	ptrBuf[NUMBUFLEN];
+    char	ptrBuf[sizeof(void *)*2 + 1];
 
     /* Avoid infinite recursion */
     if (depth > 100)
@@ -309,9 +309,9 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
     if ((our_tv->v_type == VAR_LIST && our_tv->vval.v_list != NULL)
 	    || (our_tv->v_type == VAR_DICT && our_tv->vval.v_dict != NULL))
     {
-	sprintf(ptrBuf, PRINTF_DECIMAL_LONG_U,
-		our_tv->v_type == VAR_LIST ? (long_u)our_tv->vval.v_list
-					   : (long_u)our_tv->vval.v_dict);
+	sprintf(ptrBuf, "%p",
+		our_tv->v_type == VAR_LIST ? (void *)our_tv->vval.v_list
+					   : (void *)our_tv->vval.v_dict);
 	result = PyDict_GetItemString(lookupDict, ptrBuf);
 	if (result != NULL)
 	{
