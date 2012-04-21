@@ -1756,36 +1756,6 @@ PyMODINIT_FUNC Py3Init_vim(void)
  * 4. Utility functions for handling the interface between Vim and Python.
  */
 
-    static PyObject *
-ConvertToPyObject(typval_T *tv)
-{
-    if(tv == NULL)
-    {
-	PyErr_SetVim(_("NULL reference passed"));
-	return NULL;
-    }
-    switch (tv->v_type)
-    {
-	case VAR_STRING:
-	    return PyBytes_FromString((char *) tv->vval.v_string);
-	case VAR_NUMBER:
-	    return PyLong_FromLong((long) tv->vval.v_number);
-#ifdef FEAT_FLOAT
-	case VAR_FLOAT:
-	    return PyFloat_FromDouble((double) tv->vval.v_float);
-#endif
-	case VAR_LIST:
-	    return ListNew(tv->vval.v_list);
-	case VAR_DICT:
-	    return DictionaryNew(tv->vval.v_dict);
-	case VAR_FUNC:
-	    return FunctionNew(tv->vval.v_string);
-	default:
-	    PyErr_SetVim(_("internal error: invalid value type"));
-	    return NULL;
-    }
-}
-
 /* Convert a Vim line into a Python string.
  * All internal newlines are replaced by null characters.
  *

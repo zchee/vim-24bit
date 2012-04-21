@@ -154,6 +154,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # endif
 # define PyInt_AsLong dll_PyInt_AsLong
 # define PyInt_FromLong dll_PyInt_FromLong
+# define PyLong_FromLong dll_PyLong_FromLong
 # define PyInt_Type (*dll_PyInt_Type)
 # define PyList_GetItem dll_PyList_GetItem
 # define PyList_Append dll_PyList_Append
@@ -239,6 +240,7 @@ static void (*dll_PyGILState_Release)(PyGILState_STATE);
 # endif
 static long(*dll_PyInt_AsLong)(PyObject *);
 static PyObject*(*dll_PyInt_FromLong)(long);
+static PyObject*(*dll_PyLong_FromLong)(long);
 static PyTypeObject* dll_PyInt_Type;
 static PyObject*(*dll_PyList_GetItem)(PyObject *, PyInt);
 static PyObject*(*dll_PyList_Append)(PyObject *, PyObject *);
@@ -343,6 +345,7 @@ static struct
 # endif
     {"PyInt_AsLong", (PYTHON_PROC*)&dll_PyInt_AsLong},
     {"PyInt_FromLong", (PYTHON_PROC*)&dll_PyInt_FromLong},
+    {"PyLong_FromLong", (PYTHON_PROC*)&dll_PyLong_FromLong},
     {"PyInt_Type", (PYTHON_PROC*)&dll_PyInt_Type},
     {"PyList_GetItem", (PYTHON_PROC*)&dll_PyList_GetItem},
     {"PyList_Append", (PYTHON_PROC*)&dll_PyList_Append},
@@ -1705,36 +1708,6 @@ FunctionGetattr(PyObject *self, char *name)
 	return PyString_FromString((char *)(this->name));
     else
 	return Py_FindMethod(FunctionMethods, self, name);
-}
-
-    static PyObject *
-ConvertToPyObject(typval_T *tv)
-{
-    if(tv == NULL)
-    {
-	PyErr_SetVim(_("NULL reference passed"));
-	return NULL;
-    }
-    switch (tv->v_type)
-    {
-	case VAR_STRING:
-	    return PyString_FromString((char *) tv->vval.v_string);
-	case VAR_NUMBER:
-	    return PyInt_FromLong((long) tv->vval.v_number);
-#ifdef FEAT_FLOAT
-	case VAR_FLOAT:
-	    return PyFloat_FromDouble((double) tv->vval.v_float);
-#endif
-	case VAR_LIST:
-	    return ListNew(tv->vval.v_list);
-	case VAR_DICT:
-	    return DictionaryNew(tv->vval.v_dict);
-	case VAR_FUNC:
-	    return FunctionNew(tv->vval.v_string);
-	default:
-	    PyErr_SetVim(_("internal error: invalid value type"));
-	    return NULL;
-    }
 }
 
     void
