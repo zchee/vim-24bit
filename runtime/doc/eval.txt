@@ -4604,6 +4604,7 @@ py3eval({expr})						*py3eval()*
 		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type with 
 		keys converted to strings.
+		{only available when compiled with the |+python3| feature}
 
 							*E858* *E859*
 pyeval({expr})						*pyeval()*
@@ -4614,6 +4615,7 @@ pyeval({expr})						*pyeval()*
 		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type with 
 		keys converted to strings.
+		{only available when compiled with the |+python| feature}
 
 							*E726* *E727*
 range({expr} [, {max} [, {stride}]])				*range()*
