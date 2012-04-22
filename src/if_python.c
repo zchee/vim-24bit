@@ -777,6 +777,7 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
 	else if(ConvertFromPyObject(r, rettv) == -1)
 	    EMSG(_("E859: Failed to convert returned python object to vim value"));
 	PyErr_Clear();
+	Py_DECREF(r);
     }
 
     Python_SaveThread();	    /* leave python */

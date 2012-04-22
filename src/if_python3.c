@@ -789,6 +789,7 @@ DoPy3Command(exarg_T *eap, const char *cmd, typval_T *rettv)
 	else if(ConvertFromPyObject(r, rettv) == -1)
 	    EMSG(_("E861: Failed to convert returned python 3 object to vim value"));
 	PyErr_Clear();
+	Py_DECREF(r);
     }
     Py_XDECREF(cmdbytes);
 
