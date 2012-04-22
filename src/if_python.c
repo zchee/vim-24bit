@@ -130,6 +130,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # undef Py_BuildValue
 # undef Py_InitModule4
 # undef Py_InitModule4_64
+# undef PyObject_CallMethod
 
 /*
  * Wrapper defines
@@ -154,8 +155,10 @@ struct PyMethodDef { Py_ssize_t a; };
 # endif
 # define PyInt_AsLong dll_PyInt_AsLong
 # define PyInt_FromLong dll_PyInt_FromLong
+# define PyLong_AsLong dll_PyLong_AsLong
 # define PyLong_FromLong dll_PyLong_FromLong
 # define PyInt_Type (*dll_PyInt_Type)
+# define PyLong_Type (*dll_PyLong_Type)
 # define PyList_GetItem dll_PyList_GetItem
 # define PyList_Append dll_PyList_Append
 # define PyList_New dll_PyList_New
@@ -177,7 +180,6 @@ struct PyMethodDef { Py_ssize_t a; };
 # else
 #  define PyMapping_Items dll_PyMapping_Items
 # endif
-# undef PyObject_CallMethod
 # define PyObject_CallMethod dll_PyObject_CallMethod
 # define PyMapping_Check dll_PyMapping_Check
 # define PyIter_Next dll_PyIter_Next
@@ -216,6 +218,8 @@ struct PyMethodDef { Py_ssize_t a; };
 #  define PyObject_Malloc dll_PyObject_Malloc
 #  define PyObject_Free dll_PyObject_Free
 # endif
+# define PyCapsule_New dll_PyCapsule_New
+# define PyCapsule_GetPointer dll_PyCapsule_GetPointer
 
 /*
  * Pointers for dynamic link
@@ -240,8 +244,10 @@ static void (*dll_PyGILState_Release)(PyGILState_STATE);
 # endif
 static long(*dll_PyInt_AsLong)(PyObject *);
 static PyObject*(*dll_PyInt_FromLong)(long);
+static long(*dll_PyLong_AsLong)(PyObject *);
 static PyObject*(*dll_PyLong_FromLong)(long);
 static PyTypeObject* dll_PyInt_Type;
+static PyTypeObject* dll_PyLong_Type;
 static PyObject*(*dll_PyList_GetItem)(PyObject *, PyInt);
 static PyObject*(*dll_PyList_Append)(PyObject *, PyObject *);
 static PyObject*(*dll_PyList_New)(PyInt size);
@@ -299,6 +305,8 @@ static int (*dll_PyType_IsSubtype)(PyTypeObject *, PyTypeObject *);
 static void* (*dll_PyObject_Malloc)(size_t);
 static void (*dll_PyObject_Free)(void*);
 # endif
+static PyObject* (*dll_PyCapsule_New)(void *, char *, PyCapsule_Destructor);
+static void* (*dll_PyCapsule_GetPointer)(PyObject *, char *);
 
 static HINSTANCE hinstPython = 0; /* Instance of python.dll */
 
@@ -345,8 +353,10 @@ static struct
 # endif
     {"PyInt_AsLong", (PYTHON_PROC*)&dll_PyInt_AsLong},
     {"PyInt_FromLong", (PYTHON_PROC*)&dll_PyInt_FromLong},
+    {"PyLong_AsLong", (PYTHON_PROC*)&dll_PyLong_AsLong},
     {"PyLong_FromLong", (PYTHON_PROC*)&dll_PyLong_FromLong},
     {"PyInt_Type", (PYTHON_PROC*)&dll_PyInt_Type},
+    {"PyLong_Type", (PYTHON_PROC*)&dll_PyLong_Type},
     {"PyList_GetItem", (PYTHON_PROC*)&dll_PyList_GetItem},
     {"PyList_Append", (PYTHON_PROC*)&dll_PyList_Append},
     {"PyList_New", (PYTHON_PROC*)&dll_PyList_New},
@@ -408,6 +418,8 @@ static struct
     {"PyObject_Malloc", (PYTHON_PROC*)&dll_PyObject_Malloc},
     {"PyObject_Free", (PYTHON_PROC*)&dll_PyObject_Free},
 # endif
+    {"PyCapsule_New", (PYTHON_PROC*)&dll_PyCapsule_New},
+    {"PyCapsule_GetPointer", (PYTHON_PROC*)&dll_PyCapsule_GetPointer},
     {"", NULL},
 };
 
