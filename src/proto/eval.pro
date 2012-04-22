@@ -48,6 +48,7 @@ void list_unref __ARGS((list_T *l));
 void list_free __ARGS((list_T *l, int recurse));
 dictitem_T *dict_lookup __ARGS((hashitem_T *hi));
 char_u *list_find_str __ARGS((list_T *l, long idx));
+void list_append __ARGS((list_T *l, listitem_T *item));
 int list_append_tv __ARGS((list_T *l, typval_T *tv));
 int list_append_dict __ARGS((list_T *list, dict_T *dict));
 int list_append_string __ARGS((list_T *l, char_u *str, int len));

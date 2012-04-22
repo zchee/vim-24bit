@@ -195,6 +195,8 @@ static void init_structs(void);
 # undef PyUnicode_Decode
 # define PyUnicode_Decode py3_PyUnicode_Decode
 # define PyType_IsSubtype py3_PyType_IsSubtype
+# define PyCapsule_New py3_PyCapsule_New
+# define PyCapsule_GetPointer py3_PyCapsule_GetPointer
 
 # ifdef Py_DEBUG
 #  undef PyObject_NEW
@@ -278,6 +280,8 @@ static PyObject* (*py3_PyType_GenericNew)(PyTypeObject *type, PyObject *args, Py
 static PyTypeObject* py3_PySlice_Type;
 static PyTypeObject* py3_PyFloat_Type;
 static PyObject* (*py3_PyErr_NewException)(char *name, PyObject *base, PyObject *dict);
+static PyObject* (*py3_PyCapsule_New)(void *, char *, PyCapsule_Destructor);
+static void* (*py3_PyCapsule_GetPointer)(PyObject *, char *);
 # ifdef Py_DEBUG
     static void (*py3__Py_NegativeRefcount)(const char *fname, int lineno, PyObject *op);
     static Py_ssize_t* py3__Py_RefTotal;
@@ -393,6 +397,8 @@ static struct
     {"PyObject_Free", (PYTHON_PROC*)&py3_PyObject_Free},
 # endif
     {"PyType_IsSubtype", (PYTHON_PROC*)&py3_PyType_IsSubtype},
+    {"PyCapsule_New", (PYTHON_PROC*)&py3_PyCapsule_New},
+    {"PyCapsule_GetPointer", (PYTHON_PROC*)&py3_PyCapsule_GetPointer},
     {"", NULL},
 };
 
