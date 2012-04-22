@@ -1844,6 +1844,7 @@ lispindent( {lnum})		Number	Lisp indent for line {lnum}
 localtime()			Number	current time
 log( {expr})			Float	natural logarithm (base e) of {expr}
 log10( {expr})			Float	logarithm of Float {expr} to base 10
+luaeval( {expr}[, {expr}])	any	evaluate |Lua| expression
 map( {expr}, {string})		List/Dict  change each item in {expr} to {expr}
 maparg( {name}[, {mode} [, {abbr} [, {dict}]]])
 				String or Dict
@@ -3997,6 +3998,20 @@ log10({expr})						*log10()*
 <			-2.0
 		{only available when compiled with the |+float| feature}
 		
+luaeval({expr}[, {expr}])					*luaeval()*
+		Evaluate Lua expression {expr} and return its result converted 
+		to Vim data structures. Second {expr} may hold additional 
+		argument accessible as _A inside first {expr}.
+		Strings are returned as they are.
+		Boolean objects are converted to numbers.
+		Numbers are converted to |Float| values if vim was compiled 
+		with |+float| and to numbers otherwise.
+		Dictionaries and lists obtained by vim.eval() are returned 
+		as-is.
+		Other objects are returned as zero without any errors.
+		See |lua-luaeval| for more details.
+		{only available when compiled with the |+lua| feature}
+
 map({expr}, {string})					*map()*
 		{expr} must be a |List| or a |Dictionary|.
 		Replace each item in {expr} with the result of evaluating
@@ -4321,7 +4336,7 @@ mode([expr])	Return a string that indicates the current mode.
 
 mzeval({expr})							*mzeval()*
 		Evaluate MzScheme expression {expr} and return its result
-		convert to Vim data structures.
+		converted to Vim data structures.
 		Numbers and strings are returned as they are.
 		Pairs (including lists and improper lists) and vectors are
 		returned as Vim |Lists|.
