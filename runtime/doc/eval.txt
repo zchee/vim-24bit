@@ -1880,6 +1880,8 @@ pow( {x}, {y})			Float	{x} to the power of {y}
 prevnonblank( {lnum})		Number	line nr of non-blank line <= {lnum}
 printf( {fmt}, {expr1}...)	String	format text
 pumvisible()			Number	whether popup menu is visible
+pyeval( {expr})			any	evaluate |Python| expression
+py3eval( {expr})		any	evaluate |python3| expression
 range( {expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
 readfile( {fname} [, {binary} [, {max}]])
@@ -4609,6 +4611,29 @@ pumvisible()						*pumvisible()*
 		otherwise.  See |ins-completion-menu|.
 		This can be used to avoid some things that would remove the
 		popup menu.
+
+							*E860* *E861*
+py3eval({expr})						*py3eval()*
+		Evaluate Python expression {expr} and return its result
+		converted to Vim data structures.
+		Numbers and strings are returned as they are (strings are 
+		copied though, unicode strings are additionally converted to 
+		'encoding').
+		Lists are represented as Vim |List| type.
+		Dictionaries are represented as Vim |Dictionary| type with 
+		keys converted to strings.
+		{only available when compiled with the |+python3| feature}
+
+							*E858* *E859*
+pyeval({expr})						*pyeval()*
+		Evaluate Python expression {expr} and return its result
+		converted to Vim data structures.
+		Numbers and strings are returned as they are (strings are 
+		copied though).
+		Lists are represented as Vim |List| type.
+		Dictionaries are represented as Vim |Dictionary| type with 
+		keys converted to strings.
+		{only available when compiled with the |+python| feature}
 
 							*E726* *E727*
 range({expr} [, {max} [, {stride}]])				*range()*
