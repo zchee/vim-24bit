@@ -191,6 +191,8 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyString_FromStringAndSize dll_PyString_FromStringAndSize
 # define PyString_Size dll_PyString_Size
 # define PyString_Type (*dll_PyString_Type)
+# define PyUnicode_Type (*dll_PyUnicode_Type)
+# define PyUnicodeUCS4_AsEncodedString (*dll_PyUnicodeUCS4_AsEncodedString)
 # define PyFloat_AsDouble dll_PyFloat_AsDouble
 # define PyFloat_FromDouble dll_PyFloat_FromDouble
 # define PyFloat_Type (*dll_PyFloat_Type)
@@ -278,6 +280,8 @@ static PyObject*(*dll_PyString_FromString)(const char *);
 static PyObject*(*dll_PyString_FromStringAndSize)(const char *, PyInt);
 static PyInt(*dll_PyString_Size)(PyObject *);
 static PyTypeObject* dll_PyString_Type;
+static PyTypeObject* dll_PyUnicode_Type;
+static PyObject *(*PyUnicodeUCS4_AsEncodedString)(PyObject *, char *, char *);
 static double(*dll_PyFloat_AsDouble)(PyObject *);
 static PyObject*(*dll_PyFloat_FromDouble)(double);
 static PyTypeObject* dll_PyFloat_Type;
@@ -387,6 +391,8 @@ static struct
     {"PyString_FromStringAndSize", (PYTHON_PROC*)&dll_PyString_FromStringAndSize},
     {"PyString_Size", (PYTHON_PROC*)&dll_PyString_Size},
     {"PyString_Type", (PYTHON_PROC*)&dll_PyString_Type},
+    {"PyUnicode_Type", (PYTHON_PROC*)&dll_PyUnicode_Type},
+    {"PyUnicodeUCS4_AsEncodedString", (PYTHON_PROC*)&dll_PyUnicodeUCS4_AsEncodedString},
     {"PyFloat_Type", (PYTHON_PROC*)&dll_PyFloat_Type},
     {"PyFloat_AsDouble", (PYTHON_PROC*)&dll_PyFloat_AsDouble},
     {"PyFloat_FromDouble", (PYTHON_PROC*)&dll_PyFloat_FromDouble},

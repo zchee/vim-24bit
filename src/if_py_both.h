@@ -2532,6 +2532,28 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	tv->v_type = VAR_STRING;
     }
 #else
+    else if(PyUnicode_Check(obj))
+    {
+	PyObject	*bytes;
+	char_u	*result;
+
+	bytes = PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, NULL);
+	if(bytes == NULL)
+	    return -1;
+
+	result=(char_u *) PyString_AsString(bytes);
+	if(result == NULL)
+	    return -1;
+
+	if(set_string_copy(result, tv) == -1)
+	{
+	    Py_XDECREF(bytes);
+	    return -1;
+	}
+	Py_XDECREF(bytes);
+
+	tv->v_type = VAR_STRING;
+    }
     else if(PyString_Check(obj))
     {
 	char_u	*retval = NULL;
