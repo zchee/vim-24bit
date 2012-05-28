@@ -77,7 +77,7 @@ static void init_structs(void);
 
 #define PyInt Py_ssize_t
 #define PyString_Check(obj) PyUnicode_Check(obj)
-#define PyString_AsBytes(obj) PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, CODEC_ERROR_HANDLER);
+#define PyString_AsBytes(obj) PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, CODEC_ERROR_HANDLER)
 #define PyString_FreeBytes(obj) Py_XDECREF(bytes)
 #define PyString_AsString(obj) PyBytes_AsString(obj)
 #define PyString_Size(obj) PyBytes_GET_SIZE(bytes)
