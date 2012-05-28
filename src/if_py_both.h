@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -487,6 +487,17 @@ VimEvalPy(PyObject *self UNUSED, PyObject *args)
 #endif
 }
 
+    static PyObject *
+VimStrwidth(PyObject *self UNUSED, PyObject *args)
+{
+    char	*expr;
+
+    if(!PyArg_ParseTuple(args, "s", &expr))
+	return NULL;
+
+    return PyLong_FromLong(mb_string2cells((char_u *)expr, STRLEN(expr)));
+}
+
 /*
  * Vim module - Definitions
  */
@@ -496,6 +507,7 @@ static struct PyMethodDef VimMethods[] = {
     {"command",	     VimCommand,	1,	    "Execute a Vim ex-mode command" },
     {"eval",	     VimEval,		1,	    "Evaluate an expression using Vim evaluator" },
     {"bindeval",     VimEvalPy,         1,          "Like eval(), but returns objects attached to vim ones"},
+    {"strwidth",     VimStrwidth,       1,          "Screen string width, counts <Tab> as having width 1"},
     { NULL,	     NULL,		0,	    NULL }
 };
 
