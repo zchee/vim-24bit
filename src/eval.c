@@ -18564,9 +18564,7 @@ f_winrestview(argvars, rettv)
 	curwin->w_skipcol = get_dict_number(dict, (char_u *)"skipcol");
 
 	check_cursor();
-	changed_cline_bef_curs();
-	invalidate_botline();
-	redraw_later(VALID);
+	changed_window_setting();
 
 	if (curwin->w_topline == 0)
 	    curwin->w_topline = 1;
@@ -19227,11 +19225,7 @@ get_vim_var_list(idx)
 set_vim_var_char(c)
     int c;
 {
-#ifdef FEAT_MBYTE
-    char_u	buf[MB_MAXBYTES];
-#else
-    char_u	buf[2];
-#endif
+    char_u	buf[MB_MAXBYTES + 1];
 
 #ifdef FEAT_MBYTE
     if (has_mbyte)
