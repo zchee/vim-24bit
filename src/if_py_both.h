@@ -672,6 +672,8 @@ pydict_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	    PyErr_NoMemory();
 	    return -1;
 	}
+	di->di_tv.v_lock = 0;
+
 	if(_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
 	{
 	    vim_free(di);
@@ -751,6 +753,8 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	    PyErr_NoMemory();
 	    return -1;
 	}
+	di->di_tv.v_lock = 0;
+
 	if(_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
 	{
 	    vim_free(di);
@@ -839,6 +843,8 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	    PyErr_NoMemory();
 	    return -1;
 	}
+	di->di_tv.v_lock = 0;
+
 	if(dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
@@ -924,6 +930,7 @@ list_py_concat(list_T *l, PyObject *obj, PyObject *lookupDict)
 	    PyErr_NoMemory();
 	    return -1;
 	}
+	li->li_tv.v_lock = 0;
 
 	litem = PySequence_GetItem(obj, i);
 	if(litem == NULL)
@@ -988,6 +995,8 @@ pyiter_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	    PyErr_NoMemory();
 	    return -1;
 	}
+	li->li_tv.v_lock = 0;
+
 	if(_ConvertFromPyObject(item, &li->li_tv, lookupDict) == -1)
 	    return -1;
 
