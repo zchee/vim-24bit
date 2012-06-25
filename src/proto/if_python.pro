@@ -8,6 +8,4 @@ void python_buffer_free __ARGS((buf_T *buf));
 void python_window_free __ARGS((win_T *win));
 void do_pyeval __ARGS((char_u *str, typval_T *rettv));
 void set_ref_in_python __ARGS((int copyID));
-void *PyMem_Malloc __ARGS((size_t size));
-void PyMem_Free __ARGS((void *ptr));
 /* vim: set ft=c : */
