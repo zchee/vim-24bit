@@ -299,7 +299,7 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
 {
     PyObject	*result;
     PyObject	*newObj;
-    char	ptrBuf[sizeof(void *)*2 + 1];
+    char	ptrBuf[sizeof(void *) * 2 + 1];
 
     /* Avoid infinite recursion */
     if (depth > 100)
@@ -403,7 +403,7 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookupDict)
 #endif
 
     static PyObject *
-VimEval(PyObject *self UNUSED, PyObject *args)
+VimEval(PyObject *self UNUSED, PyObject *args UNUSED)
 {
 #ifdef FEAT_EVAL
     char	*expr;
@@ -450,7 +450,7 @@ VimEval(PyObject *self UNUSED, PyObject *args)
 static PyObject *ConvertToPyObject(typval_T *);
 
     static PyObject *
-VimEvalPy(PyObject *self UNUSED, PyObject *args)
+VimEvalPy(PyObject *self UNUSED, PyObject *args UNUSED)
 {
 #ifdef FEAT_EVAL
     char	*expr;
@@ -492,7 +492,7 @@ VimStrwidth(PyObject *self UNUSED, PyObject *args)
 {
     char	*expr;
 
-    if(!PyArg_ParseTuple(args, "s", &expr))
+    if (!PyArg_ParseTuple(args, "s", &expr))
 	return NULL;
 
     return PyLong_FromLong(mb_string2cells((char_u *)expr, STRLEN(expr)));
@@ -574,9 +574,9 @@ static pylinkedlist_T *lastlist = NULL;
     static void
 pyll_remove(pylinkedlist_T *ref, pylinkedlist_T **last)
 {
-    if(ref->pll_prev == NULL)
+    if (ref->pll_prev == NULL)
     {
-	if(ref->pll_next == NULL)
+	if (ref->pll_next == NULL)
 	{
 	    *last = NULL;
 	    return;
@@ -585,7 +585,7 @@ pyll_remove(pylinkedlist_T *ref, pylinkedlist_T **last)
     else
 	ref->pll_prev->pll_next = ref->pll_next;
 
-    if(ref->pll_next == NULL)
+    if (ref->pll_next == NULL)
 	*last = ref->pll_prev;
     else
 	ref->pll_next->pll_prev = ref->pll_prev;
@@ -594,7 +594,7 @@ pyll_remove(pylinkedlist_T *ref, pylinkedlist_T **last)
     static void
 pyll_add(PyObject *self, pylinkedlist_T *ref, pylinkedlist_T **last)
 {
-    if(*last == NULL)
+    if (*last == NULL)
 	ref->pll_prev = NULL;
     else
     {
@@ -640,11 +640,9 @@ pydict_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     PyObject	*keyObject;
     PyObject	*valObject;
     Py_ssize_t	iter = 0;
-    typval_T	v;
-    PyObject	*bytes;
 
     d = dict_alloc();
-    if(d == NULL)
+    if (d == NULL)
     {
 	PyErr_NoMemory();
 	return -1;
@@ -653,12 +651,13 @@ pydict_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     tv->v_type = VAR_DICT;
     tv->vval.v_dict = d;
 
-    while(PyDict_Next(obj, &iter, &keyObject, &valObject))
+    while (PyDict_Next(obj, &iter, &keyObject, &valObject))
     {
-	bytes = NULL;
-	if(keyObject == NULL)
+	DICTKEY_DECL
+
+	if (keyObject == NULL)
 	    return -1;
-	if(valObject == NULL)
+	if (valObject == NULL)
 	    return -1;
 
 	DICTKEY_GET(-1)
@@ -667,19 +666,19 @@ pydict_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 
 	DICTKEY_UNREF
 
-	if(di == NULL)
+	if (di == NULL)
 	{
 	    PyErr_NoMemory();
 	    return -1;
 	}
 	di->di_tv.v_lock = 0;
 
-	if(_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
+	if (_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
 	{
 	    vim_free(di);
 	    return -1;
 	}
-	if(dict_add(d, di) == FAIL)
+	if (dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
 	    PyErr_SetVim(_("failed to add key to dictionary"));
@@ -699,12 +698,10 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     PyObject	*litem;
     PyObject	*keyObject;
     PyObject	*valObject;
-    PyObject	*lobj;
     Py_ssize_t	lsize;
-    PyObject	*bytes;
 
     d = dict_alloc();
-    if(d == NULL)
+    if (d == NULL)
     {
 	PyErr_NoMemory();
 	return -1;
@@ -715,17 +712,19 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 
     list = PyMapping_Items(obj);
     lsize = PyList_Size(list);
-    while(lsize--)
+    while (lsize--)
     {
+	DICTKEY_DECL
+
 	litem = PyList_GetItem(list, lsize);
-	if(litem == NULL)
+	if (litem == NULL)
 	{
 	    Py_DECREF(list);
 	    return -1;
 	}
 
 	keyObject = PyTuple_GetItem(litem, 0);
-	if(keyObject == NULL)
+	if (keyObject == NULL)
 	{
 	    Py_DECREF(list);
 	    Py_DECREF(litem);
@@ -735,7 +734,7 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	DICTKEY_GET(-1)
 
 	valObject = PyTuple_GetItem(litem, 1);
-	if(valObject == NULL)
+	if (valObject == NULL)
 	{
 	    Py_DECREF(list);
 	    Py_DECREF(litem);
@@ -746,7 +745,7 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 
 	DICTKEY_UNREF
 
-	if(di == NULL)
+	if (di == NULL)
 	{
 	    Py_DECREF(list);
 	    Py_DECREF(litem);
@@ -755,14 +754,14 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	}
 	di->di_tv.v_lock = 0;
 
-	if(_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
+	if (_ConvertFromPyObject(valObject, &di->di_tv, lookupDict) == -1)
 	{
 	    vim_free(di);
 	    Py_DECREF(list);
 	    Py_DECREF(litem);
 	    return -1;
 	}
-	if(dict_add(d, di) == FAIL)
+	if (dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
 	    Py_DECREF(list);
@@ -787,7 +786,7 @@ DictionaryItem(PyObject *self, PyObject *keyObject)
 {
     char_u	*key;
     dictitem_T	*val;
-    PyObject	*bytes = NULL;
+    DICTKEY_DECL
 
     DICTKEY_GET(NULL)
 
@@ -805,9 +804,9 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
     typval_T	tv;
     dict_T	*d = ((DictionaryObject *)(self))->dict;
     dictitem_T	*di;
-    PyObject	*bytes = NULL;
+    DICTKEY_DECL
 
-    if(d->dv_lock)
+    if (d->dv_lock)
     {
 	PyErr_SetVim(_("dict is locked"));
 	return -1;
@@ -817,9 +816,9 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 
     di = dict_find(d, key, -1);
 
-    if(valObject == NULL)
+    if (valObject == NULL)
     {
-	if(di == NULL)
+	if (di == NULL)
 	{
 	    PyErr_SetString(PyExc_IndexError, _("no such key in dictionary"));
 	    return -1;
@@ -830,22 +829,22 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
 	return 0;
     }
 
-    if(ConvertFromPyObject(valObject, &tv) == -1)
+    if (ConvertFromPyObject(valObject, &tv) == -1)
     {
 	return -1;
     }
 
-    if(di == NULL)
+    if (di == NULL)
     {
 	di = dictitem_alloc(key);
-	if(di == NULL)
+	if (di == NULL)
 	{
 	    PyErr_NoMemory();
 	    return -1;
 	}
 	di->di_tv.v_lock = 0;
 
-	if(dict_add(d, di) == FAIL)
+	if (dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
 	    PyErr_SetVim(_("failed to add key to dictionary"));
@@ -873,7 +872,7 @@ DictionaryListKeys(PyObject *self)
     r = PyList_New(todo);
     for (hi = dict->dv_hashtab.ht_array; todo > 0; ++hi)
     {
-	if(!HASHITEM_EMPTY(hi))
+	if (!HASHITEM_EMPTY(hi))
 	{
 	    PyList_SetItem(r, i, PyBytes_FromString((char *)(hi->hi_key)));
 	    --todo;
@@ -901,7 +900,6 @@ typedef struct
 ListNew(list_T *list)
 {
     ListObject	*self;
-    void	**hi = NULL;
 
     self = PyObject_NEW(ListObject, &ListType);
     if (self == NULL)
@@ -925,7 +923,7 @@ list_py_concat(list_T *l, PyObject *obj, PyObject *lookupDict)
     for(i=0; i<lsize; i++)
     {
 	li = listitem_alloc();
-	if(li == NULL)
+	if (li == NULL)
 	{
 	    PyErr_NoMemory();
 	    return -1;
@@ -933,9 +931,9 @@ list_py_concat(list_T *l, PyObject *obj, PyObject *lookupDict)
 	li->li_tv.v_lock = 0;
 
 	litem = PySequence_GetItem(obj, i);
-	if(litem == NULL)
+	if (litem == NULL)
 	    return -1;
-	if(_ConvertFromPyObject(litem, &li->li_tv, lookupDict) == -1)
+	if (_ConvertFromPyObject(litem, &li->li_tv, lookupDict) == -1)
 	    return -1;
 
 	list_append(l, li);
@@ -949,7 +947,7 @@ pyseq_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     list_T	*l;
 
     l = list_alloc();
-    if(l == NULL)
+    if (l == NULL)
     {
 	PyErr_NoMemory();
 	return -1;
@@ -958,7 +956,7 @@ pyseq_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     tv->v_type = VAR_LIST;
     tv->vval.v_list = l;
 
-    if(list_py_concat(l, obj, lookupDict) == -1)
+    if (list_py_concat(l, obj, lookupDict) == -1)
 	return -1;
 
     return 0;
@@ -974,7 +972,7 @@ pyiter_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 
     l = list_alloc();
 
-    if(l == NULL)
+    if (l == NULL)
     {
 	PyErr_NoMemory();
 	return -1;
@@ -984,20 +982,20 @@ pyiter_to_tv(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     tv->v_type = VAR_LIST;
 
 
-    if(iterator == NULL)
+    if (iterator == NULL)
 	return -1;
 
-    while((item = PyIter_Next(obj)))
+    while ((item = PyIter_Next(obj)))
     {
 	li = listitem_alloc();
-	if(li == NULL)
+	if (li == NULL)
 	{
 	    PyErr_NoMemory();
 	    return -1;
 	}
 	li->li_tv.v_lock = 0;
 
-	if(_ConvertFromPyObject(item, &li->li_tv, lookupDict) == -1)
+	if (_ConvertFromPyObject(item, &li->li_tv, lookupDict) == -1)
 	    return -1;
 
 	list_append(l, li);
@@ -1020,13 +1018,13 @@ ListItem(PyObject *self, Py_ssize_t index)
 {
     listitem_T	*li;
 
-    if(index>=ListLength(self))
+    if (index>=ListLength(self))
     {
 	PyErr_SetString(PyExc_IndexError, "list index out of range");
 	return NULL;
     }
     li = list_find(((ListObject *) (self))->list, (long) index);
-    if(li == NULL)
+    if (li == NULL)
     {
 	PyErr_SetVim(_("internal error: failed to get vim list item"));
 	return NULL;
@@ -1035,17 +1033,17 @@ ListItem(PyObject *self, Py_ssize_t index)
 }
 
 #define PROC_RANGE \
-    if(last < 0) {\
-	if(last < -size) \
+    if (last < 0) {\
+	if (last < -size) \
 	    last = 0; \
 	else \
 	    last += size; \
     } \
-    if(first < 0) \
+    if (first < 0) \
 	first = 0; \
-    if(first > size) \
+    if (first > size) \
 	first = size; \
-    if(last > size) \
+    if (last > size) \
 	last = size;
 
     static PyObject *
@@ -1058,24 +1056,24 @@ ListSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last)
     int		reversed = 0;
 
     PROC_RANGE
-    if(first >= last)
+    if (first >= last)
 	first = last;
 
     n = last-first;
     list = PyList_New(n);
-    if(list == NULL)
+    if (list == NULL)
 	return NULL;
 
     for (i = 0; i < n; ++i)
     {
 	PyObject	*item = ListItem(self, i);
-	if(item == NULL)
+	if (item == NULL)
 	{
 	    Py_DECREF(list);
 	    return NULL;
 	}
 
-	if((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item)))
+	if ((PyList_SetItem(list, ((reversed)?(n-i-1):(i)), item)))
 	{
 	    Py_DECREF(item);
 	    Py_DECREF(list);
@@ -1094,18 +1092,18 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
     listitem_T	*li;
     Py_ssize_t	length = ListLength(self);
 
-    if(l->lv_lock)
+    if (l->lv_lock)
     {
 	PyErr_SetVim(_("list is locked"));
 	return -1;
     }
-    if(index>length || (index==length && obj==NULL))
+    if (index>length || (index==length && obj==NULL))
     {
 	PyErr_SetString(PyExc_IndexError, "list index out of range");
 	return -1;
     }
 
-    if(obj == NULL)
+    if (obj == NULL)
     {
 	li = list_find(l, (long) index);
 	list_remove(l, li, li);
@@ -1114,12 +1112,12 @@ ListAssItem(PyObject *self, Py_ssize_t index, PyObject *obj)
 	return 0;
     }
 
-    if(ConvertFromPyObject(obj, &tv) == -1)
+    if (ConvertFromPyObject(obj, &tv) == -1)
 	return -1;
 
-    if(index == length)
+    if (index == length)
     {
-	if(list_append_tv(l, &tv) == FAIL)
+	if (list_append_tv(l, &tv) == FAIL)
 	{
 	    PyErr_SetVim(_("Failed to add item to list"));
 	    return -1;
@@ -1146,7 +1144,7 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
     typval_T	v;
     list_T	*l = ((ListObject *) (self))->list;
 
-    if(l->lv_lock)
+    if (l->lv_lock)
     {
 	PyErr_SetVim(_("list is locked"));
 	return -1;
@@ -1154,20 +1152,20 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 
     PROC_RANGE
 
-    if(first == size)
+    if (first == size)
 	li = NULL;
     else
     {
 	li = list_find(l, (long) first);
-	if(li == NULL)
+	if (li == NULL)
 	{
 	    PyErr_SetVim(_("internal error: no vim list item"));
 	    return -1;
 	}
-	if(last > first)
+	if (last > first)
 	{
 	    i = last - first;
-	    while(i-- && li != NULL)
+	    while (i-- && li != NULL)
 	    {
 		next = li->li_next;
 		listitem_remove(l, li);
@@ -1176,10 +1174,10 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 	}
     }
 
-    if(obj == NULL)
+    if (obj == NULL)
 	return 0;
 
-    if(!PyList_Check(obj))
+    if (!PyList_Check(obj))
     {
 	PyErr_SetString(PyExc_TypeError, _("can only assign lists to slice"));
 	return -1;
@@ -1190,11 +1188,11 @@ ListAssSlice(PyObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
     for(i=0; i<lsize; i++)
     {
 	litem = PyList_GetItem(obj, i);
-	if(litem == NULL)
+	if (litem == NULL)
 	    return -1;
-	if(ConvertFromPyObject(litem, &v) == -1)
+	if (ConvertFromPyObject(litem, &v) == -1)
 	    return -1;
-	if(list_insert_tv(l, &v, li) == FAIL)
+	if (list_insert_tv(l, &v, li) == FAIL)
 	{
 	    PyErr_SetVim(_("internal error: failed to add item to list"));
 	    return -1;
@@ -1209,20 +1207,20 @@ ListConcatInPlace(PyObject *self, PyObject *obj)
     list_T	*l = ((ListObject *) (self))->list;
     PyObject	*lookup_dict;
 
-    if(l->lv_lock)
+    if (l->lv_lock)
     {
 	PyErr_SetVim(_("list is locked"));
 	return NULL;
     }
 
-    if(!PySequence_Check(obj))
+    if (!PySequence_Check(obj))
     {
 	PyErr_SetString(PyExc_TypeError, _("can only concatenate with lists"));
 	return NULL;
     }
 
     lookup_dict = PyDict_New();
-    if(list_py_concat(l, obj, lookup_dict) == -1)
+    if (list_py_concat(l, obj, lookup_dict) == -1)
     {
 	Py_DECREF(lookup_dict);
 	return NULL;
@@ -1252,10 +1250,10 @@ FunctionNew(char_u *name)
     FunctionObject	*self;
 
     self = PyObject_NEW(FunctionObject, &FunctionType);
-    if(self == NULL)
+    if (self == NULL)
 	return NULL;
     self->name = PyMem_New(char_u, STRLEN(name));
-    if(self->name == NULL)
+    if (self->name == NULL)
     {
 	PyErr_NoMemory();
 	return NULL;
@@ -1278,28 +1276,28 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     PyObject	*result;
     int		error;
 
-    if(ConvertFromPyObject(argsObject, &args) == -1)
+    if (ConvertFromPyObject(argsObject, &args) == -1)
 	return NULL;
 
-    if(kwargs != NULL)
+    if (kwargs != NULL)
     {
 	selfdictObject = PyDict_GetItemString(kwargs, "self");
-	if(selfdictObject != NULL)
+	if (selfdictObject != NULL)
 	{
-	    if(!PyDict_Check(selfdictObject))
+	    if (!PyDict_Check(selfdictObject))
 	    {
 		PyErr_SetString(PyExc_TypeError, _("'self' argument must be a dictionary"));
 		clear_tv(&args);
 		return NULL;
 	    }
-	    if(ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
+	    if (ConvertFromPyObject(selfdictObject, &selfdicttv) == -1)
 		return NULL;
 	    selfdict = selfdicttv.vval.v_dict;
 	}
     }
 
     error = func_call(name, &args, selfdict, &rettv);
-    if(error != OK)
+    if (error != OK)
     {
 	result = NULL;
 	PyErr_SetVim(_("failed to run function"));
@@ -1311,7 +1309,7 @@ FunctionCall(PyObject *self, PyObject *argsObject, PyObject *kwargs)
     clear_tv(&args);
     clear_tv(&rettv);
     /*
-     * if(selfdict!=NULL)
+     * if (selfdict!=NULL)
      *     clear_tv(selfdicttv);
      */
 
@@ -2392,22 +2390,22 @@ set_ref_in_py(const int copyID)
     dict_T	*dd;
     list_T	*ll;
 
-    if(lastdict != NULL)
+    if (lastdict != NULL)
 	for(cur = lastdict ; cur != NULL ; cur = cur->pll_prev)
 	{
 	    dd = ((DictionaryObject *) (cur->pll_obj))->dict;
-	    if(dd->dv_copyID != copyID)
+	    if (dd->dv_copyID != copyID)
 	    {
 		dd->dv_copyID = copyID;
 		set_ref_in_ht(&dd->dv_hashtab, copyID);
 	    }
 	}
 
-    if(lastlist != NULL)
+    if (lastlist != NULL)
 	for(cur = lastlist ; cur != NULL ; cur = cur->pll_prev)
 	{
 	    ll = ((ListObject *) (cur->pll_obj))->list;
-	    if(ll->lv_copyID != copyID)
+	    if (ll->lv_copyID != copyID)
 	    {
 		ll->lv_copyID = copyID;
 		set_ref_in_list(ll, copyID);
@@ -2419,7 +2417,7 @@ set_ref_in_py(const int copyID)
 set_string_copy(char_u *str, typval_T *tv)
 {
     tv->vval.v_string = vim_strsave(str);
-    if(tv->vval.v_string == NULL)
+    if (tv->vval.v_string == NULL)
     {
 	PyErr_NoMemory();
 	return -1;
@@ -2431,28 +2429,27 @@ set_string_copy(char_u *str, typval_T *tv)
 typedef int (*pytotvfunc)(PyObject *, typval_T *, PyObject *);
 
     static int
-convert_dl(PyObject *obj, typval_T *tv, pytotvfunc py_to_tv, PyObject *lookupDict)
+convert_dl(PyObject *obj, typval_T *tv,
+				    pytotvfunc py_to_tv, PyObject *lookupDict)
 {
     PyObject	*capsule;
-    char	ptrBuf[sizeof(void *)*2 + 1];
+    char	hexBuf[sizeof(void *) * 2 + 1];
 
-    sprintf(ptrBuf, "%p", obj);
+    sprintf(hexBuf, "%p", obj);
 
-    capsule = PyDict_GetItemString(lookupDict, ptrBuf);
-    if(capsule == NULL)
+    capsule = PyDict_GetItemString(lookupDict, hexBuf);
+    if (capsule == NULL)
     {
-	int	r;
 	capsule = PyCapsule_New(tv, NULL, NULL);
-	PyDict_SetItemString(lookupDict, ptrBuf, capsule);
+	PyDict_SetItemString(lookupDict, hexBuf, capsule);
 	Py_DECREF(capsule);
-	if(py_to_tv(obj, tv, lookupDict) == -1)
+	if (py_to_tv(obj, tv, lookupDict) == -1)
 	{
 	    tv->v_type = VAR_UNKNOWN;
 	    return -1;
 	}
-	/* As we are not using copy_tv which increments reference count we must 
-	 * do it ourself.
-	 */
+	/* As we are not using copy_tv which increments reference count we must
+	 * do it ourself. */
 	switch(tv->v_type)
 	{
 	    case VAR_DICT: ++tv->vval.v_dict->dv_refcount; break;
@@ -2482,56 +2479,53 @@ ConvertFromPyObject(PyObject *obj, typval_T *tv)
     static int
 _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 {
-    if(obj->ob_type == &DictionaryType)
+    if (obj->ob_type == &DictionaryType)
     {
 	tv->v_type = VAR_DICT;
 	tv->vval.v_dict = (((DictionaryObject *)(obj))->dict);
 	++tv->vval.v_dict->dv_refcount;
     }
-    else if(obj->ob_type == &ListType)
+    else if (obj->ob_type == &ListType)
     {
 	tv->v_type = VAR_LIST;
 	tv->vval.v_list = (((ListObject *)(obj))->list);
 	++tv->vval.v_list->lv_refcount;
     }
-    else if(obj->ob_type == &FunctionType)
+    else if (obj->ob_type == &FunctionType)
     {
-	char_u	*retval = NULL;
-
-	if(set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
+	if (set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_FUNC;
 	func_ref(tv->vval.v_string);
     }
 #if PY_MAJOR_VERSION >= 3
-    else if(PyBytes_Check(obj))
+    else if (PyBytes_Check(obj))
     {
-	char_u	*retval = NULL;
 	char_u	*result = (char_u *) PyBytes_AsString(obj);
 
-	if(result == NULL)
+	if (result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv) == -1)
+	if (set_string_copy(result, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_STRING;
     }
-    else if(PyUnicode_Check(obj))
+    else if (PyUnicode_Check(obj))
     {
 	PyObject	*bytes;
 	char_u	*result;
 
 	bytes = PyString_AsBytes(obj);
-	if(bytes == NULL)
+	if (bytes == NULL)
 	    return -1;
 
 	result = (char_u *) PyBytes_AsString(bytes);
-	if(result == NULL)
+	if (result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv) == -1)
+	if (set_string_copy(result, tv) == -1)
 	{
 	    Py_XDECREF(bytes);
 	    return -1;
@@ -2541,20 +2535,20 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	tv->v_type = VAR_STRING;
     }
 #else
-    else if(PyUnicode_Check(obj))
+    else if (PyUnicode_Check(obj))
     {
 	PyObject	*bytes;
 	char_u	*result;
 
 	bytes = PyUnicode_AsEncodedString(obj, (char *)ENC_OPT, NULL);
-	if(bytes == NULL)
+	if (bytes == NULL)
 	    return -1;
 
 	result=(char_u *) PyString_AsString(bytes);
-	if(result == NULL)
+	if (result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv) == -1)
+	if (set_string_copy(result, tv) == -1)
 	{
 	    Py_XDECREF(bytes);
 	    return -1;
@@ -2563,44 +2557,43 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 
 	tv->v_type = VAR_STRING;
     }
-    else if(PyString_Check(obj))
+    else if (PyString_Check(obj))
     {
-	char_u	*retval = NULL;
 	char_u	*result = (char_u *) PyString_AsString(obj);
 
-	if(result == NULL)
+	if (result == NULL)
 	    return -1;
 
-	if(set_string_copy(result, tv) == -1)
+	if (set_string_copy(result, tv) == -1)
 	    return -1;
 
 	tv->v_type = VAR_STRING;
     }
-    else if(PyInt_Check(obj))
+    else if (PyInt_Check(obj))
     {
 	tv->v_type = VAR_NUMBER;
 	tv->vval.v_number = (varnumber_T) PyInt_AsLong(obj);
     }
 #endif
-    else if(PyLong_Check(obj))
+    else if (PyLong_Check(obj))
     {
 	tv->v_type = VAR_NUMBER;
 	tv->vval.v_number = (varnumber_T) PyLong_AsLong(obj);
     }
-    else if(PyDict_Check(obj))
+    else if (PyDict_Check(obj))
 	return convert_dl(obj, tv, pydict_to_tv, lookupDict);
 #ifdef FEAT_FLOAT
-    else if(PyFloat_Check(obj))
+    else if (PyFloat_Check(obj))
     {
 	tv->v_type = VAR_FLOAT;
 	tv->vval.v_float = (float_T) PyFloat_AsDouble(obj);
     }
 #endif
-    else if(PyIter_Check(obj))
+    else if (PyIter_Check(obj))
 	return convert_dl(obj, tv, pyiter_to_tv, lookupDict);
-    else if(PySequence_Check(obj))
+    else if (PySequence_Check(obj))
 	return convert_dl(obj, tv, pyseq_to_tv, lookupDict);
-    else if(PyMapping_Check(obj))
+    else if (PyMapping_Check(obj))
 	return convert_dl(obj, tv, pymap_to_tv, lookupDict);
     else
     {
@@ -2613,7 +2606,7 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     static PyObject *
 ConvertToPyObject(typval_T *tv)
 {
-    if(tv == NULL)
+    if (tv == NULL)
     {
 	PyErr_SetVim(_("NULL reference passed"));
 	return NULL;

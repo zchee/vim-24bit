@@ -534,13 +534,14 @@ static int initialised = 0;
 
 /* Add conversion from PyInt? */
 #define DICTKEY_GET(err) \
-    if(!PyString_Check(keyObject)) \
+    if (!PyString_Check(keyObject)) \
     { \
 	PyErr_SetString(PyExc_TypeError, _("only string keys are allowed")); \
 	return err; \
     } \
     key = (char_u *) PyString_AsString(keyObject);
 #define DICTKEY_UNREF
+#define DICTKEY_DECL
 
 /*
  * Include the code shared with if_python3.c
@@ -745,7 +746,7 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
     if (Python_Init())
 	goto theend;
 
-    if(rettv == NULL)
+    if (rettv == NULL)
     {
 	RangeStart = eap->line1;
 	RangeEnd = eap->line2;
@@ -772,15 +773,16 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
 
     Python_RestoreThread();	    /* enter python */
 
-    if(rettv == NULL)
+    if (rettv == NULL)
 	PyRun_SimpleString((char *)(cmd));
     else
     {
 	PyObject	*r;
+
 	r = PyRun_String((char *)(cmd), Py_eval_input, globals, globals);
-	if(r == NULL)
+	if (r == NULL)
 	    EMSG(_("E858: Eval did not return a valid python object"));
-	else if(ConvertFromPyObject(r, rettv) == -1)
+	else if (ConvertFromPyObject(r, rettv) == -1)
 	    EMSG(_("E859: Failed to convert returned python object to vim value"));
 	PyErr_Clear();
 	Py_DECREF(r);
@@ -1595,8 +1597,8 @@ static PyTypeObject DictionaryType = {
     (cmpfunc)     0,
     (reprfunc)    0,
 
-    0,                      /* as number */
-    0,                      /* as sequence */
+    0,			    /* as number */
+    0,			    /* as sequence */
     &DictionaryAsMapping,   /* as mapping */
 
     (hashfunc)    0,
@@ -1654,9 +1656,9 @@ static PyTypeObject ListType = {
     (cmpfunc)     0,
     (reprfunc)    0,
 
-    0,                      /* as number */
-    &ListAsSeq,             /* as sequence */
-    0,                      /* as mapping */
+    0,			    /* as number */
+    &ListAsSeq,		    /* as sequence */
+    0,			    /* as mapping */
 
     (hashfunc)    0,
     (ternaryfunc) 0,
@@ -1698,9 +1700,9 @@ static PyTypeObject FunctionType = {
     (cmpfunc)     0,
     (reprfunc)    0,
 
-    0,                      /* as number */
-    0,                      /* as sequence */
-    0,                      /* as mapping */
+    0,			    /* as number */
+    0,			    /* as sequence */
+    0,			    /* as mapping */
 
     (hashfunc)    0,
     (ternaryfunc) FunctionCall,
@@ -1723,7 +1725,7 @@ FunctionGetattr(PyObject *self, char *name)
 {
     FunctionObject	*this = (FunctionObject *)(self);
 
-    if(strcmp(name, "name") == 0)
+    if (strcmp(name, "name") == 0)
 	return PyString_FromString((char *)(this->name));
     else
 	return Py_FindMethod(FunctionMethods, self, name);

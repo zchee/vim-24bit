@@ -199,9 +199,9 @@ int (*dll_lua_pcall) (lua_State *L, int nargs, int nresults, int errfunc);
 lua_Number (*dll_lua_tonumberx) (lua_State *L, int idx, int *isnum);
 lua_Integer (*dll_lua_tointegerx) (lua_State *L, int idx, int *isnum);
 void (*dll_lua_callk) (lua_State *L, int nargs, int nresults, int ctx,
-        lua_CFunction k);
+	lua_CFunction k);
 int (*dll_lua_pcallk) (lua_State *L, int nargs, int nresults, int errfunc,
-        int ctx, lua_CFunction k);
+	int ctx, lua_CFunction k);
 void (*dll_lua_getglobal) (lua_State *L, const char *var);
 void (*dll_lua_setglobal) (lua_State *L, const char *var);
 #endif
@@ -394,7 +394,7 @@ lua_enabled(int verbose)
 luaL_typeerror (lua_State *L, int narg, const char *tname)
 {
     const char *msg = lua_pushfstring(L, "%s expected, got %s",
-            tname, luaL_typename(L, narg));
+	    tname, luaL_typename(L, narg));
     return luaL_argerror(L, narg, msg);
 }
 #endif

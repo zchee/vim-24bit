@@ -9170,7 +9170,7 @@ func_call(name, args, selfdict, rettv)
     typval_T	argv[MAX_FUNC_ARGS + 1];
     int		argc = 0;
     int		dummy;
-    int		r;
+    int		r = 0;
 
     for (item = args->vval.v_list->lv_first; item != NULL;
 							 item = item->li_next)

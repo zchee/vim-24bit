@@ -543,15 +543,15 @@ static int py3initialised = 0;
 
 /* Add conversion from PyInt? */
 #define DICTKEY_GET(err) \
-    if(PyBytes_Check(keyObject)) \
+    if (PyBytes_Check(keyObject)) \
 	key = (char_u *) PyBytes_AsString(keyObject); \
-    else if(PyUnicode_Check(keyObject)) \
+    else if (PyUnicode_Check(keyObject)) \
     { \
 	bytes = PyString_AsBytes(keyObject); \
-	if(bytes == NULL) \
+	if (bytes == NULL) \
 	    return err; \
 	key = (char_u *) PyBytes_AsString(bytes); \
-	if(key == NULL) \
+	if (key == NULL) \
 	    return err; \
     } \
     else \
@@ -560,8 +560,10 @@ static int py3initialised = 0;
 	return err; \
     }
 #define DICTKEY_UNREF \
-    if(bytes != NULL) \
+    if (bytes != NULL) \
 	Py_XDECREF(bytes);
+
+#define DICTKEY_DECL PyObject *bytes = NULL;
 
 /*
  * Include the code shared with if_python.c
@@ -744,7 +746,7 @@ DoPy3Command(exarg_T *eap, const char *cmd, typval_T *rettv)
     if (Python3_Init())
 	goto theend;
 
-    if(rettv == NULL)
+    if (rettv == NULL)
     {
 	RangeStart = eap->line1;
 	RangeEnd = eap->line2;
@@ -777,16 +779,16 @@ DoPy3Command(exarg_T *eap, const char *cmd, typval_T *rettv)
 					(char *)ENC_OPT, CODEC_ERROR_HANDLER);
     cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", CODEC_ERROR_HANDLER);
     Py_XDECREF(cmdstr);
-    if(rettv == NULL)
+    if (rettv == NULL)
 	PyRun_SimpleString(PyBytes_AsString(cmdbytes));
     else
     {
 	PyObject	*r;
 	r = PyRun_String(PyBytes_AsString(cmdbytes), Py_eval_input,
 			 globals, globals);
-	if(r == NULL)
+	if (r == NULL)
 	    EMSG(_("E860: Eval did not return a valid python 3 object"));
-	else if(ConvertFromPyObject(r, rettv) == -1)
+	else if (ConvertFromPyObject(r, rettv) == -1)
 	    EMSG(_("E861: Failed to convert returned python 3 object to vim value"));
 	PyErr_Clear();
 	Py_DECREF(r);
@@ -1544,7 +1546,6 @@ static PyTypeObject DictionaryType;
     static void
 DictionaryDestructor(PyObject *self)
 {
-    void	**hi = NULL;
     DictionaryObject *this = (DictionaryObject *)(self);
 
     pyll_remove(&this->ref, &lastdict);
@@ -1634,7 +1635,6 @@ ListAsSubscript(PyObject *self, PyObject *idxObject, PyObject *obj)
     static void
 ListDestructor(PyObject *self)
 {
-    void	**hi = NULL;
     ListObject *this = (ListObject *)(self);
 
     pyll_remove(&this->ref, &lastlist);
@@ -1662,10 +1662,10 @@ FunctionGetattro(PyObject *self, PyObject *nameobj)
 {
     FunctionObject	*this = (FunctionObject *)(self);
     char	*name = "";
-    if(PyUnicode_Check(nameobj))
+    if (PyUnicode_Check(nameobj))
 	name = _PyUnicode_AsString(nameobj);
 
-    if(strcmp(name, "name") == 0)
+    if (strcmp(name, "name") == 0)
 	return PyUnicode_FromString((char *)(this->name));
 
     return PyObject_GenericGetAttr(self, nameobj);
