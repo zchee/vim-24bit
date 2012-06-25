@@ -1252,7 +1252,7 @@ FunctionNew(char_u *name)
     self = PyObject_NEW(FunctionObject, &FunctionType);
     if (self == NULL)
 	return NULL;
-    self->name = PyMem_New(char_u, STRLEN(name));
+    self->name = PyMem_New(char_u, STRLEN(name)+1);
     if (self->name == NULL)
     {
 	PyErr_NoMemory();
