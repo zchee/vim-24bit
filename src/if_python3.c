@@ -784,14 +784,18 @@ DoPy3Command(exarg_T *eap, const char *cmd, typval_T *rettv)
     else
     {
 	PyObject	*r;
+
 	r = PyRun_String(PyBytes_AsString(cmdbytes), Py_eval_input,
 			 globals, globals);
 	if (r == NULL)
 	    EMSG(_("E860: Eval did not return a valid python 3 object"));
-	else if (ConvertFromPyObject(r, rettv) == -1)
-	    EMSG(_("E861: Failed to convert returned python 3 object to vim value"));
+	else
+	{
+	    if (ConvertFromPyObject(r, rettv) == -1)
+		EMSG(_("E861: Failed to convert returned python 3 object to vim value"));
+	    Py_DECREF(r);
+	}
 	PyErr_Clear();
-	Py_DECREF(r);
     }
     Py_XDECREF(cmdbytes);
 

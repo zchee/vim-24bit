@@ -782,10 +782,13 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
 	r = PyRun_String((char *)(cmd), Py_eval_input, globals, globals);
 	if (r == NULL)
 	    EMSG(_("E858: Eval did not return a valid python object"));
-	else if (ConvertFromPyObject(r, rettv) == -1)
-	    EMSG(_("E859: Failed to convert returned python object to vim value"));
+	else
+	{
+	    if (ConvertFromPyObject(r, rettv) == -1)
+		EMSG(_("E859: Failed to convert returned python object to vim value"));
+	    Py_DECREF(r);
+	}
 	PyErr_Clear();
-	Py_DECREF(r);
     }
 
     Python_SaveThread();	    /* leave python */
