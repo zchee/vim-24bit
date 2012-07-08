@@ -1106,6 +1106,11 @@ typedef struct
 #define VAR_DICT    5	/* "v_dict" is used */
 #define VAR_FLOAT   6	/* "v_float" is used */
 
+/* Values for "v_scope". */
+#define VAR_SCOPE     1	/* a:, v:, s:, … scope dictionaries */
+#define VAR_DEF_SCOPE 2	/* l:, g: scope dictionaries: here funcrefs may mask 
+                           existing functions */
+
 /* Values for "v_lock". */
 #define VAR_LOCKED  1	/* locked with lock(), can use unlock() */
 #define VAR_FIXED   2	/* locked forever */
@@ -1181,6 +1186,7 @@ struct dictvar_S
     int		dv_copyID;	/* ID used by deepcopy() */
     dict_T	*dv_copydict;	/* copied dict used by deepcopy() */
     char	dv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
+    char	dv_scope;	/* zero, 1 */
     dict_T	*dv_used_next;	/* next dict in used dicts list */
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
 };
