@@ -1241,6 +1241,7 @@ enum auto_event
     EVENT_CMDWINENTER,		/* after entering the cmdline window */
     EVENT_CMDWINLEAVE,		/* before leaving the cmdline window */
     EVENT_COLORSCHEME,		/* after loading a colorscheme */
+    EVENT_COMPLETEDONE,		/* after finishing insert complete */
     EVENT_FILEAPPENDPOST,	/* after appending to a file */
     EVENT_FILEAPPENDPRE,	/* before appending to a file */
     EVENT_FILEAPPENDCMD,	/* append to a file using command */
@@ -2122,6 +2123,12 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
 #  endif
 # else
 #  define X_DISPLAY	xterm_dpy
+# endif
+#endif
+
+#if defined(FEAT_BROWSE) && defined(GTK_CHECK_VERSION)
+# if GTK_CHECK_VERSION(2,4,0)
+#  define USE_FILE_CHOOSER
 # endif
 #endif
 
