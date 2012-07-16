@@ -790,8 +790,6 @@ static void list_one_var_a __ARGS((char_u *prefix, char_u *name, int type, char_
 static void set_var __ARGS((char_u *name, typval_T *varp, int copy));
 static int var_check_ro __ARGS((int flags, char_u *name));
 static int var_check_fixed __ARGS((int flags, char_u *name));
-static int var_check_func_name __ARGS((char_u *name, int new_var));
-static int valid_varname __ARGS((char_u *varname));
 static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
@@ -2740,8 +2738,8 @@ get_lval(name, rettv, lp, unlet, skip, quiet, fne_flags)
 		}
 		wrong = (lp->ll_dict->dv_scope == VAR_DEF_SCOPE
 			       && rettv->v_type == VAR_FUNC
-			       && var_check_func_name(key, lp->ll_di == NULL))
-			|| !valid_varname(key);
+			       && var_check_func_name(key, lp->ll_di == NULL, TRUE))
+			|| !valid_varname(key, TRUE);
 		if (len != -1)
 		    key[len] = prevval;
 		if (wrong)
@@ -10224,9 +10222,10 @@ f_extend(argvars, rettv)
 		        if (d1->dv_scope == VAR_DEF_SCOPE
 				&& HI2DI(hi2)->di_tv.v_type == VAR_FUNC
 				&& var_check_func_name(hi2->hi_key,
-								 di1 == NULL))
+								 di1 == NULL,
+								 TRUE))
 			    break;
-			if (!valid_varname(hi2->hi_key))
+			if (!valid_varname(hi2->hi_key, TRUE))
 			    break;
 		    }
 		    if (di1 == NULL)
@@ -20231,7 +20230,7 @@ set_var(name, tv, copy)
     }
     v = find_var_in_ht(ht, varname, TRUE);
 
-    if (tv->v_type == VAR_FUNC && var_check_func_name(name, v == NULL))
+    if (tv->v_type == VAR_FUNC && var_check_func_name(name, v == NULL, TRUE))
 	return;
 
     if (v != NULL)
@@ -20298,7 +20297,7 @@ set_var(name, tv, copy)
 	}
 
 	/* Make sure the variable name is valid. */
-	if (!valid_varname(varname))
+	if (!valid_varname(varname, TRUE))
 	    return;
 
 	v = (dictitem_T *)alloc((unsigned)(sizeof(dictitem_T)
@@ -20365,19 +20364,21 @@ var_check_fixed(flags, name)
 
 /*
  * Check if a funcref is assigned to a valid variable name.
- * Return TRUE and give an error if not.
+ * Return TRUE if not. Give an error unless echo_error is set to FALSE.
  */
-    static int
-var_check_func_name(name, new_var)
-    char_u *name;    /* points to start of variable name */
-    int    new_var;  /* TRUE when creating the variable */
+    int
+var_check_func_name(name, new_var, echo_error)
+    char_u *name;      /* points to start of variable name */
+    int    new_var;    /* TRUE when creating the variable */
+    int    echo_error; /* TRUE if it is needed to echo vim error */
 {
     if (!(vim_strchr((char_u *)"wbs", name[0]) != NULL && name[1] == ':')
 	    && !ASCII_ISUPPER((name[0] != NUL && name[1] == ':')
 						     ? name[2] : name[0]))
     {
-	EMSG2(_("E704: Funcref variable name must start with a capital: %s"),
-									name);
+	if (echo_error)
+	    EMSG2(_("E704: Funcref variable name must start with a capital: %s"),
+									    name);
 	return TRUE;
     }
     /* Don't allow hiding a function.  When "v" is not NULL we might be
@@ -20385,8 +20386,9 @@ var_check_func_name(name, new_var)
      * below. */
     if (new_var && function_exists(name))
     {
-	EMSG2(_("E705: Variable name conflicts with existing function: %s"),
-								    name);
+	if (echo_error)
+	    EMSG2(_("E705: Variable name conflicts with existing function: %s"),
+									name);
 	return TRUE;
     }
     return FALSE;
@@ -20394,11 +20396,13 @@ var_check_func_name(name, new_var)
 
 /*
  * Check if a variable name is valid.
- * Return FALSE and give an error if not.
+ * Return FALSE if not. Also give an error in this case unless echo_error is set 
+ * to false.
  */
-    static int
-valid_varname(varname)
+    int
+valid_varname(varname, echo_error)
     char_u *varname;
+    int    echo_error;
 {
     char_u *p;
 
@@ -20406,7 +20410,10 @@ valid_varname(varname)
 	if (!eval_isnamec1(*p) && (p == varname || !VIM_ISDIGIT(*p))
 						   && *p != AUTOLOAD_CHAR)
 	{
-	    EMSG2(_(e_illvar), varname);
+	    /* When using this function from python don’t throw vim error, throw 
+	     * a python exception instead */
+	    if (echo_error)
+		EMSG2(_(e_illvar), varname);
 	    return FALSE;
 	}
     return TRUE;
