@@ -32,6 +32,8 @@ Vim(put):E684:
 [0, 1, 'g', 2, 3]
 ['h']
 [0, 1, 2, 3]
+3
+[]
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd']
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}, 'New']

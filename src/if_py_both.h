@@ -834,6 +834,22 @@ DictionaryAssItem(PyObject *self, PyObject *keyObject, PyObject *valObject)
     if (ConvertFromPyObject(valObject, &tv) == -1)
 	return -1;
 
+    if (d->dv_scope != 0)
+    {
+	if (d->dv_scope == VAR_DEF_SCOPE
+		&& tv.v_type == VAR_FUNC
+		&& var_check_func_name(key, di == NULL, FALSE))
+	{
+	    PyErr_SetString(PyExc_ValueError, _("cannot assing function reference to this variable"));
+	    return -1;
+	}
+	if(!valid_varname(key, FALSE))
+	{
+	    PyErr_SetString(PyExc_ValueError, _("invalid variable name"));
+	    return -1;
+	}
+    }
+
     if (di == NULL)
     {
 	di = dictitem_alloc(key);
