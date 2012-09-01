@@ -552,7 +552,7 @@ static int py3initialised = 0;
 #define DICTKEY_GET(err) \
     if (PyBytes_Check(keyObject)) \
     { \
-	if (PyBytes_AsStringAndSize(bytes, (char **) &key, NULL) == -1) \
+	if (PyBytes_AsStringAndSize(keyObject, (char **) &key, NULL) == -1) \
 	    return err; \
     } \
     else if (PyUnicode_Check(keyObject)) \
