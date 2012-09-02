@@ -2535,8 +2535,10 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 #if PY_MAJOR_VERSION >= 3
     else if (PyBytes_Check(obj))
     {
-	char_u	*result = (char_u *) PyBytes_AsString(obj);
+	char_u	*result;
 
+	if (PyString_AsStringAndSize(obj, (char **) &result, NULL) == -1)
+	    return -1;
 	if (result == NULL)
 	    return -1;
 
@@ -2554,7 +2556,8 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	if (bytes == NULL)
 	    return -1;
 
-	result = (char_u *) PyBytes_AsString(bytes);
+	if(PyString_AsStringAndSize(bytes, (char **) &result, NULL) == -1)
+	    return -1;
 	if (result == NULL)
 	    return -1;
 
@@ -2577,7 +2580,8 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
 	if (bytes == NULL)
 	    return -1;
 
-	result=(char_u *) PyString_AsString(bytes);
+	if(PyString_AsStringAndSize(bytes, (char **) &result, NULL) == -1)
+	    return -1;
 	if (result == NULL)
 	    return -1;
 
@@ -2592,8 +2596,10 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookupDict)
     }
     else if (PyString_Check(obj))
     {
-	char_u	*result = (char_u *) PyString_AsString(obj);
+	char_u	*result;
 
+	if(PyString_AsStringAndSize(obj, (char **) &result, NULL) == -1)
+	    return -1;
 	if (result == NULL)
 	    return -1;
 
