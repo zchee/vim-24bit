@@ -668,6 +668,8 @@ static void f_reverse __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_FLOAT
 static void f_round __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
+static void f_screencol __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_screenrow __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_search __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_searchdecl __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_searchpair __ARGS((typval_T *argvars, typval_T *rettv));
@@ -8032,6 +8034,8 @@ static struct fst
 #ifdef FEAT_FLOAT
     {"round",		1, 1, f_round},
 #endif
+    {"screencol",	0, 0, f_screencol},
+    {"screenrow",	0, 0, f_screenrow},
     {"search",		1, 4, f_search},
     {"searchdecl",	1, 3, f_searchdecl},
     {"searchpair",	3, 7, f_searchpair},
@@ -15715,6 +15719,28 @@ f_round(argvars, rettv)
 	rettv->vval.v_float = 0.0;
 }
 #endif
+
+/*
+ * "screencol()" function
+ */
+    static void
+f_screencol(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    rettv->vval.v_number = screen_screencol();
+}
+
+/*
+ * "screenrow()" function
+ */
+    static void
+f_screenrow(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    rettv->vval.v_number = screen_screenrow();
+}
 
 /*
  * "search()" function
