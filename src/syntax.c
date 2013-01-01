@@ -7808,6 +7808,10 @@ restore_cterm_colors()
     cterm_normal_fg_color = 0;
     cterm_normal_fg_bold = 0;
     cterm_normal_bg_color = 0;
+# ifdef FEAT_XTERM_RGB
+    cterm_normal_fg_gui_color = INVALCOLOR;
+    cterm_normal_bg_gui_color = INVALCOLOR;
+# endif
 #endif
 }
 
@@ -7879,7 +7883,7 @@ highlight_clear(idx)
 #endif
 }
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB) || defined(PROTO)
 /*
  * Set the normal foreground and background colors according to the "Normal"
  * highlighting group.  For X11 also set "Menu", "Scrollbar", and
@@ -7888,44 +7892,78 @@ highlight_clear(idx)
     void
 set_normal_colors()
 {
-    if (set_group_colors((char_u *)"Normal",
-			     &gui.norm_pixel, &gui.back_pixel,
-			     FALSE, TRUE, FALSE))
-    {
-	gui_mch_new_colors();
-	must_redraw = CLEAR;
-    }
-#ifdef FEAT_GUI_X11
-    if (set_group_colors((char_u *)"Menu",
-			 &gui.menu_fg_pixel, &gui.menu_bg_pixel,
-			 TRUE, FALSE, FALSE))
-    {
-# ifdef FEAT_MENU
-	gui_mch_new_menu_colors();
+#ifdef FEAT_GUI
+# ifdef FEAT_XTERM_RGB
+    if (gui.in_use)
 # endif
-	must_redraw = CLEAR;
-    }
-# ifdef FEAT_BEVAL
-    if (set_group_colors((char_u *)"Tooltip",
-			 &gui.tooltip_fg_pixel, &gui.tooltip_bg_pixel,
-			 FALSE, FALSE, TRUE))
     {
-# ifdef FEAT_TOOLBAR
-	gui_mch_new_tooltip_colors();
+	if (set_group_colors((char_u *)"Normal",
+				 &gui.norm_pixel, &gui.back_pixel,
+				 FALSE, TRUE, FALSE))
+	{
+	    gui_mch_new_colors();
+	    must_redraw = CLEAR;
+	}
+# ifdef FEAT_GUI_X11
+	if (set_group_colors((char_u *)"Menu",
+			     &gui.menu_fg_pixel, &gui.menu_bg_pixel,
+			     TRUE, FALSE, FALSE))
+	{
+#  ifdef FEAT_MENU
+	    gui_mch_new_menu_colors();
+#  endif
+	    must_redraw = CLEAR;
+	}
+#  ifdef FEAT_BEVAL
+	if (set_group_colors((char_u *)"Tooltip",
+			     &gui.tooltip_fg_pixel, &gui.tooltip_bg_pixel,
+			     FALSE, FALSE, TRUE))
+	{
+#   ifdef FEAT_TOOLBAR
+	    gui_mch_new_tooltip_colors();
+#   endif
+	    must_redraw = CLEAR;
+	}
+#  endif
+	if (set_group_colors((char_u *)"Scrollbar",
+			&gui.scroll_fg_pixel, &gui.scroll_bg_pixel,
+			FALSE, FALSE, FALSE))
+	{
+	    gui_new_scrollbar_colors();
+	    must_redraw = CLEAR;
+	}
 # endif
-	must_redraw = CLEAR;
     }
 #endif
-    if (set_group_colors((char_u *)"Scrollbar",
-		    &gui.scroll_fg_pixel, &gui.scroll_bg_pixel,
-		    FALSE, FALSE, FALSE))
+#ifdef FEAT_XTERM_RGB
+# ifdef FEAT_GUI
+    else
+# endif
     {
-	gui_new_scrollbar_colors();
-	must_redraw = CLEAR;
+	int		idx;
+
+	idx = syn_name2id((char_u *)"Normal") - 1;
+	if (idx >= 0)
+	{
+	    gui_do_one_color(idx, FALSE, FALSE);
+
+	    if (HL_TABLE()[idx].sg_gui_fg != INVALCOLOR)
+	    {
+		cterm_normal_fg_gui_color = HL_TABLE()[idx].sg_gui_fg;
+		must_redraw = CLEAR;
+	    }
+	    if (HL_TABLE()[idx].sg_gui_bg != INVALCOLOR)
+	    {
+		cterm_normal_bg_gui_color = HL_TABLE()[idx].sg_gui_bg;
+		must_redraw = CLEAR;
+	    }
+	}
     }
 #endif
 }
+#endif
 
+#if defined(FEAT_GUI) || defined(PROTO)
 /*
  * Set the colors for "Normal", "Menu", "Tooltip" or "Scrollbar".
  */
@@ -8185,7 +8223,7 @@ color_name2handle(name)
 	else
 #endif
 #ifdef FEAT_XTERM_RGB
-	    return 0xffffff;
+	    return cterm_normal_fg_gui_color;
 #endif
     if (STRICMP(name, "bg") == 0 || STRICMP(name, "background") == 0)
 #if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
@@ -8198,7 +8236,7 @@ color_name2handle(name)
 	else
 #endif
 #ifdef FEAT_XTERM_RGB
-	    return 0x000000;
+	    return cterm_normal_bg_gui_color;
 #endif
 
     return gui_get_color(name);
@@ -8452,7 +8490,11 @@ hl_combine_attr(char_attr, prim_attr)
     }
 #endif
 
-    if (t_colors > 1)
+    if (t_colors > 1
+#ifdef FEAT_XTERM_RGB
+	    || p_guicolors
+#endif
+	    )
     {
 	if (char_attr > HL_ALL)
 	    char_aep = syn_cterm_attr2entry(char_attr);
@@ -8546,10 +8588,14 @@ syn_attr2attr(attr)
 	aep = syn_gui_attr2entry(attr);
     else
 #endif
-	if (t_colors > 1)
-	aep = syn_cterm_attr2entry(attr);
-    else
-	aep = syn_term_attr2entry(attr);
+	if (t_colors > 1
+#ifdef FEAT_XTERM_RGB
+		|| p_guicolors
+#endif
+		)
+	    aep = syn_cterm_attr2entry(attr);
+	else
+	    aep = syn_term_attr2entry(attr);
 
     if (aep == NULL)	    /* highlighting not set */
 	return 0;
@@ -9157,7 +9203,11 @@ syn_id2attr(hl_id)
 	attr = sgp->sg_gui_attr;
     else
 #endif
-	if (t_colors > 1)
+	if (t_colors > 1
+#ifdef FEAT_XTERM_RGB
+		|| p_guicolors
+#endif
+		)
 	    attr = sgp->sg_cterm_attr;
 	else
 	    attr = sgp->sg_term_attr;
@@ -9226,9 +9276,13 @@ highlight_gui_started()
     int	    idx;
 
     /* First get the colors from the "Normal" and "Menu" group, if set */
-# ifdef FEAT_GUI
+# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
 #  ifdef FEAT_XTERM_RGB
-    if (gui.in_use)
+    if (
+#   ifdef FEAT_GUI
+	    gui.in_use ||
+#   endif
+	    p_guicolors)
 #  endif
 	set_normal_colors();
 # endif
