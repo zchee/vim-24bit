@@ -284,6 +284,7 @@ prt_get_attr(hl_id, pattr, modec)
     pattr->underline = (highlight_has_attr(hl_id, HL_UNDERLINE, modec) != NULL);
     pattr->undercurl = (highlight_has_attr(hl_id, HL_UNDERCURL, modec) != NULL);
 
+    /* FIXME Support FEAT_XTERM_RGB */
 # ifdef FEAT_GUI
     if (gui.in_use)
     {
