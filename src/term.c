@@ -1404,6 +1404,11 @@ hex_digit(int c)
     return 0x1ffffff;
 }
 
+/*
+ * Returns RGB color for given name. Used only if vim is compiled without GUI 
+ * support, otherwise GUI function is used for the task, even when run in 
+ * terminal.
+ */
     guicolor_T
 gui_mch_get_color(char_u *name)
 {

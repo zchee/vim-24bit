@@ -285,8 +285,12 @@ prt_get_attr(hl_id, pattr, modec)
     pattr->undercurl = (highlight_has_attr(hl_id, HL_UNDERCURL, modec) != NULL);
 
     /* FIXME Support FEAT_XTERM_RGB */
-# ifdef FEAT_GUI
-    if (gui.in_use)
+# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+    if (gui.in_use
+#  ifdef FEAT_XTERM_RGB
+	    || p_guicolors
+#  endif
+	    )
     {
 	bg_color = highlight_gui_color_rgb(hl_id, FALSE);
 	if (bg_color == PRCOLOR_BLACK)
