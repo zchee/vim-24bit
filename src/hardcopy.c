@@ -286,9 +286,15 @@ prt_get_attr(hl_id, pattr, modec)
 
     /* FIXME Support FEAT_XTERM_RGB */
 # if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
-    if (gui.in_use
+    if (
+#  ifdef FEAT_GUI
+	    gui.in_use
+#  endif
+#  if defined(FEAT_GUI) && defined(FEAT_XTERM_RGB)
+	    ||
+#  endif
 #  ifdef FEAT_XTERM_RGB
-	    || p_guicolors
+	    p_guicolors
 #  endif
 	    )
     {
