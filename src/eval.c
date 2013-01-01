@@ -12479,6 +12479,9 @@ f_has(argvars, rettv)
 #ifdef FEAT_XCLIPBOARD
 	"xterm_clipboard",
 #endif
+#ifdef FEAT_XTERM_RGB
+	"xterm_rgb",
+#endif
 #ifdef FEAT_XTERM_SAVE
 	"xterm_save",
 #endif
