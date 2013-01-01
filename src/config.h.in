@@ -359,6 +359,9 @@
 /* Define if you want to include the Tcl interpreter. */
 #undef FEAT_TCL
 
+/* Define if you want 24-bit colors in xterm. */
+#undef FEAT_XTERM_RGB
+
 /* Define if you want to include the Sniff interface. */
 #undef FEAT_SNIFF
 
