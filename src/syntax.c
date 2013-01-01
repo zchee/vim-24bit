@@ -8473,11 +8473,16 @@ hl_combine_attr(char_attr, prim_attr)
 	    if (spell_aep != NULL)
 	    {
 		new_en.ae_attr |= spell_aep->ae_attr;
-		/* FIXME Check whether something needs to be done with this */
 		if (spell_aep->ae_u.cterm.fg_color > 0)
 		    new_en.ae_u.cterm.fg_color = spell_aep->ae_u.cterm.fg_color;
 		if (spell_aep->ae_u.cterm.bg_color > 0)
 		    new_en.ae_u.cterm.bg_color = spell_aep->ae_u.cterm.bg_color;
+#ifdef FEAT_XTERM_RGB
+		if (spell_aep->ae_u.cterm.fg_rgb != INVALCOLOR)
+		    new_en.ae_u.cterm.fg_rgb = spell_aep->ae_u.cterm.fg_rgb;
+		if (spell_aep->ae_u.cterm.bg_rgb != INVALCOLOR)
+		    new_en.ae_u.cterm.bg_rgb = spell_aep->ae_u.cterm.bg_rgb;
+#endif
 	    }
 	}
 	return get_attr_entry(&cterm_attr_table, &new_en);
@@ -8796,8 +8801,8 @@ highlight_color(id, what, modec)
 }
 #endif
 
-#if (defined(FEAT_SYN_HL) && defined(FEAT_GUI) && defined(FEAT_PRINTER)) \
-	|| defined(PROTO)
+#if (defined(FEAT_SYN_HL) && (defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)) \
+	&& defined(FEAT_PRINTER)) || defined(PROTO)
 /*
  * Return color name of highlight group "id" as RGB value.
  */
