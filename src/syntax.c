@@ -8797,13 +8797,25 @@ highlight_color(id, what, modec)
 	return NULL;
     if (modec == 'g')
     {
-# ifdef FEAT_GUI
+# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#  ifdef FEAT_GUI
 	/* return font name */
 	if (font)
 	    return HL_TABLE()[id - 1].sg_font_name;
+#  endif
 
 	/* return #RRGGBB form (only possible when GUI is running) */
-	if (gui.in_use && what[2] == '#')
+	if ((
+#  ifdef FEAT_GUI
+		    gui.in_use
+#  endif
+#  if defined(FEAT_GUI) && defined(FEAT_XTERM_RGB)
+		    ||
+#  endif
+#  ifdef FEAT_XTERM_RGB
+		    p_guicolors
+#  endif
+	    ) && what[2] == '#')
 	{
 	    guicolor_T		color;
 	    long_u		rgb;
@@ -8812,7 +8824,11 @@ highlight_color(id, what, modec)
 	    if (fg)
 		color = HL_TABLE()[id - 1].sg_gui_fg;
 	    else if (sp)
+#  ifdef FEAT_GUI
 		color = HL_TABLE()[id - 1].sg_gui_sp;
+#  else
+		color = INVALCOLOR;
+#  endif
 	    else
 		color = HL_TABLE()[id - 1].sg_gui_bg;
 	    if (color == INVALCOLOR)
@@ -8824,7 +8840,7 @@ highlight_color(id, what, modec)
 				      (unsigned)rgb & 255);
 	    return buf;
 	}
-#endif
+# endif
 	if (fg)
 	    return (HL_TABLE()[id - 1].sg_gui_fg_name);
 	if (sp)
