@@ -708,6 +708,11 @@ static char *(features[]) =
 	"-xterm_clipboard",
 # endif
 #endif
+#ifdef FEAT_XTERM_RGB
+	"+xterm_rgb",
+#else
+	"-xterm_rgb",
+#endif
 #ifdef FEAT_XTERM_SAVE
 	"+xterm_save",
 #else
