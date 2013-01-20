@@ -1570,6 +1570,31 @@ typedef UINT32_TYPEDEF UINT32_T;
 #define MSG_PUTS_LONG(s)	    msg_puts_long_attr((char_u *)(s), 0)
 #define MSG_PUTS_LONG_ATTR(s, a)    msg_puts_long_attr((char_u *)(s), (a))
 
+#ifdef FEAT_GUI
+# ifdef FEAT_XTERM_RGB
+#  define GUI_FUNCTION(f)	    (gui.in_use ? gui_##f : xterm_rgb_##f)
+#  define USE_24BIT		    (gui.in_use || p_guicolors)
+# else
+#  define GUI_FUNCTION(f)	    gui_##f
+#  define USE_24BIT		    gui.in_use
+# endif
+#else
+# ifdef FEAT_XTERM_RGB
+#  define GUI_FUNCTION(f)	    xterm_rgb_##f
+#  define USE_24BIT		    p_guicolors
+# endif
+#endif
+#ifdef FEAT_XTERM_RGB
+# define IS_CTERM		    (t_colors > 1 || p_guicolors)
+#else
+# define IS_CTERM		    (t_colors > 1)
+#endif
+#ifdef GUI_FUNCTION
+# define GUI_MCH_GET_RGB	    GUI_FUNCTION(mch_get_rgb)
+# define GUI_MCH_GET_COLOR	    GUI_FUNCTION(mch_get_color)
+# define GUI_GET_COLOR		    GUI_FUNCTION(get_color)
+#endif
+
 /* Prefer using emsg3(), because perror() may send the output to the wrong
  * destination and mess up the screen. */
 #ifdef HAVE_STRERROR

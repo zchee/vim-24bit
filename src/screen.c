@@ -7311,11 +7311,7 @@ screen_start_highlight(attr)
 	{
 	    if (attr > HL_ALL)				/* special HL attr. */
 	    {
-		if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-			|| p_guicolors
-#endif
-			)
+		if (IS_CTERM)
 		    aep = syn_cterm_attr2entry(attr);
 		else
 		    aep = syn_term_attr2entry(attr);
@@ -7411,11 +7407,7 @@ screen_stop_highlight()
 	    {
 		attrentry_T *aep;
 
-		if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-			|| p_guicolors
-#endif
-			)
+		if (IS_CTERM)
 		{
 		    /*
 		     * Assume that t_me restores the original colors!
@@ -7513,11 +7505,7 @@ screen_stop_highlight()
     void
 reset_cterm_colors()
 {
-    if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-	    || p_guicolors
-#endif
-	)
+    if (IS_CTERM)
     {
 	/* set Normal cterm colors */
 #ifdef FEAT_XTERM_RGB
@@ -7773,10 +7761,7 @@ screen_fill(start_row, end_row, start_col, end_col, c1, c2, attr)
 #ifdef FEAT_GUI
 	    !gui.in_use &&
 #endif
-#ifdef FEAT_XTERM_RGB
-	    !p_guicolors &&
-#endif
-			    t_colors <= 1);
+	    !IS_CTERM);
     for (row = start_row; row < end_row; ++row)
     {
 #ifdef FEAT_MBYTE

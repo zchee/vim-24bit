@@ -284,19 +284,8 @@ prt_get_attr(hl_id, pattr, modec)
     pattr->underline = (highlight_has_attr(hl_id, HL_UNDERLINE, modec) != NULL);
     pattr->undercurl = (highlight_has_attr(hl_id, HL_UNDERCURL, modec) != NULL);
 
-    /* FIXME Support FEAT_XTERM_RGB */
 # if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
-    if (
-#  ifdef FEAT_GUI
-	    gui.in_use
-#  endif
-#  if defined(FEAT_GUI) && defined(FEAT_XTERM_RGB)
-	    ||
-#  endif
-#  ifdef FEAT_XTERM_RGB
-	    p_guicolors
-#  endif
-	    )
+    if (USE_24BIT)
     {
 	bg_color = highlight_gui_color_rgb(hl_id, FALSE);
 	if (bg_color == PRCOLOR_BLACK)

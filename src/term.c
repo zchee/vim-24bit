@@ -1334,7 +1334,7 @@ static struct builtin_term builtin_termcaps[] =
 
 };	/* end of builtin_termcaps */
 
-#if defined(FEAT_XTERM_RGB) && !defined(FEAT_GUI)
+#if defined(FEAT_XTERM_RGB) || defined(PROTO)
 # define RGB(r, g, b) ((r<<16) | (g<<8) | (b))
 struct rgbcolor_table_S {
     char_u	*color_name;
@@ -1404,13 +1404,8 @@ hex_digit(int c)
     return 0x1ffffff;
 }
 
-/*
- * Returns RGB color for given name. Used only if vim is compiled without GUI 
- * support, otherwise GUI function is used for the task, even when run in 
- * terminal.
- */
     guicolor_T
-gui_mch_get_color(char_u *name)
+xterm_rgb_mch_get_color(char_u *name)
 {
     guicolor_T	color;
     int		i;
@@ -1484,19 +1479,28 @@ gui_mch_get_color(char_u *name)
 }
 
     guicolor_T
-gui_get_color(name)
+xterm_rgb_get_color(name)
     char_u	*name;
 {
     guicolor_T	t;
 
     if (*name == NUL)
 	return INVALCOLOR;
-    t = gui_mch_get_color(name);
+    t = xterm_rgb_mch_get_color(name);
 
     if (t == INVALCOLOR)
 	EMSG2(_("E254: Cannot allocate color %s"), name);
     return t;
 }
+
+#if defined(FEAT_GUI) || defined(PROTO)
+    long_u
+xterm_rgb_mch_get_rgb(color)
+    guicolor_T	color;
+{
+    return (long_u) color;
+}
+#endif
 #endif
 
 /*
@@ -2907,7 +2911,7 @@ term_color(s, n)
 	OUT_STR(tgoto((char *)s, 0, n));
 }
 
-#ifdef FEAT_XTERM_RGB
+#if defined(FEAT_XTERM_RGB) || defined(PROTO)
     void
 term_fg_rgb_color(rgb)
     long_u	rgb;

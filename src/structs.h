@@ -83,7 +83,6 @@ typedef int			scid_T;		/* script ID */
 # ifdef FEAT_XCLIPBOARD
 #  include <X11/Intrinsic.h>
 # endif
-# define gui_mch_get_rgb(color) (color)
 # define guicolor_T long_u		/* avoid error in prototypes and 
 					 * make FEAT_XTERM_RGB work */
 # define INVALCOLOR ((guicolor_T)0x1ffffff)
