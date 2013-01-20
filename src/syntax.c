@@ -7046,10 +7046,8 @@ do_highlight(line, forceit, init)
 	    for (idx = 0; idx < highlight_ga.ga_len; ++idx)
 		highlight_clear(idx);
 	    init_highlight(TRUE, TRUE);
-#ifdef FEAT_GUI
-	    if (gui.in_use)
-#endif
 #if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+	    if (USE_24BIT)
 		highlight_gui_started();
 #endif
 	    highlight_changed();
@@ -7511,11 +7509,7 @@ do_highlight(line, forceit, init)
 		i = color_name2handle(arg);
 		if (i != INVALCOLOR || STRCMP(arg, "NONE") == 0
 #  ifdef FEAT_GUI
-			|| !(gui.in_use
-#   ifdef FEAT_XTERM_RGB
-			     || p_guicolors
-#   endif
-			    )
+			|| !(USE_24BIT)
 #  else
 			|| !p_guicolors
 #  endif
@@ -7556,17 +7550,7 @@ do_highlight(line, forceit, init)
 # if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
 		/* In GUI guifg colors are only used when recognized */
 		i = color_name2handle(arg);
-		if (i != INVALCOLOR || STRCMP(arg, "NONE") == 0
-#  ifdef FEAT_GUI
-			|| !(gui.in_use
-#   ifdef FEAT_XTERM_RGB
-			     || p_guicolors
-#   endif
-			    )
-#  else
-			|| !p_guicolors
-#  endif
-		   )
+		if (i != INVALCOLOR || STRCMP(arg, "NONE") == 0 || !USE_24BIT)
 		{
 		    HL_TABLE()[idx].sg_gui_bg = i;
 # endif
@@ -7735,9 +7719,9 @@ do_highlight(line, forceit, init)
 	     * Need to update all groups, because they might be using "bg"
 	     * and/or "fg", which have been changed now.
 	     */
-	    if (gui.in_use)
 #endif
 #if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+	    if (USE_24BIT)
 		highlight_gui_started();
 #endif
 	}
@@ -8213,6 +8197,7 @@ color_name2handle(name)
 	return INVALCOLOR;
 
     if (STRICMP(name, "fg") == 0 || STRICMP(name, "foreground") == 0)
+    {
 #if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
 	if (gui.in_use)
 #endif
@@ -8225,7 +8210,9 @@ color_name2handle(name)
 #ifdef FEAT_XTERM_RGB
 	    return cterm_normal_fg_gui_color;
 #endif
+    }
     if (STRICMP(name, "bg") == 0 || STRICMP(name, "background") == 0)
+    {
 #if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
 	if (gui.in_use)
 #endif
@@ -8238,8 +8225,9 @@ color_name2handle(name)
 #ifdef FEAT_XTERM_RGB
 	    return cterm_normal_bg_gui_color;
 #endif
+    }
 
-    return gui_get_color(name);
+    return GUI_GET_COLOR(name);
 }
 #endif
 
@@ -8490,11 +8478,7 @@ hl_combine_attr(char_attr, prim_attr)
     }
 #endif
 
-    if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-	    || p_guicolors
-#endif
-	    )
+    if (IS_CTERM)
     {
 	if (char_attr > HL_ALL)
 	    char_aep = syn_cterm_attr2entry(char_attr);
@@ -8588,11 +8572,7 @@ syn_attr2attr(attr)
 	aep = syn_gui_attr2entry(attr);
     else
 #endif
-	if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-		|| p_guicolors
-#endif
-		)
+	if (IS_CTERM)
 	    aep = syn_cterm_attr2entry(attr);
 	else
 	    aep = syn_term_attr2entry(attr);
@@ -8805,17 +8785,7 @@ highlight_color(id, what, modec)
 #  endif
 
 	/* return #RRGGBB form (only possible when GUI is running) */
-	if ((
-#  ifdef FEAT_GUI
-		    gui.in_use
-#  endif
-#  if defined(FEAT_GUI) && defined(FEAT_XTERM_RGB)
-		    ||
-#  endif
-#  ifdef FEAT_XTERM_RGB
-		    p_guicolors
-#  endif
-	    ) && what[2] == '#')
+	if ((USE_24BIT) && what[2] == '#')
 	{
 	    guicolor_T		color;
 	    long_u		rgb;
@@ -8833,7 +8803,7 @@ highlight_color(id, what, modec)
 		color = HL_TABLE()[id - 1].sg_gui_bg;
 	    if (color == INVALCOLOR)
 		return NULL;
-	    rgb = gui_mch_get_rgb(color);
+	    rgb = GUI_MCH_GET_RGB(color);
 	    sprintf((char *)buf, "#%02x%02x%02x",
 				      (unsigned)(rgb >> 16),
 				      (unsigned)(rgb >> 8) & 255,
@@ -8886,7 +8856,7 @@ highlight_gui_color_rgb(id, fg)
     if (color == INVALCOLOR)
 	return 0L;
 
-    return gui_mch_get_rgb(color);
+    return GUI_MCH_GET_RGB(color);
 }
 #endif
 
@@ -9015,8 +8985,8 @@ set_hl_attr(idx)
 	at_en.ae_u.cterm.fg_color = sgp->sg_cterm_fg;
 	at_en.ae_u.cterm.bg_color = sgp->sg_cterm_bg;
 # ifdef FEAT_XTERM_RGB
-	at_en.ae_u.cterm.fg_rgb = gui_mch_get_rgb(sgp->sg_gui_fg);
-	at_en.ae_u.cterm.bg_rgb = gui_mch_get_rgb(sgp->sg_gui_bg);
+	at_en.ae_u.cterm.fg_rgb = GUI_MCH_GET_RGB(sgp->sg_gui_fg);
+	at_en.ae_u.cterm.bg_rgb = GUI_MCH_GET_RGB(sgp->sg_gui_bg);
 # endif
 	sgp->sg_cterm_attr = get_attr_entry(&cterm_attr_table, &at_en);
     }
@@ -9219,11 +9189,7 @@ syn_id2attr(hl_id)
 	attr = sgp->sg_gui_attr;
     else
 #endif
-	if (t_colors > 1
-#ifdef FEAT_XTERM_RGB
-		|| p_guicolors
-#endif
-		)
+	if (IS_CTERM)
 	    attr = sgp->sg_cterm_attr;
 	else
 	    attr = sgp->sg_term_attr;
@@ -9294,11 +9260,7 @@ highlight_gui_started()
     /* First get the colors from the "Normal" and "Menu" group, if set */
 # if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
 #  ifdef FEAT_XTERM_RGB
-    if (
-#   ifdef FEAT_GUI
-	    gui.in_use ||
-#   endif
-	    p_guicolors)
+    if (USE_24BIT)
 #  endif
 	set_normal_colors();
 # endif

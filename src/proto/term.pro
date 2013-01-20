@@ -57,12 +57,9 @@ void show_termcodes __ARGS((void));
 int show_one_termcode __ARGS((char_u *name, char_u *code, int printit));
 char_u *translate_mapping __ARGS((char_u *str, int expmap));
 void update_tcap __ARGS((int attr));
-#if defined(FEAT_XTERM_RGB) && !defined(FEAT_GUI)
-guicolor_T gui_mch_get_color __ARGS((char_u *name));
-guicolor_T gui_get_color __ARGS((char_u *name));
-#endif
-#ifdef FEAT_XTERM_RGB
+guicolor_T xterm_rgb_mch_get_color __ARGS((char_u *name));
+guicolor_T xterm_rgb_get_color __ARGS((char_u *name));
+long_u xterm_rgb_mch_get_rgb __ARGS((guicolor_T color));
 void term_fg_rgb_color __ARGS((long_u rgb));
 void term_bg_rgb_color __ARGS((long_u rgb));
-#endif
 /* vim: set ft=c : */
