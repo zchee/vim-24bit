@@ -8118,6 +8118,14 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 
 #endif
 
+#ifdef FEAT_TERMTRUECOLOR
+    /* 'guicolors' */
+    else if ((int *)varp == &p_guicolors)
+    {
+	highlight_gui_started();
+    }
+#endif
+
     /*
      * End of handling side effects for bool options.
      */
