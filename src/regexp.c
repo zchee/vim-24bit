@@ -3413,7 +3413,7 @@ static unsigned	reg_tofreelen;
  * reg_startpos		<invalid>		reg_mmatch->startpos
  * reg_endpos		<invalid>		reg_mmatch->endpos
  * reg_win		NULL			window in which to search
- * reg_buf		<invalid>		buffer in which to search
+ * reg_buf		curbuf			buffer in which to search
  * reg_firstlnum	<invalid>		first line in which to search
  * reg_maxline		0			last line nr
  * reg_line_lbr		FALSE or TRUE		FALSE
@@ -3571,6 +3571,7 @@ vim_regexec(rmp, line, col)
     reg_mmatch = NULL;
     reg_maxline = 0;
     reg_line_lbr = FALSE;
+    reg_buf = curbuf;
     reg_win = NULL;
     ireg_ic = rmp->rm_ic;
 #ifdef FEAT_MBYTE
@@ -3595,6 +3596,7 @@ vim_regexec_nl(rmp, line, col)
     reg_mmatch = NULL;
     reg_maxline = 0;
     reg_line_lbr = TRUE;
+    reg_buf = curbuf;
     reg_win = NULL;
     ireg_ic = rmp->rm_ic;
 #ifdef FEAT_MBYTE
@@ -3623,7 +3625,6 @@ vim_regexec_multi(rmp, win, buf, lnum, col, tm)
     proftime_T	*tm;		/* timeout limit or NULL */
 {
     long	r;
-    buf_T	*save_curbuf = curbuf;
 
     reg_match = NULL;
     reg_mmatch = rmp;
@@ -3638,10 +3639,7 @@ vim_regexec_multi(rmp, win, buf, lnum, col, tm)
 #endif
     ireg_maxcol = rmp->rmm_maxcol;
 
-    /* Need to switch to buffer "buf" to make vim_iswordc() work. */
-    curbuf = buf;
     r = vim_regexec_both(NULL, col, tm);
-    curbuf = save_curbuf;
 
     return r;
 }
@@ -4185,7 +4183,7 @@ regmatch(scan)
 		int	cmp = OPERAND(scan)[1];
 		pos_T	*pos;
 
-		pos = getmark(mark, FALSE);
+		pos = getmark_buf(reg_buf, mark, FALSE);
 		if (pos == NULL		     /* mark doesn't exist */
 			|| pos->lnum <= 0    /* mark isn't set (in curbuf) */
 			|| (pos->lnum == reglnum + reg_firstlnum
@@ -4315,8 +4313,8 @@ regmatch(scan)
 #endif
 	    else
 	    {
-		if (!vim_iswordc(c)
-			|| (reginput > regline && vim_iswordc(reginput[-1])))
+		if (!vim_iswordc_buf(c, reg_buf) || (reginput > regline
+				   && vim_iswordc_buf(reginput[-1], reg_buf)))
 		    status = RA_NOMATCH;
 	    }
 	    break;
@@ -4339,8 +4337,8 @@ regmatch(scan)
 #endif
 	    else
 	    {
-		if (!vim_iswordc(reginput[-1])
-			|| (reginput[0] != NUL && vim_iswordc(c)))
+		if (!vim_iswordc_buf(reginput[-1], reg_buf)
+			|| (reginput[0] != NUL && vim_iswordc_buf(c, reg_buf)))
 		    status = RA_NOMATCH;
 	    }
 	    break; /* Matched with EOW */
@@ -7139,6 +7137,7 @@ vim_regsub(rmp, source, dest, copy, magic, backslash)
     reg_match = rmp;
     reg_mmatch = NULL;
     reg_maxline = 0;
+    reg_buf = curbuf;
     return vim_regsub_both(source, dest, copy, magic, backslash);
 }
 #endif

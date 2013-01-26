@@ -5200,6 +5200,12 @@ outofmem:
 	    EMSG2(_(e_patnotf2), get_search_pat());
     }
 
+#ifdef FEAT_FOLDING
+    if (do_ask && hasAnyFolding(curwin))
+	/* Cursor position may require updating */
+	changed_window_setting();
+#endif
+
     vim_free(regmatch.regprog);
 }
 
@@ -5849,14 +5855,14 @@ find_help_tags(arg, num_matches, matches, keep_lang)
     int		i;
     static char *(mtable[]) = {"*", "g*", "[*", "]*", ":*",
 			       "/*", "/\\*", "\"*", "**",
-			       "/\\(\\)",
+			       "cpo-*", "/\\(\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
 			       "/\\?", "/\\z(\\)", "\\=", ":s\\=",
 			       "[count]", "[quotex]", "[range]",
 			       "[pattern]", "\\|", "\\%$"};
     static char *(rtable[]) = {"star", "gstar", "[star", "]star", ":star",
 			       "/star", "/\\\\star", "quotestar", "starstar",
-			       "/\\\\(\\\\)",
+			       "cpo-star", "/\\\\(\\\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
 			       "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
 			       "\\[count]", "\\[quotex]", "\\[range]",
