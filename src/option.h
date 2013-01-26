@@ -495,7 +495,7 @@ EXTERN char_u	*p_popt;	/* 'printoptions' */
 EXTERN char_u	*p_header;	/* 'printheader' */
 #endif
 EXTERN int	p_prompt;	/* 'prompt' */
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 EXTERN int	p_guicolors;	/* 'guicolors' */
 #endif
 #ifdef FEAT_GUI

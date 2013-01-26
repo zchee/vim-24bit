@@ -1263,7 +1263,7 @@ static struct vimoption
 #endif
 			    SCRIPTID_INIT},
     {"guicolors",   "gcol",  P_BOOL|P_VI_DEF|P_VIM|P_RCLR,
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			    (char_u *)&p_guicolors, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)FALSE}
 #else

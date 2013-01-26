@@ -34,7 +34,7 @@ struct hl_group
     int		sg_cterm_bg;	/* terminal bg color number + 1 */
     int		sg_cterm_attr;	/* Screen attr for color term mode */
 /* for when using the GUI */
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
     guicolor_T	sg_gui_fg;	/* GUI foreground color handle */
     guicolor_T	sg_gui_bg;	/* GUI background color handle */
 #endif
@@ -99,7 +99,7 @@ static int syn_list_header __ARGS((int did_header, int outlen, int id));
 static int hl_has_settings __ARGS((int idx, int check_link));
 static void highlight_clear __ARGS((int idx));
 
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 static void gui_do_one_color __ARGS((int idx, int do_menu, int do_tooltip));
 static guicolor_T color_name2handle __ARGS((char_u *name));
 #endif
@@ -7046,7 +7046,7 @@ do_highlight(line, forceit, init)
 	    for (idx = 0; idx < highlight_ga.ga_len; ++idx)
 		highlight_clear(idx);
 	    init_highlight(TRUE, TRUE);
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 	    if (USE_24BIT)
 		highlight_gui_started();
 #endif
@@ -7504,7 +7504,7 @@ do_highlight(line, forceit, init)
 		if (!init)
 		    HL_TABLE()[idx].sg_set |= SG_GUI;
 
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 		/* In GUI guifg colors are only used when recognized */
 		i = color_name2handle(arg);
 		if (i != INVALCOLOR || STRCMP(arg, "NONE") == 0
@@ -7522,7 +7522,7 @@ do_highlight(line, forceit, init)
 			HL_TABLE()[idx].sg_gui_fg_name = vim_strsave(arg);
 		    else
 			HL_TABLE()[idx].sg_gui_fg_name = NULL;
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 #  ifdef FEAT_GUI_X11
 		    if (is_menu_group)
 			gui.menu_fg_pixel = i;
@@ -7547,7 +7547,7 @@ do_highlight(line, forceit, init)
 		if (!init)
 		    HL_TABLE()[idx].sg_set |= SG_GUI;
 
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 		/* In GUI guifg colors are only used when recognized */
 		i = color_name2handle(arg);
 		if (i != INVALCOLOR || STRCMP(arg, "NONE") == 0 || !USE_24BIT)
@@ -7559,7 +7559,7 @@ do_highlight(line, forceit, init)
 			HL_TABLE()[idx].sg_gui_bg_name = vim_strsave(arg);
 		    else
 			HL_TABLE()[idx].sg_gui_bg_name = NULL;
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 #  ifdef FEAT_GUI_X11
 		    if (is_menu_group)
 			gui.menu_bg_pixel = i;
@@ -7720,7 +7720,7 @@ do_highlight(line, forceit, init)
 	     * and/or "fg", which have been changed now.
 	     */
 #endif
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 	    if (USE_24BIT)
 		highlight_gui_started();
 #endif
@@ -7792,7 +7792,7 @@ restore_cterm_colors()
     cterm_normal_fg_color = 0;
     cterm_normal_fg_bold = 0;
     cterm_normal_bg_color = 0;
-# ifdef FEAT_XTERM_RGB
+# ifdef FEAT_TERMTRUECOLOR
     cterm_normal_fg_gui_color = INVALCOLOR;
     cterm_normal_bg_gui_color = INVALCOLOR;
 # endif
@@ -7843,7 +7843,7 @@ highlight_clear(idx)
     vim_free(HL_TABLE()[idx].sg_gui_sp_name);
     HL_TABLE()[idx].sg_gui_sp_name = NULL;
 #endif
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
     HL_TABLE()[idx].sg_gui_fg = INVALCOLOR;
     HL_TABLE()[idx].sg_gui_bg = INVALCOLOR;
 #endif
@@ -7867,7 +7867,7 @@ highlight_clear(idx)
 #endif
 }
 
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB) || defined(PROTO)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR) || defined(PROTO)
 /*
  * Set the normal foreground and background colors according to the "Normal"
  * highlighting group.  For X11 also set "Menu", "Scrollbar", and
@@ -7877,7 +7877,7 @@ highlight_clear(idx)
 set_normal_colors()
 {
 #ifdef FEAT_GUI
-# ifdef FEAT_XTERM_RGB
+# ifdef FEAT_TERMTRUECOLOR
     if (gui.in_use)
 # endif
     {
@@ -7919,7 +7919,7 @@ set_normal_colors()
 # endif
     }
 #endif
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 # ifdef FEAT_GUI
     else
 # endif
@@ -8184,7 +8184,7 @@ hl_do_font(idx, arg, do_normal, do_menu, do_tooltip, free_font)
 
 #endif /* FEAT_GUI */
 
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB) || defined(PROTO)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR) || defined(PROTO)
 /*
  * Return the handle for a color name.
  * Returns INVALCOLOR when failed.
@@ -8198,31 +8198,31 @@ color_name2handle(name)
 
     if (STRICMP(name, "fg") == 0 || STRICMP(name, "foreground") == 0)
     {
-#if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
+#if defined(FEAT_TERMTRUECOLOR) && defined(FEAT_GUI)
 	if (gui.in_use)
 #endif
 #ifdef FEAT_GUI
 	    return gui.norm_pixel;
 #endif
-#if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
+#if defined(FEAT_TERMTRUECOLOR) && defined(FEAT_GUI)
 	else
 #endif
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 	    return cterm_normal_fg_gui_color;
 #endif
     }
     if (STRICMP(name, "bg") == 0 || STRICMP(name, "background") == 0)
     {
-#if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
+#if defined(FEAT_TERMTRUECOLOR) && defined(FEAT_GUI)
 	if (gui.in_use)
 #endif
 #ifdef FEAT_GUI
 	    return gui.back_pixel;
 #endif
-#if defined(FEAT_XTERM_RGB) && defined(FEAT_GUI)
+#if defined(FEAT_TERMTRUECOLOR) && defined(FEAT_GUI)
 	else
 #endif
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 	    return cterm_normal_bg_gui_color;
 #endif
     }
@@ -8309,7 +8309,7 @@ get_attr_entry(table, aep)
 						  == taep->ae_u.cterm.fg_color
 			    && aep->ae_u.cterm.bg_color
 						  == taep->ae_u.cterm.bg_color
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			    && aep->ae_u.cterm.fg_rgb
 						    == taep->ae_u.cterm.fg_rgb
 			    && aep->ae_u.cterm.bg_rgb
@@ -8381,7 +8381,7 @@ get_attr_entry(table, aep)
     {
 	taep->ae_u.cterm.fg_color = aep->ae_u.cterm.fg_color;
 	taep->ae_u.cterm.bg_color = aep->ae_u.cterm.bg_color;
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 	taep->ae_u.cterm.fg_rgb = aep->ae_u.cterm.fg_rgb;
 	taep->ae_u.cterm.bg_rgb = aep->ae_u.cterm.bg_rgb;
 #endif
@@ -8503,7 +8503,7 @@ hl_combine_attr(char_attr, prim_attr)
 		    new_en.ae_u.cterm.fg_color = spell_aep->ae_u.cterm.fg_color;
 		if (spell_aep->ae_u.cterm.bg_color > 0)
 		    new_en.ae_u.cterm.bg_color = spell_aep->ae_u.cterm.bg_color;
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 		if (spell_aep->ae_u.cterm.fg_rgb != INVALCOLOR)
 		    new_en.ae_u.cterm.fg_rgb = spell_aep->ae_u.cterm.fg_rgb;
 		if (spell_aep->ae_u.cterm.bg_rgb != INVALCOLOR)
@@ -8777,7 +8777,7 @@ highlight_color(id, what, modec)
 	return NULL;
     if (modec == 'g')
     {
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 #  ifdef FEAT_GUI
 	/* return font name */
 	if (font)
@@ -8833,7 +8833,8 @@ highlight_color(id, what, modec)
 }
 #endif
 
-#if (defined(FEAT_SYN_HL) && (defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)) \
+#if (defined(FEAT_SYN_HL) \
+	    && (defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)) \
 	&& defined(FEAT_PRINTER)) || defined(PROTO)
 /*
  * Return color name of highlight group "id" as RGB value.
@@ -8973,7 +8974,7 @@ set_hl_attr(idx)
      * highlighting attributes, need to allocate an attr number.
      */
     if (sgp->sg_cterm_fg == 0 && sgp->sg_cterm_bg == 0
-# ifdef FEAT_XTERM_RGB
+# ifdef FEAT_TERMTRUECOLOR
 	    && sgp->sg_gui_fg == INVALCOLOR
 	    && sgp->sg_gui_bg == INVALCOLOR
 # endif
@@ -8984,7 +8985,7 @@ set_hl_attr(idx)
 	at_en.ae_attr = sgp->sg_cterm;
 	at_en.ae_u.cterm.fg_color = sgp->sg_cterm_fg;
 	at_en.ae_u.cterm.bg_color = sgp->sg_cterm_bg;
-# ifdef FEAT_XTERM_RGB
+# ifdef FEAT_TERMTRUECOLOR
 	at_en.ae_u.cterm.fg_rgb = GUI_MCH_GET_RGB(sgp->sg_gui_fg);
 	at_en.ae_u.cterm.bg_rgb = GUI_MCH_GET_RGB(sgp->sg_gui_bg);
 # endif
@@ -9247,7 +9248,7 @@ syn_get_final_id(hl_id)
     return hl_id;
 }
 
-#if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
 /*
  * Call this function just after the GUI has started.
  * It finds the font and color handles for the highlighting groups.
@@ -9258,8 +9259,8 @@ highlight_gui_started()
     int	    idx;
 
     /* First get the colors from the "Normal" and "Menu" group, if set */
-# if defined(FEAT_GUI) || defined(FEAT_XTERM_RGB)
-#  ifdef FEAT_XTERM_RGB
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
+#  ifdef FEAT_TERMTRUECOLOR
     if (USE_24BIT)
 #  endif
 	set_normal_colors();
@@ -9280,7 +9281,7 @@ gui_do_one_color(idx, do_menu, do_tooltip)
     int		didit = FALSE;
 
 # ifdef FEAT_GUI
-#  ifdef FEAT_XTERM_RGB
+#  ifdef FEAT_TERMTRUECOLOR
     if (gui.in_use)
 #  endif
 	if (HL_TABLE()[idx].sg_font_name != NULL)

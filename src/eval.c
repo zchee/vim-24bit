@@ -12419,6 +12419,9 @@ f_has(argvars, rettv)
 #ifdef FEAT_TERMRESPONSE
 	"termresponse",
 #endif
+#ifdef FEAT_TERMTRUECOLOR
+	"termtruecolor",
+#endif
 #ifdef FEAT_TEXTOBJ
 	"textobjects",
 #endif
@@ -12488,9 +12491,6 @@ f_has(argvars, rettv)
 #endif
 #ifdef FEAT_XCLIPBOARD
 	"xterm_clipboard",
-#endif
-#ifdef FEAT_XTERM_RGB
-	"xterm_rgb",
 #endif
 #ifdef FEAT_XTERM_SAVE
 	"xterm_save",

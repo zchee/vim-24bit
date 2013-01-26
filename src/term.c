@@ -77,7 +77,7 @@ struct builtin_term
 static struct builtin_term *find_builtin_term __ARGS((char_u *name));
 static void parse_builtin_tcap __ARGS((char_u *s));
 static void term_color __ARGS((char_u *s, int n));
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 static void term_rgb_color __ARGS((char *s, long_u rgb));
 #endif
 static void gather_termleader __ARGS((void));
@@ -1334,7 +1334,7 @@ static struct builtin_term builtin_termcaps[] =
 
 };	/* end of builtin_termcaps */
 
-#if defined(FEAT_XTERM_RGB) || defined(PROTO)
+#if defined(FEAT_TERMTRUECOLOR) || defined(PROTO)
 # define RGB(r, g, b) ((r<<16) | (g<<8) | (b))
 struct rgbcolor_table_S {
     char_u	*color_name;
@@ -1405,7 +1405,7 @@ hex_digit(int c)
 }
 
     guicolor_T
-xterm_rgb_mch_get_color(char_u *name)
+termtrue_mch_get_color(char_u *name)
 {
     guicolor_T	color;
     int		i;
@@ -1479,14 +1479,14 @@ xterm_rgb_mch_get_color(char_u *name)
 }
 
     guicolor_T
-xterm_rgb_get_color(name)
+termtrue_get_color(name)
     char_u	*name;
 {
     guicolor_T	t;
 
     if (*name == NUL)
 	return INVALCOLOR;
-    t = xterm_rgb_mch_get_color(name);
+    t = termtrue_mch_get_color(name);
 
     if (t == INVALCOLOR)
 	EMSG2(_("E254: Cannot allocate color %s"), name);
@@ -1495,7 +1495,7 @@ xterm_rgb_get_color(name)
 
 #if defined(FEAT_GUI) || defined(PROTO)
     long_u
-xterm_rgb_mch_get_rgb(color)
+termtrue_mch_get_rgb(color)
     guicolor_T	color;
 {
     return (long_u) color;
@@ -2911,7 +2911,7 @@ term_color(s, n)
 	OUT_STR(tgoto((char *)s, 0, n));
 }
 
-#if defined(FEAT_XTERM_RGB) || defined(PROTO)
+#if defined(FEAT_TERMTRUECOLOR) || defined(PROTO)
     void
 term_fg_rgb_color(rgb)
     long_u	rgb;
