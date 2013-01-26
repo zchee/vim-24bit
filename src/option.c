@@ -8120,9 +8120,12 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 
 #ifdef FEAT_TERMTRUECOLOR
     /* 'guicolors' */
-    else if ((int *)varp == &p_guicolors && !gui.in_use && !gui.starting)
+    else if ((int *)varp == &p_guicolors)
     {
-	highlight_gui_started();
+# ifdef FEAT_GUI
+	if (!gui.in_use && !gui.starting)
+# endif
+	    highlight_gui_started();
     }
 #endif
 
