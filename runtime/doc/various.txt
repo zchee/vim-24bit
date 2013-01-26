@@ -399,6 +399,7 @@ m  *+tcl*		Tcl interface |tcl|
 m  *+tcl/dyn*		Tcl interface |tcl-dynamic| |/dyn|
    *+terminfo*		uses |terminfo| instead of termcap
 N  *+termresponse*	support for |t_RV| and |v:termresponse|
+m  *+termtruecolor*	24-bit color in xterm-compatible terminals support
 N  *+textobjects*	|text-objects| selection
    *+tgetent*		non-Unix only: able to use external termcap
 N  *+title*		Setting the window 'title' and 'icon'
@@ -420,7 +421,6 @@ m  *+xpm_w32*		Win32 GUI only: pixmap support |w32-xpm-support|
    *+xsmp*		XSMP (X session management) support
    *+xsmp_interact*	interactive XSMP (X session management) support
 N  *+xterm_clipboard*	Unix only: xterm clipboard handling
-m  *+xterm_rgb*		24-bit color in xterm-compatible terminals support
 m  *+xterm_save*	save and restore xterm screen |xterm-screens|
 N  *+X11*		Unix only: can restore window title |X11|
 

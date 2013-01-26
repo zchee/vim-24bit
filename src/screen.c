@@ -7323,12 +7323,12 @@ screen_start_highlight(attr)
 	    if ((attr & HL_BOLD) && T_MD != NULL)	/* bold */
 		out_str(T_MD);
 	    else if (aep != NULL && cterm_normal_fg_bold &&
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			(p_guicolors ?
 			    (aep->ae_u.cterm.fg_rgb != INVALCOLOR):
 #endif
 			    (t_colors > 1 && aep->ae_u.cterm.fg_color)
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			)
 #endif
 		    )
@@ -7351,7 +7351,7 @@ screen_start_highlight(attr)
 	     */
 	    if (aep != NULL)
 	    {
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 		if (p_guicolors)
 		{
 		    if (aep->ae_u.cterm.fg_rgb != INVALCOLOR)
@@ -7414,13 +7414,13 @@ screen_stop_highlight()
 		     */
 		    aep = syn_cterm_attr2entry(screen_attr);
 		    if (aep != NULL &&
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			    (p_guicolors ?
 				(aep->ae_u.cterm.fg_rgb != INVALCOLOR ||
 				 aep->ae_u.cterm.bg_rgb != INVALCOLOR):
 #endif
 				(aep->ae_u.cterm.fg_color || aep->ae_u.cterm.bg_color)
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 			    )
 #endif
 			)
@@ -7471,7 +7471,7 @@ screen_stop_highlight()
 	    if (do_ME || (screen_attr & (HL_BOLD | HL_INVERSE)))
 		out_str(T_ME);
 
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 	    if (p_guicolors)
 	    {
 		if (cterm_normal_fg_gui_color != INVALCOLOR)
@@ -7508,7 +7508,7 @@ reset_cterm_colors()
     if (IS_CTERM)
     {
 	/* set Normal cterm colors */
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 	if (p_guicolors ?
 		(cterm_normal_fg_gui_color != INVALCOLOR
 		 || cterm_normal_bg_gui_color != INVALCOLOR):
@@ -8455,7 +8455,7 @@ can_clear(p)
 #ifdef FEAT_GUI
 		|| gui.in_use
 #endif
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 		|| (p_guicolors && cterm_normal_bg_gui_color != INVALCOLOR)
 #endif
 		|| cterm_normal_bg_color == 0 || *T_UT != NUL));
@@ -9774,7 +9774,7 @@ draw_tabline()
 #ifdef FEAT_GUI
 					    && !gui.in_use
 #endif
-#ifdef FEAT_XTERM_RGB
+#ifdef FEAT_TERMTRUECOLOR
 					    && !p_guicolors
 #endif
 					    );

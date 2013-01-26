@@ -3345,10 +3345,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 'guicolors' 'gcol'	boolean (default off)
 			global
 			{not in Vi}
-			{not available when compiled without the |+xterm_rgb|
-			feature}
+			{not available when compiled without the 
+			|+termtruecolor| feature}
 	When on, uses |highlight-guifg| and |highlight-guibg| attributes in 
-	terminal (thus using 24-bit color). Requires xterm-compatible 
+	terminal (thus using 24-bit color). Requires ISO-8613-3 compatible 
 	terminal.
 
 			*'guicursor'* *'gcr'* *E545* *E546* *E548* *E549*
