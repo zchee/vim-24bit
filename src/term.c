@@ -1493,14 +1493,12 @@ termtrue_get_color(name)
     return t;
 }
 
-#if defined(FEAT_GUI) || defined(PROTO)
     long_u
 termtrue_mch_get_rgb(color)
     guicolor_T	color;
 {
     return (long_u) color;
 }
-#endif
 #endif
 
 /*
