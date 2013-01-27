@@ -9147,10 +9147,12 @@ syn_add_group(name)
     vim_memset(&(HL_TABLE()[highlight_ga.ga_len]), 0, sizeof(struct hl_group));
     HL_TABLE()[highlight_ga.ga_len].sg_name = name;
     HL_TABLE()[highlight_ga.ga_len].sg_name_u = vim_strsave_up(name);
-#ifdef FEAT_GUI
+#if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
     HL_TABLE()[highlight_ga.ga_len].sg_gui_bg = INVALCOLOR;
     HL_TABLE()[highlight_ga.ga_len].sg_gui_fg = INVALCOLOR;
+# ifdef FEAT_GUI
     HL_TABLE()[highlight_ga.ga_len].sg_gui_sp = INVALCOLOR;
+# endif
 #endif
     ++highlight_ga.ga_len;
 
