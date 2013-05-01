@@ -698,7 +698,10 @@ DictionarySetattr(PyObject *self, char *name, PyObject *val)
 	}
 	else
 	{
-	    if (PyObject_IsTrue(val))
+	    int		istrue = PyObject_IsTrue(val);
+	    if (istrue == -1)
+		return -1;
+	    else if (istrue)
 		this->dict->dv_lock = VAR_LOCKED;
 	    else
 		this->dict->dv_lock = 0;
@@ -1199,7 +1202,10 @@ ListSetattr(PyObject *self, char *name, PyObject *val)
 	}
 	else
 	{
-	    if (PyObject_IsTrue(val))
+	    int		istrue = PyObject_IsTrue(val);
+	    if (istrue == -1)
+		return -1;
+	    else if (istrue)
 		this->list->lv_lock = VAR_LOCKED;
 	    else
 		this->list->lv_lock = 0;
@@ -1477,7 +1483,10 @@ OptionsAssItem(OptionsObject *this, PyObject *keyObject, PyObject *valObject)
 
     if (flags & SOPT_BOOL)
     {
-	r = set_option_value_for(key, PyObject_IsTrue(valObject), NULL,
+	int	istrue = PyObject_IsTrue(valObject);
+	if (istrue == -1)
+	    return -1;
+	r = set_option_value_for(key, istrue, NULL,
 				opt_flags, this->opt_type, this->from);
     }
     else if (flags & SOPT_NUM)
