@@ -20758,6 +20758,7 @@ item_copy(from, to, deep, copyID)
  * ":echo expr1 ..."	print each argument separated with a space, add a
  *			newline at the end.
  * ":echon expr1 ..."	print each argument plain.
+ * ":echomsgn expr1 ..."	like :echon, but also saves to :messages
  */
     void
 ex_echo(eap)
@@ -20769,10 +20770,13 @@ ex_echo(eap)
     char_u	*p;
     int		needclr = TRUE;
     int		atstart = TRUE;
+    int		attr = echo_attr;
     char_u	numbuf[NUMBUFLEN];
 
     if (eap->skip)
 	++emsg_skip;
+    if (eap->cmdidx == CMD_echomsgn)
+	attr |= MSG_HIST;
     while (*arg != NUL && *arg != '|' && *arg != '\n' && !got_int)
     {
 	/* If eval1() causes an error message the text from the command may
@@ -20811,7 +20815,7 @@ ex_echo(eap)
 		}
 	    }
 	    else if (eap->cmdidx == CMD_echo)
-		msg_puts_attr((char_u *)" ", echo_attr);
+		msg_puts_attr((char_u *)" ", attr);
 	    current_copyID += COPYID_INC;
 	    p = echo_string(&rettv, &tofree, numbuf, current_copyID);
 	    if (p != NULL)
@@ -20825,7 +20829,7 @@ ex_echo(eap)
 			    msg_clr_eos();
 			    needclr = FALSE;
 			}
-			msg_putchar_attr(*p, echo_attr);
+			msg_putchar_attr(*p, attr);
 		    }
 		    else
 		    {
@@ -20834,12 +20838,12 @@ ex_echo(eap)
 			{
 			    int i = (*mb_ptr2len)(p);
 
-			    (void)msg_outtrans_len_attr(p, i, echo_attr);
+			    (void)msg_outtrans_len_attr(p, i, attr);
 			    p += i - 1;
 			}
 			else
 #endif
-			    (void)msg_outtrans_len_attr(p, 1, echo_attr);
+			    (void)msg_outtrans_len_attr(p, 1, attr);
 		    }
 		}
 	    vim_free(tofree);
