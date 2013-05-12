@@ -2568,6 +2568,7 @@ do_one_cmd(cmdlinep, sourcing,
 	    case CMD_echo:
 	    case CMD_echoerr:
 	    case CMD_echomsg:
+	    case CMD_echomsgn:
 	    case CMD_echon:
 	    case CMD_execute:
 	    case CMD_help:
@@ -3796,6 +3797,7 @@ set_one_cmd_context(xp, buff)
 	case CMD_echon:
 	case CMD_execute:
 	case CMD_echomsg:
+	case CMD_echomsgn:
 	case CMD_echoerr:
 	case CMD_call:
 	case CMD_return:

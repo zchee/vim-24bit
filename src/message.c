@@ -22,7 +22,7 @@
 static int other_sourcing_name __ARGS((void));
 static char_u *get_emsg_source __ARGS((void));
 static char_u *get_emsg_lnum __ARGS((void));
-static void add_msg_hist __ARGS((char_u *s, int len, int attr));
+static void add_msg_hist __ARGS((char_u *s, int len, int attr, int full));
 static void hit_return_msg __ARGS((void));
 static void msg_home_replace_attr __ARGS((char_u *fname, int attr));
 #ifdef FEAT_MBYTE
@@ -51,6 +51,7 @@ struct msg_hist
     struct msg_hist	*next;
     char_u		*msg;
     int			attr;
+    int			full;
 };
 
 static struct msg_hist *first_msg_hist = NULL;
@@ -166,7 +167,7 @@ msg_attr_keep(s, attr, keep)
 		&& last_msg_hist != NULL
 		&& last_msg_hist->msg != NULL
 		&& STRCMP(s, last_msg_hist->msg)))
-	add_msg_hist(s, -1, attr);
+	add_msg_hist(s, -1, attr, 1);
 
     /* When displaying keep_msg, don't let msg_start() free it, caller must do
      * that. */
@@ -716,7 +717,7 @@ msg_trunc_attr(s, force, attr)
     int		n;
 
     /* Add message to history before truncating */
-    add_msg_hist(s, -1, attr);
+    add_msg_hist(s, -1, attr, 1);
 
     s = msg_may_trunc(force, s);
 
@@ -770,10 +771,11 @@ msg_may_trunc(force, s)
 }
 
     static void
-add_msg_hist(s, len, attr)
+add_msg_hist(s, len, attr, full)
     char_u	*s;
     int		len;		/* -1 for undetermined length */
     int		attr;
+    int		full;
 {
     struct msg_hist *p;
 
@@ -801,6 +803,7 @@ add_msg_hist(s, len, attr)
 	p->msg = vim_strnsave(s, len);
 	p->next = NULL;
 	p->attr = attr;
+	p->full = full;
 	if (last_msg_hist != NULL)
 	    last_msg_hist->next = p;
 	last_msg_hist = p;
@@ -849,9 +852,23 @@ ex_messages(eap)
 		_("Messages maintainer: Bram Moolenaar <Bram@vim.org>"),
 		hl_attr(HLF_T));
 
+    if (first_msg_hist != NULL && !first_msg_hist->full)
+	msg_putchar_attr((char_u)'\n', first_msg_hist->attr);
+
     for (p = first_msg_hist; p != NULL && !got_int; p = p->next)
 	if (p->msg != NULL)
-	    msg_attr(p->msg, p->attr);
+	    if (p->full)
+	    {
+		msg_attr(p->msg, p->attr);
+		if (p->next != NULL && !p->next->full)
+		    msg_putchar_attr((char_u)'\n', p->attr);
+	    }
+	    else
+		for (s = p->msg; *s != NUL && !got_int ; ++s)
+		    if (*s == '\n' || *s == '\r' || *s == TAB)
+			msg_putchar_attr(*s, p->attr);
+		    else
+			(void)msg_outtrans_len_attr(s, 1, p->attr);
 
     msg_hist_off = FALSE;
 }
@@ -1372,7 +1389,7 @@ msg_outtrans_len_attr(msgstr, len, attr)
     /* if MSG_HIST flag set, add message to history */
     if (attr & MSG_HIST)
     {
-	add_msg_hist(str, len, attr);
+	add_msg_hist(str, len, attr, 0);
 	attr &= ~MSG_HIST;
     }
 
@@ -1897,7 +1914,7 @@ msg_puts_attr_len(str, maxlen, attr)
     /* if MSG_HIST flag set, add message to history */
     if ((attr & MSG_HIST) && maxlen < 0)
     {
-	add_msg_hist(str, -1, attr);
+	add_msg_hist(str, -1, attr, 0);
 	attr &= ~MSG_HIST;
     }
 
