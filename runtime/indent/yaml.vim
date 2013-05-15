@@ -84,7 +84,11 @@ function GetYAMLIndent(lnum)
     let previndent = indent(prevlnum)
 
     " Any examples below assume that shiftwidth=2
-    if prevline =~# '\v[{[:]$|[:-]\ [|>][+\-]?%(\s+\#.*|\s*)$'
+    if prevline[0] is# '%'
+        " %YAML 1.2
+        " %TAG !yaml! tag:yaml.org,2002:
+        return 0
+    elseif prevline =~# '\v[{[:]$|[:-]\ +[|>][+\-]?%(\s+\#.*|\s*)$'
         " Mapping key:
         "     nested mapping: ...
         "
