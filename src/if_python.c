@@ -882,7 +882,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     Python_RestoreThread();	    /* enter python */
 #endif
 
-    run((char *) cmd, arg);
+    run((char *) cmd, arg, &pygilstate);
 
 #ifdef PY_CAN_RECURSE
     PyGILState_Release(pygilstate);
@@ -980,88 +980,10 @@ ex_pyfile(exarg_T *eap)
     void
 ex_pydo(exarg_T *eap)
 {
-    linenr_T		i;
-    const char		*code_hdr = "def " DOPY_FUNC "(line, linenr):\n ";
-    const char		*s = (const char *) eap->arg;
-    size_t		len;
-    char		*code;
-    int			status;
-    PyObject		*pyfunc, *pymain;
-    PyGILState_STATE	pygilstate;
-
-    if (Python_Init())
-        return;
-
-    if (u_save(eap->line1 - 1, eap->line2 + 1) != OK)
-    {
-	EMSG(_("cannot save undo information"));
-	return;
-    }
-    len = strlen(code_hdr) + strlen(s);
-    code = malloc(len + 1);
-    STRCPY(code, code_hdr);
-    STRNCAT(code, s, len + 1);
-    pygilstate = PyGILState_Ensure();
-    status = PyRun_SimpleString(code);
-    vim_free(code);
-    if (status)
-    {
-	EMSG(_("failed to run the code"));
-	return;
-    }
-    status = 0; /* good */
-    pymain = PyImport_AddModule("__main__");
-    pyfunc = PyObject_GetAttrString(pymain, DOPY_FUNC);
-    PyGILState_Release(pygilstate);
-
-    for (i = eap->line1; i <= eap->line2; i++)
-    {
-	const char *line;
-	PyObject *pyline, *pylinenr, *pyret;
-
-	line = (char *)ml_get(i);
-	pygilstate = PyGILState_Ensure();
-	pyline = PyString_FromStringAndSize(line, strlen(line));
-	pylinenr = PyLong_FromLong(i);
-	pyret = PyObject_CallFunctionObjArgs(pyfunc, pyline, pylinenr, NULL);
-	Py_DECREF(pyline);
-	Py_DECREF(pylinenr);
-	if (!pyret)
-	{
-	    PyErr_PrintEx(0);
-	    PythonIO_Flush();
-	    status = 1;
-	    goto out;
-	}
-
-	if (pyret && pyret != Py_None)
-	{
-	    if (!PyString_Check(pyret))
-	    {
-		EMSG(_("E863: return value must be an instance of str"));
-		Py_XDECREF(pyret);
-		status = 1;
-		goto out;
-	    }
-	    ml_replace(i, (char_u *) PyString_AsString(pyret), 1);
-	    changed();
-#ifdef SYNTAX_HL
-	    syn_changed(i); /* recompute syntax hl. for this line */
-#endif
-	}
-	Py_XDECREF(pyret);
-	PythonIO_Flush();
-	PyGILState_Release(pygilstate);
-    }
-    pygilstate = PyGILState_Ensure();
-out:
-    Py_DECREF(pyfunc);
-    PyObject_SetAttrString(pymain, DOPY_FUNC, NULL);
-    PyGILState_Release(pygilstate);
-    if (status)
-	return;
-    check_cursor();
-    update_curbuf(NOT_VALID);
+    DoPyCommand(eap->arg,
+	    (rangeinitializer) init_range_cmd,
+	    (runner) run_do,
+	    (void *) eap);
 }
 
 /******************************************************
