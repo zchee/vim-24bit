@@ -872,7 +872,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     cmdbytes = PyUnicode_AsEncodedString(cmdstr, "utf-8", CODEC_ERROR_HANDLER);
     Py_XDECREF(cmdstr);
 
-    run(PyBytes_AsString(cmdbytes), arg);
+    run(PyBytes_AsString(cmdbytes), arg, &pygilstate);
     Py_XDECREF(cmdbytes);
 
     PyGILState_Release(pygilstate);
@@ -979,95 +979,10 @@ ex_py3file(exarg_T *eap)
     void
 ex_py3do(exarg_T *eap)
 {
-    linenr_T		i;
-    const char		*code_hdr = "def " DOPY_FUNC "(line, linenr):\n ";
-    const char		*s = (const char *) eap->arg;
-    size_t		len;
-    char		*code;
-    int			status;
-    PyObject		*pyfunc, *pymain;
-    PyGILState_STATE	pygilstate;
-
-    if (Python3_Init())
-	goto theend;
-
-    if (u_save(eap->line1 - 1, eap->line2 + 1) != OK)
-    {
-	EMSG(_("cannot save undo information"));
-	return;
-    }
-    len = strlen(code_hdr) + strlen(s);
-    code = malloc(len + 1);
-    STRCPY(code, code_hdr);
-    STRNCAT(code, s, len + 1);
-    pygilstate = PyGILState_Ensure();
-    status = PyRun_SimpleString(code);
-    vim_free(code);
-    if (status)
-    {
-	EMSG(_("failed to run the code"));
-	return;
-    }
-    status = 0; /* good */
-    pymain = PyImport_AddModule("__main__");
-    pyfunc = PyObject_GetAttrString(pymain, DOPY_FUNC);
-    PyGILState_Release(pygilstate);
-
-    for (i = eap->line1; i <= eap->line2; i++)
-    {
-	const char *line;
-	PyObject *pyline, *pylinenr, *pyret, *pybytes;
-
-	line = (char *)ml_get(i);
-	pygilstate = PyGILState_Ensure();
-	pyline = PyUnicode_Decode(line, strlen(line),
-		(char *)ENC_OPT, CODEC_ERROR_HANDLER);
-	pylinenr = PyLong_FromLong(i);
-	pyret = PyObject_CallFunctionObjArgs(pyfunc, pyline, pylinenr, NULL);
-	Py_DECREF(pyline);
-	Py_DECREF(pylinenr);
-	if (!pyret)
-	{
-	    PyErr_PrintEx(0);
-	    PythonIO_Flush();
-	    status = 1;
-	    goto out;
-	}
-
-	if (pyret && pyret != Py_None)
-	{
-	    if (!PyUnicode_Check(pyret))
-	    {
-		EMSG(_("E863: return value must be an instance of str"));
-		Py_XDECREF(pyret);
-		status = 1;
-		goto out;
-	    }
-	    pybytes = PyUnicode_AsEncodedString(pyret,
-		    (char *)ENC_OPT, CODEC_ERROR_HANDLER);
-	    ml_replace(i, (char_u *) PyBytes_AsString(pybytes), 1);
-	    Py_DECREF(pybytes);
-	    changed();
-#ifdef SYNTAX_HL
-	    syn_changed(i); /* recompute syntax hl. for this line */
-#endif
-	}
-	Py_XDECREF(pyret);
-	PythonIO_Flush();
-	PyGILState_Release(pygilstate);
-    }
-    pygilstate = PyGILState_Ensure();
-out:
-    Py_DECREF(pyfunc);
-    PyObject_SetAttrString(pymain, DOPY_FUNC, NULL);
-    PyGILState_Release(pygilstate);
-    if (status)
-	return;
-    check_cursor();
-    update_curbuf(NOT_VALID);
-
-theend:
-    return;
+    DoPyCommand(eap->arg,
+	    (rangeinitializer) init_range_cmd,
+	    (runner) run_do,
+	    (void *) eap);
 }
 
 /******************************************************
