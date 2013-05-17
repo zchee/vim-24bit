@@ -659,8 +659,6 @@ static PyObject *FunctionGetattr(PyObject *, char *);
  * Internal function prototypes.
  */
 
-static PyObject *globals;
-
 static void PythonIO_Flush(void);
 static int PythonIO_Init(void);
 static int PythonMod_Init(void);
@@ -828,7 +826,7 @@ fail:
  * External interface
  */
     static void
-DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
+DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
 {
 #ifndef PY_CAN_RECURSE
     static int		recursive = 0;
@@ -861,16 +859,8 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
     if (Python_Init())
 	goto theend;
 
-    if (rettv == NULL)
-    {
-	RangeStart = eap->line1;
-	RangeEnd = eap->line2;
-    }
-    else
-    {
-	RangeStart = (PyInt) curwin->w_cursor.lnum;
-	RangeEnd = RangeStart;
-    }
+    init_range(arg);
+
     Python_Release_Vim();	    /* leave vim */
 
 #if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
@@ -892,27 +882,7 @@ DoPythonCommand(exarg_T *eap, const char *cmd, typval_T *rettv)
     Python_RestoreThread();	    /* enter python */
 #endif
 
-    if (rettv == NULL)
-	PyRun_SimpleString((char *)(cmd));
-    else
-    {
-	PyObject	*r;
-
-	r = PyRun_String((char *)(cmd), Py_eval_input, globals, globals);
-	if (r == NULL)
-	{
-	    if (PyErr_Occurred() && !msg_silent)
-		PyErr_PrintEx(0);
-	    EMSG(_("E858: Eval did not return a valid python object"));
-	}
-	else
-	{
-	    if (ConvertFromPyObject(r, rettv) == -1)
-		EMSG(_("E859: Failed to convert returned python object to vim value"));
-	    Py_DECREF(r);
-	}
-	PyErr_Clear();
-    }
+    run((char *) cmd, arg);
 
 #ifdef PY_CAN_RECURSE
     PyGILState_Release(pygilstate);
@@ -952,10 +922,10 @@ ex_python(exarg_T *eap)
     script = script_get(eap, eap->arg);
     if (!eap->skip)
     {
-	if (script == NULL)
-	    DoPythonCommand(eap, (char *)eap->arg, NULL);
-	else
-	    DoPythonCommand(eap, (char *)script, NULL);
+	DoPyCommand(script == NULL ? (char *) eap->arg : (char *) script,
+		(rangeinitializer) init_range_cmd,
+		(runner) run_cmd,
+		(void *) eap);
     }
     vim_free(script);
 }
@@ -1001,7 +971,10 @@ ex_pyfile(exarg_T *eap)
     *p++ = '\0';
 
     /* Execute the file */
-    DoPythonCommand(eap, buffer, NULL);
+    DoPyCommand(buffer,
+	    (rangeinitializer) init_range_cmd,
+	    (runner) run_cmd,
+	    (void *) eap);
 }
 
     void
@@ -1525,7 +1498,10 @@ FunctionGetattr(PyObject *self, char *name)
     void
 do_pyeval (char_u *str, typval_T *rettv)
 {
-    DoPythonCommand(NULL, (char *) str, rettv);
+    DoPyCommand((char *) str,
+	    (rangeinitializer) init_range_eval,
+	    (runner) run_eval,
+	    (void *) rettv);
     switch(rettv->v_type)
     {
 	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
