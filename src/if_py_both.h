@@ -30,6 +30,9 @@ typedef int Py_ssize_t;  /* Python 2.4 and earlier don't have this type. */
 #define INVALID_WINDOW_VALUE ((win_T *)(-1))
 #define INVALID_TABPAGE_VALUE ((tabpage_T *)(-1))
 
+typedef void (*rangeinitializer)(void *);
+typedef void (*runner)(const char *, void *);
+
 static int ConvertFromPyObject(PyObject *, typval_T *);
 static int _ConvertFromPyObject(PyObject *, typval_T *, PyObject *);
 static PyObject *WindowNew(win_T *, tabpage_T *);
@@ -38,6 +41,8 @@ static PyObject *LineToString(const char *);
 
 static PyInt RangeStart;
 static PyInt RangeEnd;
+
+static PyObject *globals;
 
 /*
  * obtain a lock on the Vim data structures
@@ -3429,6 +3434,47 @@ CurrentSetattr(PyObject *self UNUSED, char *name, PyObject *value)
 	PyErr_SetString(PyExc_AttributeError, name);
 	return -1;
     }
+}
+
+    static void
+init_range_cmd(exarg_T *eap)
+{
+    RangeStart = eap->line1;
+    RangeEnd = eap->line2;
+}
+
+    static void
+init_range_eval(typval_T *rettv UNUSED)
+{
+    RangeStart = (PyInt) curwin->w_cursor.lnum;
+    RangeEnd = RangeStart;
+}
+
+    static void
+run_cmd(const char *cmd, typval_T *rettv)
+{
+    PyRun_SimpleString((char *) cmd);
+}
+
+    static void
+run_eval(const char *cmd, typval_T *rettv)
+{
+    PyObject	*r;
+
+    r = PyRun_String((char *) cmd, Py_eval_input, globals, globals);
+    if (r == NULL)
+    {
+	if (PyErr_Occurred() && !msg_silent)
+	    PyErr_PrintEx(0);
+	EMSG(_("E858: Eval did not return a valid python object"));
+    }
+    else
+    {
+	if (ConvertFromPyObject(r, rettv) == -1)
+	    EMSG(_("E859: Failed to convert returned python object to vim value"));
+	Py_DECREF(r);
+    }
+    PyErr_Clear();
 }
 
     static void
