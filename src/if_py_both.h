@@ -1521,6 +1521,24 @@ OptionsItem(OptionsObject *self, PyObject *keyObject)
 }
 
     static int
+set_option_value_err(key, numval, stringval, opt_flags)
+    char_u	*key;
+    int		numval;
+    char_u	*stringval;
+    int		opt_flags;
+{
+    char_u	*errmsg;
+    if ((errmsg = set_option_value(key, numval, stringval, opt_flags)))
+    {
+	if (VimTryEnd())
+	    return -1;
+	PyErr_SetVim(errmsg);
+	return -1;
+    }
+    return 0;
+}
+
+    static int
 set_option_value_for(key, numval, stringval, opt_flags, opt_type, from)
     char_u	*key;
     int		numval;
@@ -1533,6 +1551,7 @@ set_option_value_for(key, numval, stringval, opt_flags, opt_type, from)
     tabpage_T	*save_curtab = NULL;
     buf_T	*save_curbuf = NULL;
     int		r = 0;
+    char_u	*errmsg;
 
     VimTryStart();
     switch (opt_type)
@@ -1546,16 +1565,22 @@ set_option_value_for(key, numval, stringval, opt_flags, opt_type, from)
 		PyErr_SetVim("Problem while switching windows.");
 		return -1;
 	    }
-	    set_option_value(key, numval, stringval, opt_flags);
+	    r = set_option_value_err(key, numval, stringval, opt_flags);
 	    restore_win(save_curwin, save_curtab);
+	    if (r)
+		return;
 	    break;
 	case SREQ_BUF:
 	    switch_buffer(&save_curbuf, (buf_T *)from);
-	    set_option_value(key, numval, stringval, opt_flags);
+	    r = set_option_value_err(key, numval, stringval, opt_flags);
 	    restore_buffer(save_curbuf);
+	    if (r)
+		return;
 	    break;
 	case SREQ_GLOBAL:
-	    set_option_value(key, numval, stringval, opt_flags);
+	    r = set_option_value_err(key, numval, stringval, opt_flags);
+	    if (r)
+		return;
 	    break;
     }
     return VimTryEnd();
