@@ -4253,6 +4253,14 @@ typedef int (*object_adder)(PyObject *, const char *, PyObject *);
     if (add_object(m, name, obj)) \
 	return -1;
 
+#define ADD_CHECKED_OBJECT(m, name, obj) \
+    { \
+	PyObject	*value = obj; \
+	if (!value) \
+	    return -1; \
+	ADD_OBJECT(m, name, value); \
+    }
+
     static int
 populate_module(PyObject *m, object_adder add_object)
 {
@@ -4260,12 +4268,8 @@ populate_module(PyObject *m, object_adder add_object)
 
     for (i = 0; i < sizeof(numeric_constants) / sizeof(struct numeric_constant);
 	    ++i)
-    {
-	PyObject	*value;
-	if (!(value = PyInt_FromLong(numeric_constants[i].value)))
-	    return -1;
-	ADD_OBJECT(m, numeric_constants[i].name, value);
-    }
+	ADD_CHECKED_OBJECT(m, numeric_constants[i].name,
+		PyInt_FromLong(numeric_constants[i].value));
 
     for (i = 0; i < sizeof(object_constants) / sizeof(struct object_constant);
 	    ++i)
@@ -4281,8 +4285,9 @@ populate_module(PyObject *m, object_adder add_object)
 	return -1;
     ADD_OBJECT(m, "error", VimError);
 
-    ADD_OBJECT(m, "vars",  DictionaryNew(&globvardict));
-    ADD_OBJECT(m, "vvars", DictionaryNew(&vimvardict));
-    ADD_OBJECT(m, "options", OptionsNew(SREQ_GLOBAL, NULL, dummy_check, NULL));
+    ADD_CHECKED_OBJECT(m, "vars",  DictionaryNew(&globvardict));
+    ADD_CHECKED_OBJECT(m, "vvars", DictionaryNew(&vimvardict));
+    ADD_CHECKED_OBJECT(m, "options",
+	    OptionsNew(SREQ_GLOBAL, NULL, dummy_check, NULL));
     return 0;
 }
