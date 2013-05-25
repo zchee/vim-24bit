@@ -130,6 +130,59 @@ StringToChars(PyObject *object, PyObject **todecref)
     return (char_u *) p;
 }
 
+    static int
+add_string(PyObject *list, char *s)
+{
+    PyObject	*string;
+
+    if (!(string = PyString_FromString(s)))
+	return -1;
+    if (PyList_Append(list, string))
+    {
+	Py_DECREF(string);
+	return -1;
+    }
+
+    Py_DECREF(string);
+    return 0;
+}
+
+    static PyObject *
+ObjectDir(PyObject *self, char **attributes)
+{
+    PyMethodDef	*method;
+    char	**attr;
+    PyObject	*r;
+
+    if (!(r = PyList_New(0)))
+	return NULL;
+
+    if (self)
+	for (method = self->ob_type->tp_methods ; method->ml_name != NULL ; ++method)
+	    if (add_string(r, (char *) method->ml_name))
+	    {
+		Py_DECREF(r);
+		return NULL;
+	    }
+
+    for (attr = attributes ; *attr ; ++attr)
+	if (add_string(r, *attr))
+	{
+	    Py_DECREF(r);
+	    return NULL;
+	}
+
+#if PY_MAJOR_VERSION < 3
+    if (add_string(r, "__members__"))
+    {
+	Py_DECREF(r);
+	return NULL;
+    }
+#endif
+
+    return r;
+}
+
 /* Output buffer management
  */
 
@@ -144,6 +197,17 @@ typedef struct
     long softspace;
     long error;
 } OutputObject;
+
+static char *OutputAttrs[] = {
+    "softspace",
+    NULL
+};
+
+    static PyObject *
+OutputDir(PyObject *self)
+{
+    return ObjectDir(self, OutputAttrs);
+}
 
     static int
 OutputSetattr(OutputObject *self, char *name, PyObject *val)
@@ -304,6 +368,7 @@ static struct PyMethodDef OutputMethods[] = {
     {"write",	    (PyCFunction)OutputWrite,		METH_VARARGS,	""},
     {"writelines",  (PyCFunction)OutputWritelines,	METH_VARARGS,	""},
     {"flush",	    (PyCFunction)OutputFlush,		METH_NOARGS,	""},
+    {"__dir__",	    (PyCFunction)OutputDir,		METH_NOARGS,	""},
     { NULL,	    NULL,				0,		NULL}
 };
 
@@ -835,6 +900,17 @@ DictionaryDestructor(DictionaryObject *self)
     DESTRUCTOR_FINISH(self);
 }
 
+static char *DictionaryAttrs[] = {
+    "locked", "scope",
+    NULL
+};
+
+    static PyObject *
+DictionaryDir(PyObject *self)
+{
+    return ObjectDir(self, DictionaryAttrs);
+}
+
     static int
 DictionarySetattr(DictionaryObject *self, char *name, PyObject *val)
 {
@@ -994,7 +1070,8 @@ static PyMappingMethods DictionaryAsMapping = {
 
 static struct PyMethodDef DictionaryMethods[] = {
     {"keys",	(PyCFunction)DictionaryListKeys,	METH_NOARGS,	""},
-    { NULL,	NULL,					0,		NULL }
+    {"__dir__",	(PyCFunction)DictionaryDir,		METH_NOARGS,	""},
+    { NULL,	NULL,					0,		NULL}
 };
 
 static PyTypeObject ListType;
@@ -1342,6 +1419,17 @@ ListConcatInPlace(ListObject *self, PyObject *obj)
     return (PyObject *)(self);
 }
 
+static char *ListAttrs[] = {
+    "locked",
+    NULL
+};
+
+    static PyObject *
+ListDir(PyObject *self)
+{
+    return ObjectDir(self, ListAttrs);
+}
+
     static int
 ListSetattr(ListObject *self, char *name, PyObject *val)
 {
@@ -1379,8 +1467,9 @@ ListSetattr(ListObject *self, char *name, PyObject *val)
 }
 
 static struct PyMethodDef ListMethods[] = {
-    {"extend",	(PyCFunction)ListConcatInPlace,	METH_O,	""},
-    { NULL,	NULL,				0,	NULL }
+    {"extend",	(PyCFunction)ListConcatInPlace,	METH_O,		""},
+    {"__dir__",	(PyCFunction)ListDir,		METH_NOARGS,	""},
+    { NULL,	NULL,				0,		NULL}
 };
 
 typedef struct
@@ -1417,6 +1506,17 @@ FunctionDestructor(FunctionObject *self)
     PyMem_Free(self->name);
 
     DESTRUCTOR_FINISH(self);
+}
+
+static char *FunctionAttrs[] = {
+    "softspace",
+    NULL
+};
+
+    static PyObject *
+FunctionDir(PyObject *self)
+{
+    return ObjectDir(self, FunctionAttrs);
 }
 
     static PyObject *
@@ -1483,8 +1583,9 @@ FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
 }
 
 static struct PyMethodDef FunctionMethods[] = {
-    {"__call__",    (PyCFunction)FunctionCall,	METH_VARARGS|METH_KEYWORDS, ""},
-    { NULL,	    NULL,			0,			   NULL}
+    {"__call__",(PyCFunction)FunctionCall,  METH_VARARGS|METH_KEYWORDS,	""},
+    {"__dir__",	(PyCFunction)FunctionDir,   METH_NOARGS,		""},
+    { NULL,	NULL,			0,				NULL}
 };
 
 /*
@@ -1853,6 +1954,17 @@ TabPageDestructor(TabPageObject *self)
     DESTRUCTOR_FINISH(self);
 }
 
+static char *TabPageAttrs[] = {
+    "windows", "number", "vars", "window", "valid",
+    NULL
+};
+
+    static PyObject *
+TabPageDir(PyObject *self)
+{
+    return ObjectDir(self, TabPageAttrs);
+}
+
     static PyObject *
 TabPageAttrValid(TabPageObject *self, char *name)
 {
@@ -1884,6 +1996,8 @@ TabPageAttr(TabPageObject *self, char *name)
 	else
 	    return WindowNew(self->tab->tp_curwin, self->tab);
     }
+    else if (strcmp(name, "__members__") == 0)
+	return ObjectDir(NULL, TabPageAttrs);
     return NULL;
 }
 
@@ -1912,8 +2026,9 @@ TabPageRepr(TabPageObject *self)
 }
 
 static struct PyMethodDef TabPageMethods[] = {
-    /* name,	    function,		calling,    documentation */
-    { NULL,	    NULL,		0,	    NULL }
+    /* name,	    function,			calling,	documentation */
+    {"__dir__",	    (PyCFunction)TabPageDir,	METH_NOARGS,	""},
+    { NULL,	    NULL,			0,		NULL}
 };
 
 /*
@@ -2060,6 +2175,17 @@ get_firstwin(TabPageObject *tabObject)
     else
 	return firstwin;
 }
+static char *WindowAttrs[] = {
+    "buffer", "cursor", "height", "vars", "options", "number", "row", "col",
+    "tabpage", "valid",
+    NULL
+};
+
+    static PyObject *
+WindowDir(PyObject *self)
+{
+    return ObjectDir(self, WindowAttrs);
+}
 
     static PyObject *
 WindowAttrValid(WindowObject *self, char *name)
@@ -2114,9 +2240,8 @@ WindowAttr(WindowObject *self, char *name)
 	Py_INCREF(self->tabObject);
 	return (PyObject *)(self->tabObject);
     }
-    else if (strcmp(name,"__members__") == 0)
-	return Py_BuildValue("[ssssssssss]", "buffer", "cursor", "height",
-		"vars", "options", "number", "row", "col", "tabpage", "valid");
+    else if (strcmp(name, "__members__") == 0)
+	return ObjectDir(NULL, WindowAttrs);
     else
 	return NULL;
 }
@@ -2239,8 +2364,9 @@ WindowRepr(WindowObject *self)
 }
 
 static struct PyMethodDef WindowMethods[] = {
-    /* name,	    function,		calling,    documentation */
-    { NULL,	    NULL,		0,	    NULL }
+    /* name,	    function,			calling,	documentation */
+    {"__dir__",	    (PyCFunction)WindowDir,	METH_NOARGS,	""},
+    { NULL,	    NULL,			0,		NULL}
 };
 
 /*
@@ -3133,6 +3259,17 @@ RangeSlice(RangeObject *self, PyInt lo, PyInt hi)
     return RBSlice(self->buf, lo, hi, self->start, self->end);
 }
 
+static char *RangeAttrs[] = {
+    "start", "end",
+    NULL
+};
+
+    static PyObject *
+RangeDir(PyObject *self)
+{
+    return ObjectDir(self, RangeAttrs);
+}
+
     static PyObject *
 RangeAppend(RangeObject *self, PyObject *args)
 {
@@ -3173,7 +3310,8 @@ RangeRepr(RangeObject *self)
 static struct PyMethodDef RangeMethods[] = {
     /* name,	function,			calling,	documentation */
     {"append",	(PyCFunction)RangeAppend,	METH_VARARGS,	"Append data to the Vim range" },
-    { NULL,	NULL,				0,		NULL }
+    {"__dir__",	(PyCFunction)RangeDir,		METH_NOARGS,	""},
+    { NULL,	NULL,				0,		NULL}
 };
 
 static PyTypeObject BufferType;
@@ -3250,6 +3388,17 @@ BufferSlice(BufferObject *self, PyInt lo, PyInt hi)
     return RBSlice(self, lo, hi, 1, -1);
 }
 
+static char *BufferAttrs[] = {
+    "name", "number", "vars", "options", "valid",
+    NULL
+};
+
+    static PyObject *
+BufferDir(PyObject *self)
+{
+    return ObjectDir(self, BufferAttrs);
+}
+
     static PyObject *
 BufferAttrValid(BufferObject *self, char *name)
 {
@@ -3276,9 +3425,8 @@ BufferAttr(BufferObject *self, char *name)
     else if (strcmp(name, "options") == 0)
 	return OptionsNew(SREQ_BUF, self->buf, (checkfun) CheckBuffer,
 			(PyObject *) self);
-    else if (strcmp(name,"__members__") == 0)
-	return Py_BuildValue("[sssss]", "name", "number", "vars", "options",
-		"valid");
+    else if (strcmp(name, "__members__") == 0)
+	return ObjectDir(NULL, BufferAttrs);
     else
 	return NULL;
 }
@@ -3421,10 +3569,8 @@ static struct PyMethodDef BufferMethods[] = {
     {"append",	    (PyCFunction)BufferAppend,	METH_VARARGS,	"Append data to Vim buffer" },
     {"mark",	    (PyCFunction)BufferMark,	METH_VARARGS,	"Return (row,col) representing position of named mark" },
     {"range",	    (PyCFunction)BufferRange,	METH_VARARGS,	"Return a range object which represents the part of the given buffer between line numbers s and e" },
-#if PY_VERSION_HEX >= 0x03000000
-    {"__dir__",	    (PyCFunction)BufferDir,	METH_NOARGS,	"List buffer attributes" },
-#endif
-    { NULL,	    NULL,			0,		NULL }
+    {"__dir__",	    (PyCFunction)BufferDir,	METH_NOARGS,	""},
+    { NULL,	    NULL,			0,		NULL}
 };
 
 /*
@@ -3556,6 +3702,17 @@ static PyMappingMethods BufMapAsMapping = {
 /* Current items object
  */
 
+static char *CurrentAttrs[] = {
+    "buffer", "window", "line", "range", "tabpage",
+    NULL
+};
+
+    static PyObject *
+CurrentDir(PyObject *self)
+{
+    return ObjectDir(self, CurrentAttrs);
+}
+
     static PyObject *
 CurrentGetattr(PyObject *self UNUSED, char *name)
 {
@@ -3569,14 +3726,14 @@ CurrentGetattr(PyObject *self UNUSED, char *name)
 	return GetBufferLine(curbuf, (PyInt)curwin->w_cursor.lnum);
     else if (strcmp(name, "range") == 0)
 	return RangeNew(curbuf, RangeStart, RangeEnd);
-    else if (strcmp(name,"__members__") == 0)
-	return Py_BuildValue("[sssss]", "buffer", "window", "line", "range",
-		"tabpage");
+    else if (strcmp(name, "__members__") == 0)
+	return ObjectDir(NULL, CurrentAttrs);
     else
-    {
-	PyErr_SetString(PyExc_AttributeError, name);
+#if PY_MAJOR_VERSION < 3
+	return Py_FindMethod(WindowMethods, self, name);
+#else
 	return NULL;
-    }
+#endif
 }
 
     static int
@@ -3678,6 +3835,12 @@ CurrentSetattr(PyObject *self UNUSED, char *name, PyObject *value)
 	return -1;
     }
 }
+
+static struct PyMethodDef CurrentMethods[] = {
+    /* name,	    function,			calling,	documentation */
+    {"__dir__",	    (PyCFunction)CurrentDir,	METH_NOARGS,	""},
+    { NULL,	    NULL,			0,		NULL}
+};
 
     static void
 init_range_cmd(exarg_T *eap)
@@ -4475,6 +4638,7 @@ init_structs(void)
     CurrentType.tp_basicsize = sizeof(CurrentObject);
     CurrentType.tp_flags = Py_TPFLAGS_DEFAULT;
     CurrentType.tp_doc = "vim current object";
+    CurrentType.tp_methods = CurrentMethods;
 #if PY_MAJOR_VERSION >= 3
     CurrentType.tp_getattro = (getattrofunc)CurrentGetattro;
     CurrentType.tp_setattro = (setattrofunc)CurrentSetattro;
