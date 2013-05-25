@@ -670,6 +670,7 @@ static PyObject *BufferDir(PyObject *);
 static PyObject *OutputGetattro(PyObject *, PyObject *);
 static int OutputSetattro(PyObject *, PyObject *, PyObject *);
 static PyObject *BufferGetattro(PyObject *, PyObject *);
+static int BufferSetattro(PyObject *, PyObject *, PyObject *);
 static PyObject *TabPageGetattro(PyObject *, PyObject *);
 static PyObject *WindowGetattro(PyObject *, PyObject *);
 static int WindowSetattro(PyObject *, PyObject *, PyObject *);
@@ -1080,6 +1081,14 @@ BufferGetattro(PyObject *self, PyObject*nameobj)
 	return r;
     else
 	return PyObject_GenericGetAttr(self, nameobj);
+}
+
+    static int
+BufferSetattro(PyObject *self, PyObject *nameobj, PyObject *val)
+{
+    GET_ATTR_STRING(name, nameobj);
+
+    return BufferSetattr((BufferObject *)(self), name, val);
 }
 
     static PyObject *

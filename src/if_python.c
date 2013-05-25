@@ -935,7 +935,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     else
     {
 	/* Need to make a copy, value may change when setting new locale. */
-	saved_locale = (char *)vim_strsave((char_u *)saved_locale);
+	saved_locale = (char *) PY_STRSAVE(saved_locale);
 	(void)setlocale(LC_NUMERIC, "C");
     }
 #endif
@@ -962,7 +962,7 @@ DoPyCommand(const char *cmd, rangeinitializer init_range, runner run, void *arg)
     if (saved_locale != NULL)
     {
 	(void)setlocale(LC_NUMERIC, saved_locale);
-	vim_free(saved_locale);
+	PyMem_Free(saved_locale);
     }
 #endif
 
