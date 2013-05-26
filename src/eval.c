@@ -810,6 +810,7 @@ static int
 # endif
 	prof_self_cmp __ARGS((const void *s1, const void *s2));
 #endif
+static int script_autoload __ARGS((char_u *name, int reload));
 static char_u *autoload_name __ARGS((char_u *name));
 static void cat_func_name __ARGS((char_u *buf, ufunc_T *fp));
 static void func_free __ARGS((ufunc_T *fp));
@@ -828,10 +829,6 @@ static void setwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
 static int compare_func_name __ARGS((const void *s1, const void *s2));
 static void sortFunctions __ARGS(());
 #endif
-
-
-/* Character used as separated in autoload function/variable names. */
-#define AUTOLOAD_CHAR '#'
 
 /*
  * Initialize the global and v: variables.
@@ -21929,6 +21926,16 @@ free_all_functions()
 }
 #endif
 
+    int
+translated_function_exists(name)
+    char_u	*name;
+{
+    if (builtin_function(name))
+	return (find_internal_func(name) >= 0);
+    else
+	return (find_func(name) != NULL);
+}
+
 /*
  * Return TRUE if a function "name" exists.
  */
@@ -21946,12 +21953,7 @@ function_exists(name)
     /* Only accept "funcname", "funcname ", "funcname (..." and
      * "funcname(...", not "funcname!...". */
     if (p != NULL && (*nm == NUL || *nm == '('))
-    {
-	if (builtin_function(p))
-	    n = (find_internal_func(p) >= 0);
-	else
-	    n = (find_func(p) != NULL);
-    }
+	n = translated_function_exists(p);
     vim_free(p);
     return n;
 }
@@ -21967,18 +21969,9 @@ get_expanded_name(name, check)
     p = trans_function_name(&nm, FALSE, TFN_INT|TFN_QUIET, NULL);
 
     if (p != NULL && *nm == NUL)
-    {
-	if (!check)
+	if (!check || translated_function_exists(p))
 	    return p;
-	else if (builtin_function(p))
-	{
-	    if (find_internal_func(p) >= 0)
-		return p;
-	}
-	else
-	    if (find_func(p) != NULL)
-		return p;
-    }
+
     vim_free(p);
     return NULL;
 }
@@ -22191,7 +22184,7 @@ prof_self_cmp(s1, s2)
  * If "name" has a package name try autoloading the script for it.
  * Return TRUE if a package was loaded.
  */
-    int
+    static int
 script_autoload(name, reload)
     char_u	*name;
     int		reload;	    /* load script again when already loaded */
