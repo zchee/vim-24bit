@@ -530,8 +530,14 @@ vim.List object					*python-List*
     following methods:
         Method          Description ~
         extend(item)    Add items to the list.
+
+        __new__(), __new__(iterable)
+                        You can use `vim.List()` to create new vim lists. 
+                        `l=vim.List(iterable)` is the same as 
+                        `l=vim.bindeval('[]');l.extend(iterable)`. Without 
+                        arguments constructs empty list.
     Examples: >
-        l = vim.bindeval('[]')
+        l = vim.List("abc")		# Constructor, result: ['a', 'b', 'c']
         l.extend(['abc', 'def'])	# .extend() method
         print l[1:]			# slicing
         l[:0] = ['ghi', 'jkl']		# slice assignment
@@ -539,6 +545,7 @@ vim.List object					*python-List*
         l[0] = 'mno'			# assignment
         for i in l:			# iteration
         print isinstance(l, vim.List)	# True
+        class List(vim.List):		# Subclassing
 
 vim.Function object				*python-Function*
     Function-like object, acting like vim |Funcref| object. Supports `.name` 
