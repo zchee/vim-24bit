@@ -784,8 +784,8 @@ def subexpr_test(expr, name, subexprs):
 def stringtochars_test(expr):
     return subexpr_test(expr, 'StringToChars', (
         '1',       # Fail type checks
-        'u"\\0"',  # Fail PyString_AsStringAndSize(bytes, , NULL) check
-        '"\\0"',   # Fail PyString_AsStringAndSize(object, , NULL) check
+        'b"\\0"',  # Fail PyString_AsStringAndSize(object, , NULL) check
+        '"\\0"',   # Fail PyString_AsStringAndSize(bytes, , NULL) check
     ))
 
 class Mapping(object):
