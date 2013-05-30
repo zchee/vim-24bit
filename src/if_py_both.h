@@ -4528,7 +4528,7 @@ pydict_to_tv(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
     PyObject	*valObject;
     Py_ssize_t	iter = 0;
 
-    if (!(dict = dict_alloc()))
+    if (!(dict = py_dict_alloc()))
 	return -1;
 
     tv->v_type = VAR_DICT;
@@ -4600,7 +4600,7 @@ pymap_to_tv(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
     PyObject	*keyObject;
     PyObject	*valObject;
 
-    if (!(dict = dict_alloc()))
+    if (!(dict = py_dict_alloc()))
 	return -1;
 
     tv->v_type = VAR_DICT;
