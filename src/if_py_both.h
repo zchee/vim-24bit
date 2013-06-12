@@ -284,9 +284,9 @@ writer(writefn fn, char_u *str, PyInt n)
     static PyObject *
 OutputWrite(OutputObject *self, PyObject *args)
 {
-    Py_ssize_t len = 0;
-    char *str = NULL;
-    int error = self->error;
+    int		len = 0;
+    char	*str = NULL;
+    int		error = self->error;
 
     if (!PyArg_ParseTuple(args, "et#", ENC_OPT, &str, &len))
 	return NULL;
@@ -308,7 +308,7 @@ OutputWritelines(OutputObject *self, PyObject *args)
     PyObject	*seq;
     PyObject	*iterator;
     PyObject	*item;
-    int error = self->error;
+    int		error = self->error;
 
     if (!PyArg_ParseTuple(args, "O", &seq))
 	return NULL;
@@ -318,8 +318,8 @@ OutputWritelines(OutputObject *self, PyObject *args)
 
     while ((item = PyIter_Next(iterator)))
     {
-	char *str = NULL;
-	PyInt len;
+	char	*str = NULL;
+	int	len = 0;
 
 	if (!PyArg_Parse(item, "et#", ENC_OPT, &str, &len))
 	{
