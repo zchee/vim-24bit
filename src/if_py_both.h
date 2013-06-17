@@ -3357,7 +3357,7 @@ WindowSetattr(WindowObject *self, char *name, PyObject *valObject)
 	long	height;
 	win_T	*savewin;
 
-	if (NumberToLong(valObject, &height, NUMBER_INT))
+	if (NumberToLong(valObject, &height, NUMBER_INT|NUMBER_UNSIGNED))
 	    return -1;
 
 #ifdef FEAT_GUI
@@ -3380,7 +3380,7 @@ WindowSetattr(WindowObject *self, char *name, PyObject *valObject)
 	long	width;
 	win_T	*savewin;
 
-	if (NumberToLong(valObject, &width, NUMBER_INT))
+	if (NumberToLong(valObject, &width, NUMBER_INT|NUMBER_UNSIGNED))
 	    return -1;
 
 #ifdef FEAT_GUI

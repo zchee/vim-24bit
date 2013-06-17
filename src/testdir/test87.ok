@@ -430,7 +430,16 @@ test87.in
 > Output
 >> OutputSetattr
 del sys.stdout.softspace:(<class 'AttributeError'>, AttributeError("can't delete OutputObject attributes",))
+>>> Testing NumberToLong using sys.stdout.softspace = %s
 sys.stdout.softspace = []:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got list',))
+sys.stdout.softspace = None:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
+sys.stdout.softspace = -1:(<class 'ValueError'>, ValueError('number must be greater or equal to zero',))
+<<< Finished
+>>> Testing NumberToLong using sys.stderr.softspace = %s
+sys.stderr.softspace = []:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got list',))
+sys.stderr.softspace = None:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
+sys.stderr.softspace = -1:(<class 'ValueError'>, ValueError('number must be greater or equal to zero',))
+<<< Finished
 sys.stdout.attr = None:(<class 'AttributeError'>, AttributeError('invalid attribute: attr',))
 >> OutputWrite
 sys.stdout.write(None):(<class 'TypeError'>, TypeError("Can't convert 'NoneType' object to str implicitly",))
@@ -442,14 +451,42 @@ sys.stdout.writelines(FailingIter()):(<class 'NotImplementedError'>, NotImplemen
 sys.stdout.writelines(FailingIterNext()):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 > VimCommand
+>>> Testing StringToChars using vim.command(%s)
 vim.command(1):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+vim.command(b"\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+vim.command("\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
+vim.command("", 2):(<class 'TypeError'>, TypeError('command() takes exactly one argument (2 given)',))
 > VimToPython
 > VimEval
+>>> Testing StringToChars using vim.eval(%s)
 vim.eval(1):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+vim.eval(b"\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+vim.eval("\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
+vim.eval("", FailingTrue()):(<class 'TypeError'>, TypeError('function takes exactly 1 argument (2 given)',))
 > VimEvalPy
+>>> Testing StringToChars using vim.bindeval(%s)
 vim.bindeval(1):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+vim.bindeval(b"\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+vim.bindeval("\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
+vim.eval("", 2):(<class 'TypeError'>, TypeError('function takes exactly 1 argument (2 given)',))
 > VimStrwidth
+>>> Testing StringToChars using vim.strwidth(%s)
 vim.strwidth(1):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+vim.strwidth(b"\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+vim.strwidth("\0"):(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
+> VimForeachRTP
+vim.foreach_rtp(None):(<class 'TypeError'>, TypeError("'NoneType' object is not callable",))
+vim.foreach_rtp(NoArgsCall()):(<class 'TypeError'>, TypeError('__call__() takes exactly 1 positional argument (2 given)',))
+vim.foreach_rtp(FailingCall()):(<class 'NotImplementedError'>, NotImplementedError())
+vim.foreach_rtp(int, 2):(<class 'TypeError'>, TypeError('foreach_rtp() takes exactly one argument (2 given)',))
+> import
+import xxx_no_such_module_xxx:(<class 'ImportError'>, ImportError('No module named xxx_no_such_module_xxx',))
+import failing_import:(<class 'ImportError'>, ImportError('No module named failing_import',))
+import failing:(<class 'ImportError'>, ImportError('No module named failing',))
 > Dictionary
 >> DictionaryConstructor
 vim.Dictionary("abcI"):(<class 'ValueError'>, ValueError('expected sequence element of size 2, but got sequence of size 1',))
@@ -502,6 +539,7 @@ d["a"] = {"abcF" : {b"": 1}}:(<class 'ValueError'>, ValueError('empty keys are n
 d["a"] = {"abcF" : {"": 1}}:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d["a"] = {"abcF" : FailingMapping()}:(<class 'NotImplementedError'>, NotImplementedError())
 d["a"] = {"abcF" : FailingMappingKey()}:(<class 'NotImplementedError'>, NotImplementedError())
+d["a"] = {"abcF" : FailingNumber()}:(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using d["a"] = Mapping({%s : 1})
 d["a"] = Mapping({1 : 1}):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -528,6 +566,7 @@ d["a"] = Mapping({"abcG" : {b"": 1}}):(<class 'ValueError'>, ValueError('empty k
 d["a"] = Mapping({"abcG" : {"": 1}}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d["a"] = Mapping({"abcG" : FailingMapping()}):(<class 'NotImplementedError'>, NotImplementedError())
 d["a"] = Mapping({"abcG" : FailingMappingKey()}):(<class 'NotImplementedError'>, NotImplementedError())
+d["a"] = Mapping({"abcG" : FailingNumber()}):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using d["a"] = %s
 d["a"] = FailingIter():(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -539,6 +578,7 @@ d["a"] = {b"": 1}:(<class 'ValueError'>, ValueError('empty keys are not allowed'
 d["a"] = {"": 1}:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d["a"] = FailingMapping():(<class 'NotImplementedError'>, NotImplementedError())
 d["a"] = FailingMappingKey():(<class 'NotImplementedError'>, NotImplementedError())
+d["a"] = FailingNumber():(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >> DictionaryUpdate
 >>> kwargs
@@ -574,6 +614,7 @@ d.update({"abcF" : {b"": 1}}):(<class 'ValueError'>, ValueError('empty keys are 
 d.update({"abcF" : {"": 1}}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update({"abcF" : FailingMapping()}):(<class 'NotImplementedError'>, NotImplementedError())
 d.update({"abcF" : FailingMappingKey()}):(<class 'NotImplementedError'>, NotImplementedError())
+d.update({"abcF" : FailingNumber()}):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using d.update(Mapping({%s : 1}))
 d.update(Mapping({1 : 1})):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -600,6 +641,7 @@ d.update(Mapping({"abcG" : {b"": 1}})):(<class 'ValueError'>, ValueError('empty 
 d.update(Mapping({"abcG" : {"": 1}})):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update(Mapping({"abcG" : FailingMapping()})):(<class 'NotImplementedError'>, NotImplementedError())
 d.update(Mapping({"abcG" : FailingMappingKey()})):(<class 'NotImplementedError'>, NotImplementedError())
+d.update(Mapping({"abcG" : FailingNumber()})):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using d.update(%s)
 d.update(FailingIter()):(<class 'NotImplementedError'>, NotImplementedError())
@@ -611,6 +653,7 @@ d.update({b"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed
 d.update({"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update(FailingMapping()):(<class 'NotImplementedError'>, NotImplementedError())
 d.update(FailingMappingKey()):(<class 'NotImplementedError'>, NotImplementedError())
+d.update(FailingNumber()):(<class 'TypeError'>, TypeError("'FailingNumber' object is not iterable",))
 <<< Finished
 >>> Testing StringToChars using d.update(((%s, 0),))
 d.update(((1, 0),)):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -642,6 +685,7 @@ d.update((("a", {"abcF" : {b"": 1}}),)):(<class 'ValueError'>, ValueError('empty
 d.update((("a", {"abcF" : {"": 1}}),)):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update((("a", {"abcF" : FailingMapping()}),)):(<class 'NotImplementedError'>, NotImplementedError())
 d.update((("a", {"abcF" : FailingMappingKey()}),)):(<class 'NotImplementedError'>, NotImplementedError())
+d.update((("a", {"abcF" : FailingNumber()}),)):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using d.update((("a", Mapping({%s : 1})),))
 d.update((("a", Mapping({1 : 1})),)):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -668,6 +712,7 @@ d.update((("a", Mapping({"abcG" : {b"": 1}})),)):(<class 'ValueError'>, ValueErr
 d.update((("a", Mapping({"abcG" : {"": 1}})),)):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update((("a", Mapping({"abcG" : FailingMapping()})),)):(<class 'NotImplementedError'>, NotImplementedError())
 d.update((("a", Mapping({"abcG" : FailingMappingKey()})),)):(<class 'NotImplementedError'>, NotImplementedError())
+d.update((("a", Mapping({"abcG" : FailingNumber()})),)):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using d.update((("a", %s),))
 d.update((("a", FailingIter()),)):(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -679,6 +724,7 @@ d.update((("a", {b"": 1}),)):(<class 'ValueError'>, ValueError('empty keys are n
 d.update((("a", {"": 1}),)):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 d.update((("a", FailingMapping()),)):(<class 'NotImplementedError'>, NotImplementedError())
 d.update((("a", FailingMappingKey()),)):(<class 'NotImplementedError'>, NotImplementedError())
+d.update((("a", FailingNumber()),)):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >> DictionaryPopItem
 d.popitem(1, 2):(<class 'TypeError'>, TypeError('popitem() takes no arguments (2 given)',))
@@ -717,6 +763,7 @@ vim.List([{"abcF" : {b"": 1}}]):(<class 'ValueError'>, ValueError('empty keys ar
 vim.List([{"abcF" : {"": 1}}]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 vim.List([{"abcF" : FailingMapping()}]):(<class 'NotImplementedError'>, NotImplementedError())
 vim.List([{"abcF" : FailingMappingKey()}]):(<class 'NotImplementedError'>, NotImplementedError())
+vim.List([{"abcF" : FailingNumber()}]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using vim.List([Mapping({%s : 1})])
 vim.List([Mapping({1 : 1})]):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -743,6 +790,7 @@ vim.List([Mapping({"abcG" : {b"": 1}})]):(<class 'ValueError'>, ValueError('empt
 vim.List([Mapping({"abcG" : {"": 1}})]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 vim.List([Mapping({"abcG" : FailingMapping()})]):(<class 'NotImplementedError'>, NotImplementedError())
 vim.List([Mapping({"abcG" : FailingMappingKey()})]):(<class 'NotImplementedError'>, NotImplementedError())
+vim.List([Mapping({"abcG" : FailingNumber()})]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using vim.List([%s])
 vim.List([FailingIter()]):(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -754,6 +802,7 @@ vim.List([{b"": 1}]):(<class 'ValueError'>, ValueError('empty keys are not allow
 vim.List([{"": 1}]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 vim.List([FailingMapping()]):(<class 'NotImplementedError'>, NotImplementedError())
 vim.List([FailingMappingKey()]):(<class 'NotImplementedError'>, NotImplementedError())
+vim.List([FailingNumber()]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >> ListItem
 l[1000]:(<class 'IndexError'>, IndexError('list index out of range',))
@@ -791,6 +840,7 @@ l[:] = [{"abcF" : {b"": 1}}]:(<class 'ValueError'>, ValueError('empty keys are n
 l[:] = [{"abcF" : {"": 1}}]:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l[:] = [{"abcF" : FailingMapping()}]:(<class 'NotImplementedError'>, NotImplementedError())
 l[:] = [{"abcF" : FailingMappingKey()}]:(<class 'NotImplementedError'>, NotImplementedError())
+l[:] = [{"abcF" : FailingNumber()}]:(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using l[:] = [Mapping({%s : 1})]
 l[:] = [Mapping({1 : 1})]:(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -817,6 +867,7 @@ l[:] = [Mapping({"abcG" : {b"": 1}})]:(<class 'ValueError'>, ValueError('empty k
 l[:] = [Mapping({"abcG" : {"": 1}})]:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l[:] = [Mapping({"abcG" : FailingMapping()})]:(<class 'NotImplementedError'>, NotImplementedError())
 l[:] = [Mapping({"abcG" : FailingMappingKey()})]:(<class 'NotImplementedError'>, NotImplementedError())
+l[:] = [Mapping({"abcG" : FailingNumber()})]:(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using l[:] = [%s]
 l[:] = [FailingIter()]:(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -828,6 +879,7 @@ l[:] = [{b"": 1}]:(<class 'ValueError'>, ValueError('empty keys are not allowed'
 l[:] = [{"": 1}]:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l[:] = [FailingMapping()]:(<class 'NotImplementedError'>, NotImplementedError())
 l[:] = [FailingMappingKey()]:(<class 'NotImplementedError'>, NotImplementedError())
+l[:] = [FailingNumber()]:(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >> ListConcatInPlace
 >>> Testing *Iter* using l.extend(%s)
@@ -859,6 +911,7 @@ l.extend([{"abcF" : {b"": 1}}]):(<class 'ValueError'>, ValueError('empty keys ar
 l.extend([{"abcF" : {"": 1}}]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l.extend([{"abcF" : FailingMapping()}]):(<class 'NotImplementedError'>, NotImplementedError())
 l.extend([{"abcF" : FailingMappingKey()}]):(<class 'NotImplementedError'>, NotImplementedError())
+l.extend([{"abcF" : FailingNumber()}]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using l.extend([Mapping({%s : 1})])
 l.extend([Mapping({1 : 1})]):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -885,6 +938,7 @@ l.extend([Mapping({"abcG" : {b"": 1}})]):(<class 'ValueError'>, ValueError('empt
 l.extend([Mapping({"abcG" : {"": 1}})]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l.extend([Mapping({"abcG" : FailingMapping()})]):(<class 'NotImplementedError'>, NotImplementedError())
 l.extend([Mapping({"abcG" : FailingMappingKey()})]):(<class 'NotImplementedError'>, NotImplementedError())
+l.extend([Mapping({"abcG" : FailingNumber()})]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using l.extend([%s])
 l.extend([FailingIter()]):(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -896,6 +950,7 @@ l.extend([{b"": 1}]):(<class 'ValueError'>, ValueError('empty keys are not allow
 l.extend([{"": 1}]):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 l.extend([FailingMapping()]):(<class 'NotImplementedError'>, NotImplementedError())
 l.extend([FailingMappingKey()]):(<class 'NotImplementedError'>, NotImplementedError())
+l.extend([FailingNumber()]):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >> ListSetattr
 del l.locked:(<class 'AttributeError'>, AttributeError('cannot delete vim.List attributes',))
@@ -932,6 +987,7 @@ f({"abcF" : {b"": 1}}):(<class 'ValueError'>, ValueError('empty keys are not all
 f({"abcF" : {"": 1}}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 f({"abcF" : FailingMapping()}):(<class 'NotImplementedError'>, NotImplementedError())
 f({"abcF" : FailingMappingKey()}):(<class 'NotImplementedError'>, NotImplementedError())
+f({"abcF" : FailingNumber()}):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using f(Mapping({%s : 1}))
 f(Mapping({1 : 1})):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -958,6 +1014,7 @@ f(Mapping({"abcG" : {b"": 1}})):(<class 'ValueError'>, ValueError('empty keys ar
 f(Mapping({"abcG" : {"": 1}})):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 f(Mapping({"abcG" : FailingMapping()})):(<class 'NotImplementedError'>, NotImplementedError())
 f(Mapping({"abcG" : FailingMappingKey()})):(<class 'NotImplementedError'>, NotImplementedError())
+f(Mapping({"abcG" : FailingNumber()})):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using f(%s)
 f(FailingIter()):(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim structure',))
@@ -969,6 +1026,7 @@ f({b"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 f({"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 f(FailingMapping()):(<class 'NotImplementedError'>, NotImplementedError())
 f(FailingMappingKey()):(<class 'NotImplementedError'>, NotImplementedError())
+f(FailingNumber()):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using fd(self={%s : 1})
 fd(self={1 : 1}):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -995,6 +1053,7 @@ fd(self={"abcF" : {b"": 1}}):(<class 'ValueError'>, ValueError('empty keys are n
 fd(self={"abcF" : {"": 1}}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 fd(self={"abcF" : FailingMapping()}):(<class 'NotImplementedError'>, NotImplementedError())
 fd(self={"abcF" : FailingMappingKey()}):(<class 'NotImplementedError'>, NotImplementedError())
+fd(self={"abcF" : FailingNumber()}):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing StringToChars using fd(self=Mapping({%s : 1}))
 fd(self=Mapping({1 : 1})):(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
@@ -1021,6 +1080,7 @@ fd(self=Mapping({"abcG" : {b"": 1}})):(<class 'ValueError'>, ValueError('empty k
 fd(self=Mapping({"abcG" : {"": 1}})):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 fd(self=Mapping({"abcG" : FailingMapping()})):(<class 'NotImplementedError'>, NotImplementedError())
 fd(self=Mapping({"abcG" : FailingMappingKey()})):(<class 'NotImplementedError'>, NotImplementedError())
+fd(self=Mapping({"abcG" : FailingNumber()})):(<class 'NotImplementedError'>, NotImplementedError())
 <<< Finished
 >>> Testing *Iter* using fd(self=%s)
 fd(self=FailingIter()):(<class 'TypeError'>, TypeError('unable to convert FailingIter to vim dictionary',))
@@ -1032,6 +1092,7 @@ fd(self={b"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed'
 fd(self={"": 1}):(<class 'ValueError'>, ValueError('empty keys are not allowed',))
 fd(self=FailingMapping()):(<class 'NotImplementedError'>, NotImplementedError())
 fd(self=FailingMappingKey()):(<class 'NotImplementedError'>, NotImplementedError())
+fd(self=FailingNumber()):(<class 'TypeError'>, TypeError('unable to convert FailingNumber to vim dictionary',))
 <<< Finished
 >>> Testing ConvertFromPyMapping using fd(self=%s)
 fd(self=[]):(<class 'AttributeError'>, AttributeError('keys',))
@@ -1049,8 +1110,16 @@ vim.current.window.xxx:(<class 'AttributeError'>, AttributeError("'vim.window' o
 vim.current.window.buffer = 0:(<class 'TypeError'>, TypeError('readonly attribute: buffer',))
 vim.current.window.cursor = (100000000, 100000000):(<class 'vim.error'>, error('cursor position outside buffer',))
 vim.current.window.cursor = True:(<class 'TypeError'>, TypeError('argument must be 2-item sequence, not bool',))
-vim.current.window.height = "abcK":(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got str',))
-vim.current.window.width  = "abcL":(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got str',))
+>>> Testing NumberToLong using vim.current.window.height = %s
+vim.current.window.height = []:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got list',))
+vim.current.window.height = None:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
+vim.current.window.height = -1:(<class 'ValueError'>, ValueError('number must be greater or equal to zero',))
+<<< Finished
+>>> Testing NumberToLong using vim.current.window.width = %s
+vim.current.window.width = []:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got list',))
+vim.current.window.width = None:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
+vim.current.window.width = -1:(<class 'ValueError'>, ValueError('number must be greater or equal to zero',))
+<<< Finished
 vim.current.window.xxxxxx = True:(<class 'AttributeError'>, AttributeError('xxxxxx',))
 > WinList
 >> WinListItem
@@ -1058,6 +1127,7 @@ vim.windows[1000]:(<class 'IndexError'>, IndexError('no such window',))
 > Buffer
 >> StringToLine (indirect)
 vim.current.buffer[0] = "\na":(<class 'vim.error'>, error('string cannot contain newlines',))
+vim.current.buffer[0] = b"\na":(<class 'vim.error'>, error('string cannot contain newlines',))
 >> SetBufferLine (indirect)
 vim.current.buffer[0] = True:(<class 'TypeError'>, TypeError('bad argument type for built-in operation',))
 >> SetBufferLineList (indirect)
@@ -1084,8 +1154,13 @@ vim.current.buffer.mark("!"):(<class 'vim.error'>, error('invalid mark name',))
 vim.current.buffer.range(1, 2, 3):(<class 'TypeError'>, TypeError('function takes exactly 2 arguments (3 given)',))
 > BufMap
 >> BufMapItem
-vim.buffers[None]:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
 vim.buffers[100000000]:(<class 'KeyError'>, KeyError(100000000,))
+>>> Testing NumberToLong using vim.buffers[%s]
+vim.buffers[[]]:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got list',))
+vim.buffers[None]:(<class 'TypeError'>, TypeError('expected int() or something supporting coercing to int(), but got NoneType',))
+vim.buffers[-1]:(<class 'ValueError'>, ValueError('number must be greater then zero',))
+vim.buffers[0]:(<class 'ValueError'>, ValueError('number must be greater then zero',))
+<<< Finished
 > Current
 >> CurrentGetattr
 vim.current.xxx:(<class 'AttributeError'>, AttributeError("'vim.currentdata' object has no attribute 'xxx'",))
@@ -1095,9 +1170,14 @@ vim.current.buffer = True:(<class 'TypeError'>, TypeError('expected vim.Buffer o
 vim.current.window = True:(<class 'TypeError'>, TypeError('expected vim.Window object, but got bool',))
 vim.current.tabpage = True:(<class 'TypeError'>, TypeError('expected vim.TabPage object, but got bool',))
 vim.current.xxx = True:(<class 'AttributeError'>, AttributeError('xxx',))
+['.']
+'.'
 3,xx
 before
 after
+pythonx/topmodule/__init__.py
+pythonx/topmodule/submodule/__init__.py
+pythonx/topmodule/submodule/subsubmodule/subsubsubmodule.py
 vim.command("throw 'abcN'"):(<class 'vim.error'>, error('abcN',))
 Exe("throw 'def'"):(<class 'vim.error'>, error('def',))
 vim.eval("Exe('throw ''ghi''')"):(<class 'vim.error'>, error('ghi',))
