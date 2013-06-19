@@ -290,7 +290,7 @@ EOF
 :" threading
 :let l = [0]
 :py3 l=vim.bindeval('l')
-:py3 <<EOF
+py3 <<EOF
 import threading
 import time
 
@@ -320,7 +320,7 @@ EOF
 :" settrace
 :let l = []
 :py3 l=vim.bindeval('l')
-:py3 <<EOF
+py3 <<EOF
 import sys
 
 def traceit(frame, event, arg):
@@ -924,37 +924,37 @@ def number_test(expr, natural=False, unsigned=False):
 
 class FailingTrue(object):
     def __bool__(self):
-        raise NotImplementedError
+        raise NotImplementedError('bool')
 
 class FailingIter(object):
     def __iter__(self):
-        raise NotImplementedError
+        raise NotImplementedError('iter')
 
 class FailingIterNext(object):
     def __iter__(self):
         return self
 
     def __next__(self):
-        raise NotImplementedError
+        raise NotImplementedError('next')
 
 class FailingMappingKey(object):
     def __getitem__(self, item):
-        raise NotImplementedError
+        raise NotImplementedError('getitem:mappingkey')
 
     def keys(self):
         return list("abcH")
 
 class FailingMapping(object):
     def __getitem__(self):
-        raise NotImplementedError
+        raise NotImplementedError('getitem:mapping')
 
     def keys(self):
-        raise NotImplementedError
+        raise NotImplementedError('keys')
 
 class FailingList(list):
     def __getitem__(self, idx):
         if i == 2:
-            raise NotImplementedError
+            raise NotImplementedError('getitem:list')
         else:
             return super(FailingList, self).__getitem__(idx)
 
@@ -964,11 +964,11 @@ class NoArgsCall(object):
 
 class FailingCall(object):
     def __call__(self, path):
-        raise NotImplementedError
+        raise NotImplementedError('call')
 
 class FailingNumber(object):
     def __int__(self):
-        raise NotImplementedError
+        raise NotImplementedError('int')
 
 cb.append("> Output")
 cb.append(">> OutputSetattr")
@@ -1251,6 +1251,7 @@ EOF
 :call garbagecollect(1)
 :"
 :/^start:/,$wq! test.out
+:" vim: et ts=4 isk-=\:
 :call getchar()
 ENDTEST
 

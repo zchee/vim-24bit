@@ -216,6 +216,7 @@ EOF
 :let messages=[]
 :delfunction DictNew
 py <<EOF
+import sys
 d=vim.bindeval('{}')
 m=vim.bindeval('messages')
 def em(expr, g=globals(), l=locals()):
@@ -297,7 +298,7 @@ EOF
 :" threading
 :let l = [0]
 :py l=vim.bindeval('l')
-:py <<EOF
+py <<EOF
 import threading
 import time
 
@@ -327,7 +328,7 @@ EOF
 :" settrace
 :let l = []
 :py l=vim.bindeval('l')
-:py <<EOF
+py <<EOF
 import sys
 
 def traceit(frame, event, arg):
@@ -880,10 +881,16 @@ def ee(expr, g=globals(), l=locals()):
         if expr.find('None') > -1:
             msg = msg.replace('TypeError:(\'iteration over non-sequence\',)',
                               'TypeError:("\'NoneType\' object is not iterable",)')
+        if expr.find('FailingNumber') > -1:
+            msg = msg.replace(', not \'FailingNumber\'', '').replace('"', '\'')
+            msg = msg.replace('TypeError:(\'iteration over non-sequence\',)',
+                              'TypeError:("\'FailingNumber\' object is not iterable",)')
+        if msg.find('(\'\'') > -1 or msg.find('(\'can\'t') > -1:
+            msg = msg.replace('(\'', '("').replace('\',)', '",)')
         if expr == 'fd(self=[])':
             # HACK: PyMapping_Check changed meaning
             msg = msg.replace('AttributeError:(\'keys\',)',
-                              'TypeError:(\'unable to convert object to vim dictionary\',)')
+                              'TypeError:(\'unable to convert list to vim dictionary\',)')
         cb.append(expr + ':' + msg)
     else:
         cb.append(expr + ':NOT FAILED')
@@ -968,37 +975,37 @@ def number_test(expr, natural=False, unsigned=False):
 
 class FailingTrue(object):
     def __nonzero__(self):
-        raise NotImplementedError
+        raise NotImplementedError('bool')
 
 class FailingIter(object):
     def __iter__(self):
-        raise NotImplementedError
+        raise NotImplementedError('iter')
 
 class FailingIterNext(object):
     def __iter__(self):
         return self
 
     def next(self):
-        raise NotImplementedError
+        raise NotImplementedError('next')
 
 class FailingMappingKey(object):
     def __getitem__(self, item):
-        raise NotImplementedError
+        raise NotImplementedError('getitem:mappingkey')
 
     def keys(self):
         return list("abcH")
 
 class FailingMapping(object):
     def __getitem__(self):
-        raise NotImplementedError
+        raise NotImplementedError('getitem:mapping')
 
     def keys(self):
-        raise NotImplementedError
+        raise NotImplementedError('keys')
 
 class FailingList(list):
     def __getitem__(self, idx):
         if i == 2:
-            raise NotImplementedError
+            raise NotImplementedError('getitem:list')
         else:
             return super(FailingList, self).__getitem__(idx)
 
@@ -1008,11 +1015,11 @@ class NoArgsCall(object):
 
 class FailingCall(object):
     def __call__(self, path):
-        raise NotImplementedError
+        raise NotImplementedError('call')
 
 class FailingNumber(object):
     def __int__(self):
-        raise NotImplementedError
+        raise NotImplementedError('int')
 
 cb.append("> Output")
 cb.append(">> OutputSetattr")
@@ -1295,6 +1302,7 @@ EOF
 :call garbagecollect(1)
 :"
 :/^start:/,$wq! test.out
+:" vim: et ts=4 isk-=\:
 :call getchar()
 ENDTEST
 

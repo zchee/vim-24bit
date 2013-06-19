@@ -1610,7 +1610,7 @@ DictionaryContains(DictionaryObject *self, PyObject *keyObject)
 
     ret = (rObj == Py_True);
 
-    Py_DECREF(Py_True);
+    Py_DECREF(rObj);
 
     return ret;
 }
@@ -1909,7 +1909,7 @@ DictionaryUpdate(DictionaryObject *self, PyObject *args, PyObject *kwargs)
 		    PyErr_FORMAT(PyExc_ValueError,
 			    "expected sequence element of size 2, "
 			    "but got sequence of size %d",
-			    PySequence_Fast_GET_SIZE(fast));
+			    (int) PySequence_Fast_GET_SIZE(fast));
 		    return NULL;
 		}
 
@@ -2433,6 +2433,10 @@ ListAssSlice(ListObject *self, Py_ssize_t first, Py_ssize_t last, PyObject *obj)
 	clear_tv(&v);
     }
     Py_DECREF(iterator);
+
+    if (PyErr_Occurred())
+	return -1;
+
     return 0;
 }
 
@@ -3514,7 +3518,7 @@ StringToLine(PyObject *obj)
     char	*str;
     char	*save;
     PyObject	*bytes = NULL;
-    Py_ssize_t	len;
+    Py_ssize_t	len = 0;
     PyInt	i;
     char	*p;
 
@@ -5479,6 +5483,7 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
 #endif
     else if (PyObject_HasAttrString(obj, "keys"))
 	return convert_dl(obj, tv, pymap_to_tv, lookup_dict);
+    /* PyObject_GetIter can create built-in iterator for any sequence object */
     else if (PyIter_Check(obj) || PySequence_Check(obj))
 	return convert_dl(obj, tv, pyseq_to_tv, lookup_dict);
     else if (PyMapping_Check(obj))
@@ -5926,11 +5931,8 @@ static struct object_constant {
     {"_Loader",    (PyObject *)&LoaderType},
 };
 
-typedef int (*object_adder)(PyObject *, const char *, PyObject *);
-typedef PyObject *(*attr_getter)(PyObject *, const char *);
-
 #define ADD_OBJECT(m, name, obj) \
-    if (add_object(m, name, obj)) \
+    if (PyModule_AddObject(m, name, obj)) \
 	return -1;
 
 #define ADD_CHECKED_OBJECT(m, name, obj) \
@@ -5942,7 +5944,7 @@ typedef PyObject *(*attr_getter)(PyObject *, const char *);
     }
 
     static int
-populate_module(PyObject *m, object_adder add_object, attr_getter get_attr)
+populate_module(PyObject *m)
 {
     int		i;
     PyObject	*other_module;
@@ -5986,7 +5988,7 @@ populate_module(PyObject *m, object_adder add_object, attr_getter get_attr)
     if (!(py_chdir = PyObject_GetAttrString(other_module, "chdir")))
 	return -1;
     ADD_OBJECT(m, "_chdir", py_chdir);
-    if (!(attr = get_attr(m, "chdir")))
+    if (!(attr = PyObject_GetAttrString(m, "chdir")))
 	return -1;
     if (PyObject_SetAttrString(other_module, "chdir", attr))
     {
@@ -5998,7 +6000,7 @@ populate_module(PyObject *m, object_adder add_object, attr_getter get_attr)
     if ((py_fchdir = PyObject_GetAttrString(other_module, "fchdir")))
     {
 	ADD_OBJECT(m, "_fchdir", py_fchdir);
-	if (!(attr = get_attr(m, "fchdir")))
+	if (!(attr = PyObject_GetAttrString(m, "fchdir")))
 	    return -1;
 	if (PyObject_SetAttrString(other_module, "fchdir", attr))
 	{
