@@ -1204,7 +1204,8 @@ eval_printexpr(fname, args)
 
     if (err)
     {
-	mch_remove(fname);
+	if (fname)
+	    mch_remove(fname);
 	return FAIL;
     }
     return OK;
