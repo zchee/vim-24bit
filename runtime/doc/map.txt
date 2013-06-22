@@ -655,17 +655,18 @@ option).  After that it assumes that the 'q' is to be interpreted as such.  If
 you type slowly, or your system is slow, reset the 'timeout' option.  Then you
 might want to set the 'ttimeout' option.
 
-                            				*map-precedence*
-Buffer-local mappings (defined using |:map-<buffer>|) take precedence over
-global mappings.  When a buffer-local mapping is the same as a global mapping,
-Vim will use the buffer-local mapping.  In addition, Vim will use a complete
-buffer-local mapping immediately, even if a longer global mapping has the
-buffer-local mapping as a prefix.  For example, given the following two
-mappings: >
+							*map-precedence*
+By default buffer-local mappings (defined using |:map-<buffer>|) take 
+precedence over global mappings.  When a buffer-local mapping is the same as 
+a global mapping, Vim will use the buffer-local mapping.  In addition, Vim 
+will use a complete buffer-local mapping immediately, even if a longer global 
+mapping has the buffer-local mapping as a prefix.  For example, given the 
+following two mappings: >
     :map <buffer> \a   :echo "Local \a"<CR>
     :map          \abc :echo "Global \abc"<CR>
 The buffer-local mapping \a will be used immediately.  Vim will not wait for
-more characters to see if the user might be typing \abc.
+more characters to see if the user might be typing \abc.  This behavior is 
+overridden by 'waitforglobalmap' option which will make vim wait for \abc.
 
 							*map-keys-fails*
 There are situations where key codes might not be recognized:

@@ -2131,7 +2131,8 @@ vgetorpeek(advance)
 				(mp = mp->m_next))
 			{
 #ifdef FEAT_LOCALMAP
-			    if (expecting_global_mappings && mp2 == NULL)
+			    if (!p_wgm
+				    && expecting_global_mappings && mp2 == NULL)
 			    {
 				/* This is the first global mapping. If we've
 				 * got a complete buffer-local match, use it. */
