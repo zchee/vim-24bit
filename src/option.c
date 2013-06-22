@@ -2871,6 +2871,13 @@ static struct vimoption
     {"writedelay",  "wd",   P_NUM|P_VI_DEF,
 			    (char_u *)&p_wd, PV_NONE,
 			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
+    {"waitforglobalmap", "wgm", P_BOOL,
+#ifdef FEAT_LOCALMAP
+			    (char_u *)&p_wgm, PV_NONE,
+#else
+			    (char_u *)NULL, PV_NONE,
+#endif
+			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
 
 /* terminal output codes */
 #define p_term(sss, vvv)   {sss, NULL, P_STRING|P_VI_DEF|P_RALL|P_SECURE, \

@@ -904,6 +904,9 @@ EXTERN int	p_write;	/* 'write' */
 EXTERN int	p_wa;		/* 'writeany' */
 EXTERN int	p_wb;		/* 'writebackup' */
 EXTERN long	p_wd;		/* 'writedelay' */
+#ifdef FEAT_LOCALMAP
+EXTERN int	p_wgm;		/* 'waitforglobalmap' */
+#endif
 
 /*
  * "indir" values for buffer-local opions.

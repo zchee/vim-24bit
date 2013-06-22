@@ -1808,9 +1808,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Keep in mind that the cursor position is not always where it's
 	displayed.  E.g., when moving vertically it may change column.
 
-
-'conceallevel' 'cole'		*'conceallevel'* *'cole'*
-			number (default 0)
+						*'conceallevel'* *'cole'*
+'conceallevel' 'cole'	number (default 0)
 			local to window
 			{not in Vi}
 			{not available when compiled without the |+conceal|
@@ -2186,7 +2185,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 
 						*'cryptmethod'* *'cm'*
-'cryptmethod'		string	(default "zip")
+'cryptmethod' 'cm'	string	(default "zip")
 			global or local to buffer |global-local|
 			{not in Vi}
 	Method used for encryption when the buffer is written to a file:
@@ -2235,7 +2234,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	security reasons.
 
 						*'cscopequickfix'* *'csqf'*
-'cscopequickfix' 'csqf' string	(default "")
+'cscopequickfix' 'csqf'	string	(default "")
 			global
 			{not available when compiled without the |+cscope|
 			or |+quickfix| features}
@@ -2244,7 +2243,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	See |cscopequickfix|.
 
 		*'cscoperelative'* *'csre'* *'nocscoperelative'* *'nocsre'*
-'cscoperelative' 'csre' boolean (default off)
+'cscoperelative' 'csre'	boolean (default off)
 			global
 			{not available when compiled without the |+cscope|
 			feature}
@@ -8246,5 +8245,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 	The number of microseconds to wait for each character sent to the
 	screen.  When non-zero, characters are sent to the terminal one by
 	one.  For MS-DOS pcterm this does not work.  For debugging purposes.
+
+					*'waitforglobalmap'* *'wgm'*
+					*'nowaitforglobalmap'* *'nowgm'*
+'waitforglobalmap' 'wgm' boolean (default off)
+			global
+			{not in Vi}
+	If set wait for global mapping even if full buffer-local mapping was 
+	already typed. Has effect if there is global mapping with lhs starting 
+	with lhs of |:map-<buffer>| mapping. See also |map-precedence|.
 
  vim:tw=78:ts=8:ft=help:norl:
