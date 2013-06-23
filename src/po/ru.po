@@ -6573,98 +6573,97 @@ msgstr "Поиск будет продолжен с НАЧАЛА докумен�
 msgid "Need encryption key for \"%s\""
 msgstr "Требуется ключ шифрования для \"%s\""
 
-msgid "can't delete OutputObject attributes"
-msgstr "невозможно удалить атрибуты OutputObject"
-
-msgid "softspace must be an integer"
-msgstr "значение softspace должно быть целым числом"
-
-msgid "invalid attribute"
-msgstr "неправильный атрибут"
-
-msgid "writelines() requires list of strings"
-msgstr "writelines() требует указания списка строк"
-
-msgid "E264: Python: Error initialising I/O objects"
-msgstr "E264: Python: Ошибка инициализации объектов I/O"
-
-msgid "no such buffer"
-msgstr "нет такого буфера"
-
 msgid "empty keys are not allowed"
 msgstr "пустые ключи не допустимы"
 
-msgid "failed to add key to dictionary"
-msgstr "невозможно добавить ключ к словарю"
-
-msgid "Cannot delete DictionaryObject attributes"
-msgstr "Невозможно удалить атрибуты DictionaryObject"
-
-msgid "Cannot modify fixed dictionary"
-msgstr "Невозможно изменить фиксированный словарь"
-
-msgid "Only boolean objects are allowed"
-msgstr "Разрешено использовать только логические объекты"
-
-msgid "Cannot set this attribute"
-msgstr "Невозможно установить этот атрибут"
-
-msgid "no such key in dictionary"
-msgstr "нет такого ключа в словаре"
-
-msgid "dict is locked"
+msgid "dictionary is locked"
 msgstr "словарь заблокирован"
-
-msgid "internal error: failed to get vim list item"
-msgstr "внутренняя ошибка: не удалось получить элемент списка VIM"
 
 msgid "list is locked"
 msgstr "список заблокирован"
 
-msgid "Failed to add item to list"
-msgstr "Невозможно добавить элемент в список"
+#, c-format
+msgid "failed to add key '%s' to dictionary"
+msgstr "не удалось добавить ключ «%s» к словарю"
 
-msgid "internal error: no vim list item"
-msgstr "внутренняя ошибка: нет элемента списка VIM"
+msgid "can't delete OutputObject attributes"
+msgstr "невозможно удалить атрибуты OutputObject"
 
-msgid "can only assign lists to slice"
-msgstr "назначение выборки возможно только для списков"
+#, c-format
+msgid "invalid attribute: %s"
+msgstr "неправильный атрибут: %s"
+
+msgid "E264: Python: Error initialising I/O objects"
+msgstr "E264: Python: Ошибка инициализации объектов I/O"
+
+msgid "failed to change directory"
+msgstr "не удалось изменить текущий каталог"
+
+msgid "cannot delete vim.Dictionary attributes"
+msgstr "невозможно удалить атрибуты vim.Dictionary"
+
+msgid "cannot modify fixed dictionary"
+msgstr "невозможно изменить фиксированный словарь"
+
+#, c-format
+msgid "cannot set attribute %s"
+msgstr "невозможно установить аттрибут %s"
+
+msgid "list index out of range"
+msgstr "номер элемента за пределами диапазона"
+
+#, c-format
+msgid "internal error: failed to get vim list item %d"
+msgstr "внутренняя ошибка: не удалось получить элемент %d списка VIM"
+
+msgid "failed to add item to list"
+msgstr "не удалось добавить элемент в список"
+
+#, c-format
+msgid "internal error: no vim list item %d"
+msgstr "внутренняя ошибка: нет элемента %d списка VIM"
 
 msgid "internal error: failed to add item to list"
 msgstr "внутренняя ошибка: не удалось добавить элемент в список"
 
-msgid "can only concatenate with lists"
-msgstr "можно объединить только списки"
+msgid "cannot delete vim.List attributes"
+msgstr "невозможно удалить атрибуты vim.List"
 
-msgid "Cannot modify fixed list"
-msgstr "Невозможно изменить фиксированный список"
+msgid "cannot modify fixed list"
+msgstr "невозможно изменить фиксированный список"
 
-msgid "'self' argument must be a dictionary"
-msgstr "параметр 'self' должен быть словарём"
+#, c-format
+msgid "unnamed function %s does not exist"
+msgstr "анонимная функция %s не существует"
 
-msgid "failed to run function"
-msgstr "невозможно выполнить функцию"
+#, c-format
+msgid "function %s does not exist"
+msgstr "функция %s не существует"
+
+#, c-format
+msgid "failed to run function %s"
+msgstr "не удалось выполнить функцию %s"
+
+msgid "unable to get option value"
+msgstr "не удалось получить значение настройки"
+
+msgid "internal error: unknown option type"
+msgstr "внутренняя ошибка: неизвестный тип настройки"
+
+msgid "attempt to refer to deleted tab page"
+msgstr "попытка сослаться на уничтоженную вкладку"
+
+msgid "no such tab page"
+msgstr "нет такой вкладки"
 
 msgid "attempt to refer to deleted window"
 msgstr "попытка сослаться на закрытое окно"
 
-msgid "readonly attribute"
-msgstr "атрибут доступен только для чтения"
+msgid "readonly attribute: buffer"
+msgstr "атрибут buffer доступен только для чтения"
 
 msgid "cursor position outside buffer"
 msgstr "позиция курсора находится вне буфера"
-
-#, c-format
-msgid "<window object (deleted) at %p>"
-msgstr "<объект окна (удален) в %p>"
-
-#, c-format
-msgid "<window object (unknown) at %p>"
-msgstr "<объект окна (неизвестен) в %p>"
-
-#, c-format
-msgid "<window %d>"
-msgstr "<окно %d>"
 
 msgid "no such window"
 msgstr "нет такого окна"
@@ -6672,11 +6671,28 @@ msgstr "нет такого окна"
 msgid "attempt to refer to deleted buffer"
 msgstr "попытка сослаться на уничтоженный буфер"
 
-msgid "unable to convert to vim structure"
-msgstr "невозможно преобразовать в структуру VIM"
+msgid "failed to rename buffer"
+msgstr "не удалось переименовать буфер"
 
-msgid "NULL reference passed"
-msgstr "передана ссылка на NULL"
+msgid "failed to run the code"
+msgstr "невозможно выполнить функцию"
+
+msgid "E858: Eval did not return a valid python object"
+msgstr "E858: Eval не возвратил допустимого объекта Python"
+
+msgid "E859: Failed to convert returned python object to vim value"
+msgstr "E859: Не удалось преобразовать возвращённый объект Python в значение VIM"
+
+#, c-format
+msgid "unable to convert %s to vim dictionary"
+msgstr "невозможно преобразовать %s в словарь Vim"
+
+#, c-format
+msgid "unable to convert %s to vim structure"
+msgstr "невозможно преобразовать %s в структуру Vim"
+
+msgid "internal error: NULL reference passed"
+msgstr "внутренняя ошибка: передана ссылка на NULL"
 
 msgid "internal error: invalid value type"
 msgstr "внутренняя ошибка: неправильный тип значения"
