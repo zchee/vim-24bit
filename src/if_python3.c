@@ -1576,8 +1576,10 @@ FunctionGetattro(PyObject *self, PyObject *nameobj)
 
     GET_ATTR_STRING(name, nameobj);
 
-    if (strcmp(name, "name") == 0)
-	return PyUnicode_FromString((char *)(this->name));
+    /* FIXME
+     * if (strcmp(name, "name") == 0)
+     *     return PyUnicode_FromString((char *)(this->name));
+     */
 
     return PyObject_GenericGetAttr(self, nameobj);
 }
@@ -1697,7 +1699,7 @@ do_py3eval (char_u *str, typval_T *rettv)
     {
 	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
 	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
-	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
+	case VAR_FUNC: ++rettv->vval.v_func->fv_refcount; break;
 	case VAR_UNKNOWN:
 	    rettv->v_type = VAR_NUMBER;
 	    rettv->vval.v_number = 0;

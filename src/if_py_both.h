@@ -2539,7 +2539,7 @@ static struct PyMethodDef ListMethods[] = {
 typedef struct
 {
     PyObject_HEAD
-    char_u	*name;
+    func_T	*func;
 } FunctionObject;
 
 static PyTypeObject FunctionType;
@@ -2547,7 +2547,7 @@ static PyTypeObject FunctionType;
 #define NEW_FUNCTION(name) FunctionNew(&FunctionType, name)
 
     static PyObject *
-FunctionNew(PyTypeObject *subtype, char_u *name)
+FunctionNew(PyTypeObject *subtype, func_T *func)
 {
     FunctionObject	*self;
 
@@ -2556,26 +2556,8 @@ FunctionNew(PyTypeObject *subtype, char_u *name)
     if (self == NULL)
 	return NULL;
 
-    if (isdigit(*name))
-    {
-	if (!translated_function_exists(name))
-	{
-	    PyErr_FORMAT(PyExc_ValueError,
-		    N_("unnamed function %s does not exist"), name);
-	    return NULL;
-	}
-	self->name = vim_strsave(name);
-	func_ref(self->name);
-    }
-    else
-	if ((self->name = get_expanded_name(name,
-				    vim_strchr(name, AUTOLOAD_CHAR) == NULL))
-		== NULL)
-	{
-	    PyErr_FORMAT(PyExc_ValueError,
-		    N_("function %s does not exist"), name);
-	    return NULL;
-	}
+    self->func = func;
+    ++func->fv_refcount;
 
     return (PyObject *)(self);
 }
@@ -2585,6 +2567,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 {
     PyObject	*self;
     char_u	*name;
+    func_T	*func;
 
     if (kwargs)
     {
@@ -2596,7 +2579,20 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
     if (!PyArg_ParseTuple(args, "et", "ascii", &name))
 	return NULL;
 
-    self = FunctionNew(subtype, name);
+    VimTryStart();
+
+    func = deref_func_name(name, STRLEN(name));
+
+    if (VimTryEnd())
+	return NULL;
+
+    if (!func)
+    {
+	PyErr_SetVim(_("failed to get function"));
+	return NULL;
+    }
+
+    self = FunctionNew(subtype, func);
 
     PyMem_Free(name);
 
@@ -2606,14 +2602,15 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
     static void
 FunctionDestructor(FunctionObject *self)
 {
-    func_unref(self->name);
-    vim_free(self->name);
+    func_unref(self->func);
 
     DESTRUCTOR_FINISH(self);
 }
 
 static char *FunctionAttrs[] = {
-    "softspace",
+    /*
+     * "name",
+     */
     NULL
 };
 
@@ -2626,7 +2623,7 @@ FunctionDir(PyObject *self)
     static PyObject *
 FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
 {
-    char_u	*name = self->name;
+    func_T	*func = self->func;
     typval_T	args;
     typval_T	selfdicttv;
     typval_T	rettv;
@@ -2656,7 +2653,7 @@ FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
     Python_Lock_Vim();
 
     VimTryStart();
-    error = func_call(name, &args, selfdict, &rettv);
+    error = func_call(func, &args, selfdict, &rettv);
 
     Python_Release_Vim();
     Py_END_ALLOW_THREADS
@@ -2665,8 +2662,16 @@ FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
 	ret = NULL;
     else if (error != OK)
     {
+	char_u	*repr;
+
 	ret = NULL;
-	PyErr_VIM_FORMAT(N_("failed to run function %s"), (char *)name);
+	if (!(repr = FUNC_REPR(func)))
+	    PyErr_NoMemory();
+	else
+	{
+	    PyErr_VIM_FORMAT(N_("failed to run function %s"), (char *)repr);
+	    vim_free(repr);
+	}
     }
     else
 	ret = ConvertToPyObject(&rettv);
@@ -2682,14 +2687,25 @@ FunctionCall(FunctionObject *self, PyObject *argsObject, PyObject *kwargs)
     static PyObject *
 FunctionRepr(FunctionObject *self)
 {
+    char_u	*repr;
+    PyObject	*r;
+
 #ifdef Py_TRACE_REFS
-    /* For unknown reason self->name may be NULL after calling
-     * Finalize */
-    return PyString_FromFormat("<vim.Function '%s'>",
-	    (self->name == NULL ? "<NULL>" : (char *)self->name));
-#else
-    return PyString_FromFormat("<vim.Function '%s'>", (char *)self->name);
+    if (!(self->func))
+	return PyString_FromFormat("<vim.Function '<NULL>'>");
 #endif
+
+    if (!(repr = FUNC_REPR(self->func)))
+    {
+	PyErr_NoMemory();
+	return NULL;
+    }
+
+    r = PyString_FromFormat("<vim.Function %s>", repr);
+
+    vim_free(repr);
+
+    return r;
 }
 
 static struct PyMethodDef FunctionMethods[] = {
@@ -5482,11 +5498,9 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
     }
     else if (PyType_IsSubtype(obj->ob_type, &FunctionType))
     {
-	if (set_string_copy(((FunctionObject *) (obj))->name, tv) == -1)
-	    return -1;
-
 	tv->v_type = VAR_FUNC;
-	func_ref(tv->vval.v_string);
+	tv->vval.v_func = ((FunctionObject *) obj)->func;
+	++tv->vval.v_func->fv_refcount;
     }
     else if (PyBytes_Check(obj))
     {
@@ -5603,8 +5617,7 @@ ConvertToPyObject(typval_T *tv)
 	case VAR_DICT:
 	    return NEW_DICTIONARY(tv->vval.v_dict);
 	case VAR_FUNC:
-	    return NEW_FUNCTION(tv->vval.v_string == NULL
-					  ? (char_u *)"" : tv->vval.v_string);
+	    return NEW_FUNCTION(tv->vval.v_func);
 	case VAR_UNKNOWN:
 	    Py_INCREF(Py_None);
 	    return Py_None;
