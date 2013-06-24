@@ -115,6 +115,7 @@ static char *e_illvar = N_("E461: Illegal variable name: %s");
 #ifdef FEAT_FLOAT
 static char *e_float_as_string = N_("E806: using Float as a String");
 #endif
+static char *e_unknown_function = N_("E700: Unknown function: %s");
 
 static dictitem_T	globvars_var;		/* variable used for g: */
 #define globvarht globvardict.dv_hashtab
@@ -166,7 +167,6 @@ struct ufunc
 {
     int		uf_varargs;	/* variable nr of arguments */
     int		uf_flags;
-    int		uf_calls;	/* nr of active calls */
     garray_T	uf_args;	/* arguments */
     garray_T	uf_lines;	/* function lines */
 #ifdef FEAT_PROFILE
@@ -188,10 +188,24 @@ struct ufunc
 #endif
     scid_T	uf_script_ID;	/* ID of script where function was defined,
 				   used for s: variables */
-    int		uf_refcount;	/* for numbered function: reference count */
+    func_T	*uf_func;	/* Reference to a func_T structure holding
+				   reference to ufunc_T */
     char_u	uf_name[1];	/* name of function (actually longer); can
 				   start with <SNR>123_ (<SNR> is K_SPECIAL
 				   KS_EXTRA KE_SNR) */
+};
+
+/*
+ * Structure to hold info for autoloaded function.
+ */
+typedef struct aufunc aufunc_T;
+
+struct aufunc
+{
+    char_u	*auf_name;	/* Function name */
+    func_T	*auf_func;	/* If function was already autoloaded: 
+				   record pointer here, otherwise it will hold 
+				   NULL */
 };
 
 /* function flags */
@@ -443,12 +457,12 @@ static char_u *string_quote __ARGS((char_u *str, int function));
 static int string2float __ARGS((char_u *text, float_T *value));
 #endif
 static int get_env_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
-static int find_internal_func __ARGS((char_u *name));
-static char_u *deref_func_name __ARGS((char_u *name, int *lenp));
-static int get_func_tv __ARGS((char_u *name, int len, typval_T *rettv, char_u **arg, linenr_T firstline, linenr_T lastline, int *doesrange, int evaluate, dict_T *selfdict));
-static int call_func __ARGS((char_u *funcname, int len, typval_T *rettv, int argcount, typval_T *argvars, linenr_T firstline, linenr_T lastline, int *doesrange, int evaluate, dict_T *selfdict));
+static struct fst *find_internal_func __ARGS((char_u *name));
+static int get_func_tv __ARGS((func_T *name, typval_T *rettv, char_u **arg, linenr_T firstline, linenr_T lastline, int *doesrange, int evaluate, dict_T *selfdict));
+static int call_func __ARGS((func_T *func, typval_T *rettv, int argcount, typval_T *argvars, linenr_T firstline, linenr_T lastline, int *doesrange, dict_T *selfdict));
 static void emsg_funcname __ARGS((char *ermsg, char_u *name));
 static int non_zero_arg __ARGS((typval_T *argvars));
+static aufunc_T *aufunc_alloc __ARGS((void));
 
 #ifdef FEAT_FLOAT
 static void f_abs __ARGS((typval_T *argvars, typval_T *rettv));
@@ -794,6 +808,7 @@ static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
 static char_u *trans_function_name __ARGS((char_u **pp, int skip, int flags, funcdict_T *fd));
+static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd));
 static int eval_fname_script __ARGS((char_u *p));
 static int eval_fname_sid __ARGS((char_u *p));
 static void list_func_head __ARGS((ufunc_T *fp, int indent));
@@ -818,8 +833,9 @@ static int
 static int script_autoload __ARGS((char_u *name, int reload));
 static char_u *autoload_name __ARGS((char_u *name));
 static void cat_func_name __ARGS((char_u *buf, ufunc_T *fp));
-static void func_free __ARGS((ufunc_T *fp));
-static void call_user_func __ARGS((ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rettv, linenr_T firstline, linenr_T lastline, dict_T *selfdict));
+static void dealloc_user_func __ARGS((ufunc_T *fp));
+static int call_user_func __ARGS((ufunc_T *fp, typval_T *rettv, int argcount, typval_T *argvars, linenr_T firstline, linenr_T lastline, int *doesrange, dict_T *selfdict));
+static void remove_user_func __ARGS((ufunc_T *fp));
 static int can_free_funccal __ARGS((funccall_T *fc, int copyID)) ;
 static void free_funccal __ARGS((funccall_T *fc, int free_val));
 static void add_nr_var __ARGS((dict_T *dp, dictitem_T *v, char *name, varnumber_T nr));
@@ -834,6 +850,11 @@ static void setwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
 static int compare_func_name __ARGS((const void *s1, const void *s2));
 static void sortFunctions __ARGS(());
 #endif
+
+
+static funcdef_T user_func_type;
+static funcdef_T internal_func_type;
+static funcdef_T autoload_func_type;
 
 /*
  * Initialize the global and v: variables.
@@ -1558,10 +1579,10 @@ eval_expr(arg, nextcmd)
  * Returns OK or FAIL.
  */
     int
-call_vim_function(func, argc, argv, safe, str_arg_only, rettv)
-    char_u      *func;
+call_vim_function(name, argc, argv, safe, str_arg_only, rettv)
+    char_u	*name;
     int		argc;
-    char_u      **argv;
+    char_u	**argv;
     int		safe;		/* use the sandbox */
     int		str_arg_only;	/* all arguments are strings */
     typval_T	*rettv;
@@ -1573,10 +1594,18 @@ call_vim_function(func, argc, argv, safe, str_arg_only, rettv)
     int		doesrange;
     void	*save_funccalp = NULL;
     int		ret;
+    func_T	*func;
 
     argvars = (typval_T *)alloc((unsigned)((argc + 1) * sizeof(typval_T)));
     if (argvars == NULL)
 	return FAIL;
+
+    func = deref_func_name(name, STRLEN(name));
+    if (func == NULL)
+    {
+	vim_free(argvars);
+	return FAIL;
+    }
 
     for (i = 0; i < argc; i++)
     {
@@ -1612,9 +1641,9 @@ call_vim_function(func, argc, argv, safe, str_arg_only, rettv)
     }
 
     rettv->v_type = VAR_UNKNOWN;		/* clear_tv() uses this */
-    ret = call_func(func, (int)STRLEN(func), rettv, argc, argvars,
+    ret = call_func(func, rettv, argc, argvars,
 		    curwin->w_cursor.lnum, curwin->w_cursor.lnum,
-		    &doesrange, TRUE, NULL);
+		    &doesrange, NULL);
     if (safe)
     {
 	--sandbox;
@@ -1624,6 +1653,8 @@ call_vim_function(func, argc, argv, safe, str_arg_only, rettv)
 
     if (ret == FAIL)
 	clear_tv(rettv);
+
+    func_unref(func);
 
     return ret;
 }
@@ -3382,8 +3413,7 @@ ex_call(eap)
 {
     char_u	*arg = eap->arg;
     char_u	*startarg;
-    char_u	*name;
-    char_u	*tofree;
+    func_T	*func;
     int		len;
     typval_T	rettv;
     linenr_T	lnum;
@@ -3403,24 +3433,20 @@ ex_call(eap)
 	return;
     }
 
-    tofree = trans_function_name(&arg, eap->skip, TFN_INT, &fudi);
+    func = get_called_function(&arg, eap->skip, &fudi);
     if (fudi.fd_newkey != NULL)
     {
 	/* Still need to give an error message for missing key. */
 	EMSG2(_(e_dictkey), fudi.fd_newkey);
 	vim_free(fudi.fd_newkey);
     }
-    if (tofree == NULL)
+    if (func == NULL)
 	return;
 
     /* Increase refcount on dictionary, it could get deleted when evaluating
      * the arguments. */
     if (fudi.fd_dict != NULL)
 	++fudi.fd_dict->dv_refcount;
-
-    /* If it is the name of a variable of type VAR_FUNC use its contents. */
-    len = (int)STRLEN(tofree);
-    name = deref_func_name(tofree, &len);
 
     /* Skip white space to allow ":call func ()".  Not good, but required for
      * backward compatibility. */
@@ -3457,7 +3483,7 @@ ex_call(eap)
 #endif
 	}
 	arg = startarg;
-	if (get_func_tv(name, (int)STRLEN(name), &rettv, &arg,
+	if (get_func_tv(func, &rettv, &arg,
 		    eap->line1, eap->line2, &doesrange,
 					    !eap->skip, fudi.fd_dict) == FAIL)
 	{
@@ -3499,8 +3525,8 @@ ex_call(eap)
     }
 
 end:
+    func_unref(func);
     dict_unref(fudi.fd_dict);
-    vim_free(tofree);
 }
 
 /*
@@ -4471,12 +4497,17 @@ eval4(arg, rettv, evaluate)
 		else
 		{
 		    /* Compare two Funcrefs for being equal or unequal. */
-		    if (rettv->vval.v_string == NULL
-						|| var2.vval.v_string == NULL)
+		    if (rettv->vval.v_func == NULL
+						|| var2.vval.v_func == NULL)
+			n1 = FALSE;
+		    else if (rettv->vval.v_func->fv_type !=
+						    var2.vval.v_func->fv_type)
 			n1 = FALSE;
 		    else
-			n1 = STRCMP(rettv->vval.v_string,
-						     var2.vval.v_string) == 0;
+			n1 = rettv->vval.v_func->fv_type->fd_compare(
+					rettv->vval.v_func->fv_data,
+					var2.vval.v_func->fv_data
+				);
 		    if (type == TYPE_NEQUAL)
 			n1 = !n1;
 		}
@@ -5145,21 +5176,29 @@ eval7(arg, rettv, evaluate, want_string)
 	{
 	    if (**arg == '(')		/* recursive! */
 	    {
+		func_T	*func;
 		/* If "s" is the name of a variable of type VAR_FUNC
 		 * use its contents. */
-		s = deref_func_name(s, &len);
+		func = deref_func_name(s, len);
 
-		/* Invoke the function. */
-		ret = get_func_tv(s, len, rettv, arg,
-			  curwin->w_cursor.lnum, curwin->w_cursor.lnum,
-			  &len, evaluate, NULL);
+		if (func == NULL)
+		    ret = FAIL;
+		else
+		{
+		    /* Invoke the function. */
+		    ret = get_func_tv(func, rettv, arg,
+			      curwin->w_cursor.lnum, curwin->w_cursor.lnum,
+			      &len, evaluate, NULL);
+
+		    func_unref(func);
+		}
 
 		/* If evaluate is FALSE rettv->v_type was not set in
 		 * get_func_tv, but it's needed in handle_subscript() to parse
 		 * what follows. So set it here. */
 		if (rettv->v_type == VAR_UNKNOWN && !evaluate && **arg == '(')
 		{
-		    rettv->vval.v_string = vim_strsave((char_u *)"");
+		    rettv->vval.v_func = NULL;
 		    rettv->v_type = VAR_FUNC;
 		}
 
@@ -6120,9 +6159,13 @@ tv_equal(tv1, tv2, ic, recursive)
 	    return r;
 
 	case VAR_FUNC:
-	    return (tv1->vval.v_string != NULL
-		    && tv2->vval.v_string != NULL
-		    && STRCMP(tv1->vval.v_string, tv2->vval.v_string) == 0);
+	    return (tv1->vval.v_func != NULL
+		    && tv2->vval.v_func != NULL
+		    && tv1->vval.v_func->fv_type == tv2->vval.v_func->fv_type
+		    && tv1->vval.v_func->fv_type->fd_compare(
+					tv1->vval.v_func->fv_data,
+					tv2->vval.v_func->fv_data
+				));
 
 	case VAR_NUMBER:
 	    return tv1->vval.v_number == tv2->vval.v_number;
@@ -7593,8 +7636,8 @@ echo_string(tv, tofree, numbuf, copyID)
     switch (tv->v_type)
     {
 	case VAR_FUNC:
-	    *tofree = NULL;
-	    r = tv->vval.v_string;
+	    r = FUNC_REPR(tv->vval.v_func);
+	    *tofree = r;
 	    break;
 
 	case VAR_LIST:
@@ -7675,7 +7718,7 @@ tv2string(tv, tofree, numbuf, copyID)
     switch (tv->v_type)
     {
 	case VAR_FUNC:
-	    *tofree = string_quote(tv->vval.v_string, TRUE);
+	    *tofree = FUNC_REPR(tv->vval.v_func);
 	    return *tofree;
 	case VAR_STRING:
 	    *tofree = string_quote(tv->vval.v_string, FALSE);
@@ -7828,321 +7871,321 @@ static struct fst
     char	*f_name;	/* function name */
     char	f_min_argc;	/* minimal number of arguments */
     char	f_max_argc;	/* maximal number of arguments */
-    void	(*f_func) __ARGS((typval_T *args, typval_T *rvar));
+    void	(*f_call) __ARGS((typval_T *args, typval_T *rvar));
 				/* implementation of function */
+    func_T	*f_func;	/* reference to a func_T structure holding 
+				   reference to struct fst */
 } functions[] =
 {
 #ifdef FEAT_FLOAT
-    {"abs",		1, 1, f_abs},
-    {"acos",		1, 1, f_acos},	/* WJMc */
+    {"abs",		1, 1, f_abs, NULL},
+    {"acos",		1, 1, f_acos, NULL},	/* WJMc */
 #endif
-    {"add",		2, 2, f_add},
-    {"and",		2, 2, f_and},
-    {"append",		2, 2, f_append},
-    {"argc",		0, 0, f_argc},
-    {"argidx",		0, 0, f_argidx},
-    {"argv",		0, 1, f_argv},
+    {"add",		2, 2, f_add, NULL},
+    {"and",		2, 2, f_and, NULL},
+    {"append",		2, 2, f_append, NULL},
+    {"argc",		0, 0, f_argc, NULL},
+    {"argidx",		0, 0, f_argidx, NULL},
+    {"argv",		0, 1, f_argv, NULL},
 #ifdef FEAT_FLOAT
-    {"asin",		1, 1, f_asin},	/* WJMc */
-    {"atan",		1, 1, f_atan},
-    {"atan2",		2, 2, f_atan2},
+    {"asin",		1, 1, f_asin, NULL},	/* WJMc */
+    {"atan",		1, 1, f_atan, NULL},
+    {"atan2",		2, 2, f_atan2, NULL},
 #endif
-    {"browse",		4, 4, f_browse},
-    {"browsedir",	2, 2, f_browsedir},
-    {"bufexists",	1, 1, f_bufexists},
-    {"buffer_exists",	1, 1, f_bufexists},	/* obsolete */
-    {"buffer_name",	1, 1, f_bufname},	/* obsolete */
-    {"buffer_number",	1, 1, f_bufnr},		/* obsolete */
-    {"buflisted",	1, 1, f_buflisted},
-    {"bufloaded",	1, 1, f_bufloaded},
-    {"bufname",		1, 1, f_bufname},
-    {"bufnr",		1, 2, f_bufnr},
-    {"bufwinnr",	1, 1, f_bufwinnr},
-    {"byte2line",	1, 1, f_byte2line},
-    {"byteidx",		2, 2, f_byteidx},
-    {"call",		2, 3, f_call},
+    {"browse",		4, 4, f_browse, NULL},
+    {"browsedir",	2, 2, f_browsedir, NULL},
+    {"bufexists",	1, 1, f_bufexists, NULL},
+    {"buffer_exists",	1, 1, f_bufexists, NULL},	/* obsolete */
+    {"buffer_name",	1, 1, f_bufname, NULL},	/* obsolete */
+    {"buffer_number",	1, 1, f_bufnr, NULL},		/* obsolete */
+    {"buflisted",	1, 1, f_buflisted, NULL},
+    {"bufloaded",	1, 1, f_bufloaded, NULL},
+    {"bufname",		1, 1, f_bufname, NULL},
+    {"bufnr",		1, 2, f_bufnr, NULL},
+    {"bufwinnr",	1, 1, f_bufwinnr, NULL},
+    {"byte2line",	1, 1, f_byte2line, NULL},
+    {"byteidx",		2, 2, f_byteidx, NULL},
+    {"call",		2, 3, f_call, NULL},
 #ifdef FEAT_FLOAT
-    {"ceil",		1, 1, f_ceil},
+    {"ceil",		1, 1, f_ceil, NULL},
 #endif
-    {"changenr",	0, 0, f_changenr},
-    {"char2nr",		1, 2, f_char2nr},
-    {"cindent",		1, 1, f_cindent},
-    {"clearmatches",	0, 0, f_clearmatches},
-    {"col",		1, 1, f_col},
+    {"changenr",	0, 0, f_changenr, NULL},
+    {"char2nr",		1, 2, f_char2nr, NULL},
+    {"cindent",		1, 1, f_cindent, NULL},
+    {"clearmatches",	0, 0, f_clearmatches, NULL},
+    {"col",		1, 1, f_col, NULL},
 #if defined(FEAT_INS_EXPAND)
-    {"complete",	2, 2, f_complete},
-    {"complete_add",	1, 1, f_complete_add},
-    {"complete_check",	0, 0, f_complete_check},
+    {"complete",	2, 2, f_complete, NULL},
+    {"complete_add",	1, 1, f_complete_add, NULL},
+    {"complete_check",	0, 0, f_complete_check, NULL},
 #endif
-    {"confirm",		1, 4, f_confirm},
-    {"copy",		1, 1, f_copy},
+    {"confirm",		1, 4, f_confirm, NULL},
+    {"copy",		1, 1, f_copy, NULL},
 #ifdef FEAT_FLOAT
-    {"cos",		1, 1, f_cos},
-    {"cosh",		1, 1, f_cosh},
+    {"cos",		1, 1, f_cos, NULL},
+    {"cosh",		1, 1, f_cosh, NULL},
 #endif
-    {"count",		2, 4, f_count},
-    {"cscope_connection",0,3, f_cscope_connection},
-    {"cursor",		1, 3, f_cursor},
-    {"deepcopy",	1, 2, f_deepcopy},
-    {"delete",		1, 1, f_delete},
-    {"did_filetype",	0, 0, f_did_filetype},
-    {"diff_filler",	1, 1, f_diff_filler},
-    {"diff_hlID",	2, 2, f_diff_hlID},
-    {"empty",		1, 1, f_empty},
-    {"escape",		2, 2, f_escape},
-    {"eval",		1, 1, f_eval},
-    {"eventhandler",	0, 0, f_eventhandler},
-    {"executable",	1, 1, f_executable},
-    {"exists",		1, 1, f_exists},
+    {"count",		2, 4, f_count, NULL},
+    {"cscope_connection",0,3, f_cscope_connection, NULL},
+    {"cursor",		1, 3, f_cursor, NULL},
+    {"deepcopy",	1, 2, f_deepcopy, NULL},
+    {"delete",		1, 1, f_delete, NULL},
+    {"did_filetype",	0, 0, f_did_filetype, NULL},
+    {"diff_filler",	1, 1, f_diff_filler, NULL},
+    {"diff_hlID",	2, 2, f_diff_hlID, NULL},
+    {"empty",		1, 1, f_empty, NULL},
+    {"escape",		2, 2, f_escape, NULL},
+    {"eval",		1, 1, f_eval, NULL},
+    {"eventhandler",	0, 0, f_eventhandler, NULL},
+    {"executable",	1, 1, f_executable, NULL},
+    {"exists",		1, 1, f_exists, NULL},
 #ifdef FEAT_FLOAT
-    {"exp",		1, 1, f_exp},
+    {"exp",		1, 1, f_exp, NULL},
 #endif
-    {"expand",		1, 3, f_expand},
-    {"extend",		2, 3, f_extend},
-    {"feedkeys",	1, 2, f_feedkeys},
-    {"file_readable",	1, 1, f_filereadable},	/* obsolete */
-    {"filereadable",	1, 1, f_filereadable},
-    {"filewritable",	1, 1, f_filewritable},
-    {"filter",		2, 2, f_filter},
-    {"finddir",		1, 3, f_finddir},
-    {"findfile",	1, 3, f_findfile},
+    {"expand",		1, 3, f_expand, NULL},
+    {"extend",		2, 3, f_extend, NULL},
+    {"feedkeys",	1, 2, f_feedkeys, NULL},
+    {"file_readable",	1, 1, f_filereadable, NULL},	/* obsolete */
+    {"filereadable",	1, 1, f_filereadable, NULL},
+    {"filewritable",	1, 1, f_filewritable, NULL},
+    {"filter",		2, 2, f_filter, NULL},
+    {"finddir",		1, 3, f_finddir, NULL},
+    {"findfile",	1, 3, f_findfile, NULL},
 #ifdef FEAT_FLOAT
-    {"float2nr",	1, 1, f_float2nr},
-    {"floor",		1, 1, f_floor},
-    {"fmod",		2, 2, f_fmod},
+    {"float2nr",	1, 1, f_float2nr, NULL},
+    {"floor",		1, 1, f_floor, NULL},
+    {"fmod",		2, 2, f_fmod, NULL},
 #endif
-    {"fnameescape",	1, 1, f_fnameescape},
-    {"fnamemodify",	2, 2, f_fnamemodify},
-    {"foldclosed",	1, 1, f_foldclosed},
-    {"foldclosedend",	1, 1, f_foldclosedend},
-    {"foldlevel",	1, 1, f_foldlevel},
-    {"foldtext",	0, 0, f_foldtext},
-    {"foldtextresult",	1, 1, f_foldtextresult},
-    {"foreground",	0, 0, f_foreground},
-    {"function",	1, 1, f_function},
-    {"garbagecollect",	0, 1, f_garbagecollect},
-    {"get",		2, 3, f_get},
-    {"getbufline",	2, 3, f_getbufline},
-    {"getbufvar",	2, 3, f_getbufvar},
-    {"getchar",		0, 1, f_getchar},
-    {"getcharmod",	0, 0, f_getcharmod},
-    {"getcmdline",	0, 0, f_getcmdline},
-    {"getcmdpos",	0, 0, f_getcmdpos},
-    {"getcmdtype",	0, 0, f_getcmdtype},
-    {"getcwd",		0, 0, f_getcwd},
-    {"getfontname",	0, 1, f_getfontname},
-    {"getfperm",	1, 1, f_getfperm},
-    {"getfsize",	1, 1, f_getfsize},
-    {"getftime",	1, 1, f_getftime},
-    {"getftype",	1, 1, f_getftype},
-    {"getline",		1, 2, f_getline},
-    {"getloclist",	1, 1, f_getqflist},
-    {"getmatches",	0, 0, f_getmatches},
-    {"getpid",		0, 0, f_getpid},
-    {"getpos",		1, 1, f_getpos},
-    {"getqflist",	0, 0, f_getqflist},
-    {"getreg",		0, 2, f_getreg},
-    {"getregtype",	0, 1, f_getregtype},
-    {"gettabvar",	2, 3, f_gettabvar},
-    {"gettabwinvar",	3, 4, f_gettabwinvar},
-    {"getwinposx",	0, 0, f_getwinposx},
-    {"getwinposy",	0, 0, f_getwinposy},
-    {"getwinvar",	2, 3, f_getwinvar},
-    {"glob",		1, 3, f_glob},
-    {"globpath",	2, 3, f_globpath},
-    {"has",		1, 1, f_has},
-    {"has_key",		2, 2, f_has_key},
-    {"haslocaldir",	0, 0, f_haslocaldir},
-    {"hasmapto",	1, 3, f_hasmapto},
-    {"highlightID",	1, 1, f_hlID},		/* obsolete */
-    {"highlight_exists",1, 1, f_hlexists},	/* obsolete */
-    {"histadd",		2, 2, f_histadd},
-    {"histdel",		1, 2, f_histdel},
-    {"histget",		1, 2, f_histget},
-    {"histnr",		1, 1, f_histnr},
-    {"hlID",		1, 1, f_hlID},
-    {"hlexists",	1, 1, f_hlexists},
-    {"hostname",	0, 0, f_hostname},
-    {"iconv",		3, 3, f_iconv},
-    {"indent",		1, 1, f_indent},
-    {"index",		2, 4, f_index},
-    {"input",		1, 3, f_input},
-    {"inputdialog",	1, 3, f_inputdialog},
-    {"inputlist",	1, 1, f_inputlist},
-    {"inputrestore",	0, 0, f_inputrestore},
-    {"inputsave",	0, 0, f_inputsave},
-    {"inputsecret",	1, 2, f_inputsecret},
-    {"insert",		2, 3, f_insert},
-    {"invert",		1, 1, f_invert},
-    {"isdirectory",	1, 1, f_isdirectory},
-    {"islocked",	1, 1, f_islocked},
-    {"items",		1, 1, f_items},
-    {"join",		1, 2, f_join},
-    {"keys",		1, 1, f_keys},
-    {"last_buffer_nr",	0, 0, f_last_buffer_nr},/* obsolete */
-    {"len",		1, 1, f_len},
-    {"libcall",		3, 3, f_libcall},
-    {"libcallnr",	3, 3, f_libcallnr},
-    {"line",		1, 1, f_line},
-    {"line2byte",	1, 1, f_line2byte},
-    {"lispindent",	1, 1, f_lispindent},
-    {"localtime",	0, 0, f_localtime},
+    {"fnameescape",	1, 1, f_fnameescape, NULL},
+    {"fnamemodify",	2, 2, f_fnamemodify, NULL},
+    {"foldclosed",	1, 1, f_foldclosed, NULL},
+    {"foldclosedend",	1, 1, f_foldclosedend, NULL},
+    {"foldlevel",	1, 1, f_foldlevel, NULL},
+    {"foldtext",	0, 0, f_foldtext, NULL},
+    {"foldtextresult",	1, 1, f_foldtextresult, NULL},
+    {"foreground",	0, 0, f_foreground, NULL},
+    {"function",	1, 1, f_function, NULL},
+    {"garbagecollect",	0, 1, f_garbagecollect, NULL},
+    {"get",		2, 3, f_get, NULL},
+    {"getbufline",	2, 3, f_getbufline, NULL},
+    {"getbufvar",	2, 3, f_getbufvar, NULL},
+    {"getchar",		0, 1, f_getchar, NULL},
+    {"getcharmod",	0, 0, f_getcharmod, NULL},
+    {"getcmdline",	0, 0, f_getcmdline, NULL},
+    {"getcmdpos",	0, 0, f_getcmdpos, NULL},
+    {"getcmdtype",	0, 0, f_getcmdtype, NULL},
+    {"getcwd",		0, 0, f_getcwd, NULL},
+    {"getfontname",	0, 1, f_getfontname, NULL},
+    {"getfperm",	1, 1, f_getfperm, NULL},
+    {"getfsize",	1, 1, f_getfsize, NULL},
+    {"getftime",	1, 1, f_getftime, NULL},
+    {"getftype",	1, 1, f_getftype, NULL},
+    {"getline",		1, 2, f_getline, NULL},
+    {"getloclist",	1, 1, f_getqflist, NULL},
+    {"getmatches",	0, 0, f_getmatches, NULL},
+    {"getpid",		0, 0, f_getpid, NULL},
+    {"getpos",		1, 1, f_getpos, NULL},
+    {"getqflist",	0, 0, f_getqflist, NULL},
+    {"getreg",		0, 2, f_getreg, NULL},
+    {"getregtype",	0, 1, f_getregtype, NULL},
+    {"gettabvar",	2, 3, f_gettabvar, NULL},
+    {"gettabwinvar",	3, 4, f_gettabwinvar, NULL},
+    {"getwinposx",	0, 0, f_getwinposx, NULL},
+    {"getwinposy",	0, 0, f_getwinposy, NULL},
+    {"getwinvar",	2, 3, f_getwinvar, NULL},
+    {"glob",		1, 3, f_glob, NULL},
+    {"globpath",	2, 3, f_globpath, NULL},
+    {"has",		1, 1, f_has, NULL},
+    {"has_key",		2, 2, f_has_key, NULL},
+    {"haslocaldir",	0, 0, f_haslocaldir, NULL},
+    {"hasmapto",	1, 3, f_hasmapto, NULL},
+    {"highlightID",	1, 1, f_hlID, NULL},		/* obsolete */
+    {"highlight_exists",1, 1, f_hlexists, NULL},	/* obsolete */
+    {"histadd",		2, 2, f_histadd, NULL},
+    {"histdel",		1, 2, f_histdel, NULL},
+    {"histget",		1, 2, f_histget, NULL},
+    {"histnr",		1, 1, f_histnr, NULL},
+    {"hlID",		1, 1, f_hlID, NULL},
+    {"hlexists",	1, 1, f_hlexists, NULL},
+    {"hostname",	0, 0, f_hostname, NULL},
+    {"iconv",		3, 3, f_iconv, NULL},
+    {"indent",		1, 1, f_indent, NULL},
+    {"index",		2, 4, f_index, NULL},
+    {"input",		1, 3, f_input, NULL},
+    {"inputdialog",	1, 3, f_inputdialog, NULL},
+    {"inputlist",	1, 1, f_inputlist, NULL},
+    {"inputrestore",	0, 0, f_inputrestore, NULL},
+    {"inputsave",	0, 0, f_inputsave, NULL},
+    {"inputsecret",	1, 2, f_inputsecret, NULL},
+    {"insert",		2, 3, f_insert, NULL},
+    {"invert",		1, 1, f_invert, NULL},
+    {"isdirectory",	1, 1, f_isdirectory, NULL},
+    {"islocked",	1, 1, f_islocked, NULL},
+    {"items",		1, 1, f_items, NULL},
+    {"join",		1, 2, f_join, NULL},
+    {"keys",		1, 1, f_keys, NULL},
+    {"last_buffer_nr",	0, 0, f_last_buffer_nr, NULL},/* obsolete */
+    {"len",		1, 1, f_len, NULL},
+    {"libcall",		3, 3, f_libcall, NULL},
+    {"libcallnr",	3, 3, f_libcallnr, NULL},
+    {"line",		1, 1, f_line, NULL},
+    {"line2byte",	1, 1, f_line2byte, NULL},
+    {"lispindent",	1, 1, f_lispindent, NULL},
+    {"localtime",	0, 0, f_localtime, NULL},
 #ifdef FEAT_FLOAT
-    {"log",		1, 1, f_log},
-    {"log10",		1, 1, f_log10},
+    {"log",		1, 1, f_log, NULL},
+    {"log10",		1, 1, f_log10, NULL},
 #endif
 #ifdef FEAT_LUA
-    {"luaeval",         1, 2, f_luaeval},
+    {"luaeval",         1, 2, f_luaeval, NULL},
 #endif
-    {"map",		2, 2, f_map},
-    {"maparg",		1, 4, f_maparg},
-    {"mapcheck",	1, 3, f_mapcheck},
-    {"match",		2, 4, f_match},
-    {"matchadd",	2, 4, f_matchadd},
-    {"matcharg",	1, 1, f_matcharg},
-    {"matchdelete",	1, 1, f_matchdelete},
-    {"matchend",	2, 4, f_matchend},
-    {"matchlist",	2, 4, f_matchlist},
-    {"matchstr",	2, 4, f_matchstr},
-    {"max",		1, 1, f_max},
-    {"min",		1, 1, f_min},
+    {"map",		2, 2, f_map, NULL},
+    {"maparg",		1, 4, f_maparg, NULL},
+    {"mapcheck",	1, 3, f_mapcheck, NULL},
+    {"match",		2, 4, f_match, NULL},
+    {"matchadd",	2, 4, f_matchadd, NULL},
+    {"matcharg",	1, 1, f_matcharg, NULL},
+    {"matchdelete",	1, 1, f_matchdelete, NULL},
+    {"matchend",	2, 4, f_matchend, NULL},
+    {"matchlist",	2, 4, f_matchlist, NULL},
+    {"matchstr",	2, 4, f_matchstr, NULL},
+    {"max",		1, 1, f_max, NULL},
+    {"min",		1, 1, f_min, NULL},
 #ifdef vim_mkdir
-    {"mkdir",		1, 3, f_mkdir},
+    {"mkdir",		1, 3, f_mkdir, NULL},
 #endif
-    {"mode",		0, 1, f_mode},
+    {"mode",		0, 1, f_mode, NULL},
 #ifdef FEAT_MZSCHEME
-    {"mzeval",		1, 1, f_mzeval},
+    {"mzeval",		1, 1, f_mzeval, NULL},
 #endif
-    {"nextnonblank",	1, 1, f_nextnonblank},
-    {"nr2char",		1, 2, f_nr2char},
-    {"or",		2, 2, f_or},
-    {"pathshorten",	1, 1, f_pathshorten},
+    {"nextnonblank",	1, 1, f_nextnonblank, NULL},
+    {"nr2char",		1, 2, f_nr2char, NULL},
+    {"or",		2, 2, f_or, NULL},
+    {"pathshorten",	1, 1, f_pathshorten, NULL},
 #ifdef FEAT_FLOAT
-    {"pow",		2, 2, f_pow},
+    {"pow",		2, 2, f_pow, NULL},
 #endif
-    {"prevnonblank",	1, 1, f_prevnonblank},
-    {"printf",		2, 19, f_printf},
-    {"pumvisible",	0, 0, f_pumvisible},
+    {"prevnonblank",	1, 1, f_prevnonblank, NULL},
+    {"printf",		2, 19, f_printf, NULL},
+    {"pumvisible",	0, 0, f_pumvisible, NULL},
 #ifdef FEAT_PYTHON3
-    {"py3eval",		1, 1, f_py3eval},
+    {"py3eval",		1, 1, f_py3eval, NULL},
 #endif
 #ifdef FEAT_PYTHON
-    {"pyeval",		1, 1, f_pyeval},
+    {"pyeval",		1, 1, f_pyeval, NULL},
 #endif
-    {"range",		1, 3, f_range},
-    {"readfile",	1, 3, f_readfile},
-    {"reltime",		0, 2, f_reltime},
-    {"reltimestr",	1, 1, f_reltimestr},
-    {"remote_expr",	2, 3, f_remote_expr},
-    {"remote_foreground", 1, 1, f_remote_foreground},
-    {"remote_peek",	1, 2, f_remote_peek},
-    {"remote_read",	1, 1, f_remote_read},
-    {"remote_send",	2, 3, f_remote_send},
-    {"remove",		2, 3, f_remove},
-    {"rename",		2, 2, f_rename},
-    {"repeat",		2, 2, f_repeat},
-    {"resolve",		1, 1, f_resolve},
-    {"reverse",		1, 1, f_reverse},
+    {"range",		1, 3, f_range, NULL},
+    {"readfile",	1, 3, f_readfile, NULL},
+    {"reltime",		0, 2, f_reltime, NULL},
+    {"reltimestr",	1, 1, f_reltimestr, NULL},
+    {"remote_expr",	2, 3, f_remote_expr, NULL},
+    {"remote_foreground", 1, 1, f_remote_foreground, NULL},
+    {"remote_peek",	1, 2, f_remote_peek, NULL},
+    {"remote_read",	1, 1, f_remote_read, NULL},
+    {"remote_send",	2, 3, f_remote_send, NULL},
+    {"remove",		2, 3, f_remove, NULL},
+    {"rename",		2, 2, f_rename, NULL},
+    {"repeat",		2, 2, f_repeat, NULL},
+    {"resolve",		1, 1, f_resolve, NULL},
+    {"reverse",		1, 1, f_reverse, NULL},
 #ifdef FEAT_FLOAT
-    {"round",		1, 1, f_round},
+    {"round",		1, 1, f_round, NULL},
 #endif
-    {"screenattr",	2, 2, f_screenattr},
-    {"screenchar",	2, 2, f_screenchar},
-    {"screencol",	0, 0, f_screencol},
-    {"screenrow",	0, 0, f_screenrow},
-    {"search",		1, 4, f_search},
-    {"searchdecl",	1, 3, f_searchdecl},
-    {"searchpair",	3, 7, f_searchpair},
-    {"searchpairpos",	3, 7, f_searchpairpos},
-    {"searchpos",	1, 4, f_searchpos},
-    {"server2client",	2, 2, f_server2client},
-    {"serverlist",	0, 0, f_serverlist},
-    {"setbufvar",	3, 3, f_setbufvar},
-    {"setcmdpos",	1, 1, f_setcmdpos},
-    {"setline",		2, 2, f_setline},
-    {"setloclist",	2, 3, f_setloclist},
-    {"setmatches",	1, 1, f_setmatches},
-    {"setpos",		2, 2, f_setpos},
-    {"setqflist",	1, 2, f_setqflist},
-    {"setreg",		2, 3, f_setreg},
-    {"settabvar",	3, 3, f_settabvar},
-    {"settabwinvar",	4, 4, f_settabwinvar},
-    {"setwinvar",	3, 3, f_setwinvar},
+    {"screencol",	0, 0, f_screencol, NULL},
+    {"screenrow",	0, 0, f_screenrow, NULL},
+    {"search",		1, 4, f_search, NULL},
+    {"searchdecl",	1, 3, f_searchdecl, NULL},
+    {"searchpair",	3, 7, f_searchpair, NULL},
+    {"searchpairpos",	3, 7, f_searchpairpos, NULL},
+    {"searchpos",	1, 4, f_searchpos, NULL},
+    {"server2client",	2, 2, f_server2client, NULL},
+    {"serverlist",	0, 0, f_serverlist, NULL},
+    {"setbufvar",	3, 3, f_setbufvar, NULL},
+    {"setcmdpos",	1, 1, f_setcmdpos, NULL},
+    {"setline",		2, 2, f_setline, NULL},
+    {"setloclist",	2, 3, f_setloclist, NULL},
+    {"setmatches",	1, 1, f_setmatches, NULL},
+    {"setpos",		2, 2, f_setpos, NULL},
+    {"setqflist",	1, 2, f_setqflist, NULL},
+    {"setreg",		2, 3, f_setreg, NULL},
+    {"settabvar",	3, 3, f_settabvar, NULL},
+    {"settabwinvar",	4, 4, f_settabwinvar, NULL},
+    {"setwinvar",	3, 3, f_setwinvar, NULL},
 #ifdef FEAT_CRYPT
-    {"sha256",		1, 1, f_sha256},
+    {"sha256",		1, 1, f_sha256, NULL},
 #endif
-    {"shellescape",	1, 2, f_shellescape},
-    {"shiftwidth",	0, 0, f_shiftwidth},
-    {"simplify",	1, 1, f_simplify},
+    {"shellescape",	1, 2, f_shellescape, NULL},
+    {"shiftwidth",	0, 0, f_shiftwidth, NULL},
+    {"simplify",	1, 1, f_simplify, NULL},
 #ifdef FEAT_FLOAT
-    {"sin",		1, 1, f_sin},
-    {"sinh",		1, 1, f_sinh},
+    {"sin",		1, 1, f_sin, NULL},
+    {"sinh",		1, 1, f_sinh, NULL},
 #endif
-    {"sort",		1, 3, f_sort},
-    {"soundfold",	1, 1, f_soundfold},
-    {"spellbadword",	0, 1, f_spellbadword},
-    {"spellsuggest",	1, 3, f_spellsuggest},
-    {"split",		1, 3, f_split},
+    {"sort",		1, 3, f_sort, NULL},
+    {"soundfold",	1, 1, f_soundfold, NULL},
+    {"spellbadword",	0, 1, f_spellbadword, NULL},
+    {"spellsuggest",	1, 3, f_spellsuggest, NULL},
+    {"split",		1, 3, f_split, NULL},
 #ifdef FEAT_FLOAT
-    {"sqrt",		1, 1, f_sqrt},
-    {"str2float",	1, 1, f_str2float},
+    {"sqrt",		1, 1, f_sqrt, NULL},
+    {"str2float",	1, 1, f_str2float, NULL},
 #endif
-    {"str2nr",		1, 2, f_str2nr},
-    {"strchars",	1, 1, f_strchars},
-    {"strdisplaywidth",	1, 2, f_strdisplaywidth},
+    {"str2nr",		1, 2, f_str2nr, NULL},
+    {"strchars",	1, 1, f_strchars, NULL},
+    {"strdisplaywidth",	1, 2, f_strdisplaywidth, NULL},
 #ifdef HAVE_STRFTIME
-    {"strftime",	1, 2, f_strftime},
+    {"strftime",	1, 2, f_strftime, NULL},
 #endif
-    {"stridx",		2, 3, f_stridx},
-    {"string",		1, 1, f_string},
-    {"strlen",		1, 1, f_strlen},
-    {"strpart",		2, 3, f_strpart},
-    {"strridx",		2, 3, f_strridx},
-    {"strtrans",	1, 1, f_strtrans},
-    {"strwidth",	1, 1, f_strwidth},
-    {"submatch",	1, 1, f_submatch},
-    {"substitute",	4, 4, f_substitute},
-    {"synID",		3, 3, f_synID},
-    {"synIDattr",	2, 3, f_synIDattr},
-    {"synIDtrans",	1, 1, f_synIDtrans},
-    {"synconcealed",	2, 2, f_synconcealed},
-    {"synstack",	2, 2, f_synstack},
-    {"system",		1, 2, f_system},
-    {"tabpagebuflist",	0, 1, f_tabpagebuflist},
-    {"tabpagenr",	0, 1, f_tabpagenr},
-    {"tabpagewinnr",	1, 2, f_tabpagewinnr},
-    {"tagfiles",	0, 0, f_tagfiles},
-    {"taglist",		1, 1, f_taglist},
+    {"stridx",		2, 3, f_stridx, NULL},
+    {"string",		1, 1, f_string, NULL},
+    {"strlen",		1, 1, f_strlen, NULL},
+    {"strpart",		2, 3, f_strpart, NULL},
+    {"strridx",		2, 3, f_strridx, NULL},
+    {"strtrans",	1, 1, f_strtrans, NULL},
+    {"strwidth",	1, 1, f_strwidth, NULL},
+    {"submatch",	1, 1, f_submatch, NULL},
+    {"substitute",	4, 4, f_substitute, NULL},
+    {"synID",		3, 3, f_synID, NULL},
+    {"synIDattr",	2, 3, f_synIDattr, NULL},
+    {"synIDtrans",	1, 1, f_synIDtrans, NULL},
+    {"synconcealed",	2, 2, f_synconcealed, NULL},
+    {"synstack",	2, 2, f_synstack, NULL},
+    {"system",		1, 2, f_system, NULL},
+    {"tabpagebuflist",	0, 1, f_tabpagebuflist, NULL},
+    {"tabpagenr",	0, 1, f_tabpagenr, NULL},
+    {"tabpagewinnr",	1, 2, f_tabpagewinnr, NULL},
+    {"tagfiles",	0, 0, f_tagfiles, NULL},
+    {"taglist",		1, 1, f_taglist, NULL},
 #ifdef FEAT_FLOAT
-    {"tan",		1, 1, f_tan},
-    {"tanh",		1, 1, f_tanh},
+    {"tan",		1, 1, f_tan, NULL},
+    {"tanh",		1, 1, f_tanh, NULL},
 #endif
-    {"tempname",	0, 0, f_tempname},
-    {"test",		1, 1, f_test},
-    {"tolower",		1, 1, f_tolower},
-    {"toupper",		1, 1, f_toupper},
-    {"tr",		3, 3, f_tr},
+    {"tempname",	0, 0, f_tempname, NULL},
+    {"test",		1, 1, f_test, NULL},
+    {"tolower",		1, 1, f_tolower, NULL},
+    {"toupper",		1, 1, f_toupper, NULL},
+    {"tr",		3, 3, f_tr, NULL},
 #ifdef FEAT_FLOAT
-    {"trunc",		1, 1, f_trunc},
+    {"trunc",		1, 1, f_trunc, NULL},
 #endif
-    {"type",		1, 1, f_type},
-    {"undofile",	1, 1, f_undofile},
-    {"undotree",	0, 0, f_undotree},
-    {"values",		1, 1, f_values},
-    {"virtcol",		1, 1, f_virtcol},
-    {"visualmode",	0, 1, f_visualmode},
-    {"wildmenumode",	0, 0, f_wildmenumode},
-    {"winbufnr",	1, 1, f_winbufnr},
-    {"wincol",		0, 0, f_wincol},
-    {"winheight",	1, 1, f_winheight},
-    {"winline",		0, 0, f_winline},
-    {"winnr",		0, 1, f_winnr},
-    {"winrestcmd",	0, 0, f_winrestcmd},
-    {"winrestview",	1, 1, f_winrestview},
-    {"winsaveview",	0, 0, f_winsaveview},
-    {"winwidth",	1, 1, f_winwidth},
-    {"writefile",	2, 3, f_writefile},
-    {"xor",		2, 2, f_xor},
+    {"type",		1, 1, f_type, NULL},
+    {"undofile",	1, 1, f_undofile, NULL},
+    {"undotree",	0, 0, f_undotree, NULL},
+    {"values",		1, 1, f_values, NULL},
+    {"virtcol",		1, 1, f_virtcol, NULL},
+    {"visualmode",	0, 1, f_visualmode, NULL},
+    {"wildmenumode",	0, 0, f_wildmenumode, NULL},
+    {"winbufnr",	1, 1, f_winbufnr, NULL},
+    {"wincol",		0, 0, f_wincol, NULL},
+    {"winheight",	1, 1, f_winheight, NULL},
+    {"winline",		0, 0, f_winline, NULL},
+    {"winnr",		0, 1, f_winnr, NULL},
+    {"winrestcmd",	0, 0, f_winrestcmd, NULL},
+    {"winrestview",	1, 1, f_winrestview, NULL},
+    {"winsaveview",	0, 0, f_winsaveview, NULL},
+    {"winwidth",	1, 1, f_winwidth, NULL},
+    {"writefile",	2, 3, f_writefile, NULL},
+    {"xor",		2, 2, f_xor, NULL},
 };
 
 #if defined(FEAT_CMDL_COMPL) || defined(PROTO)
@@ -8236,9 +8279,9 @@ sortFunctions()
 
 /*
  * Find internal function in table above.
- * Return index, or -1 if not found
+ * Return pointer, or NULL if not found
  */
-    static int
+    static struct fst *
 find_internal_func(name)
     char_u	*name;		/* name of the function */
 {
@@ -8259,39 +8302,162 @@ find_internal_func(name)
 	else if (cmp > 0)
 	    first = x + 1;
 	else
-	    return x;
+	    return &functions[x];
     }
-    return -1;
+    return NULL;
 }
 
 /*
  * Check if "name" is a variable of type VAR_FUNC.  If so, return the function
- * name it contains, otherwise return "name".
+ * definition it contains, otherwise try to find internal or user-defined 
+ * function with the given name. Returns NULL on failure.
  */
-    static char_u *
-deref_func_name(name, lenp)
+    func_T *
+deref_func_name(name, len)
     char_u	*name;
-    int		*lenp;
+    int		len;
 {
     dictitem_T	*v;
     int		cc;
+    func_T	*r;
 
-    cc = name[*lenp];
-    name[*lenp] = NUL;
+    cc = name[len];
+    name[len] = NUL;
     v = find_var(name, NULL);
-    name[*lenp] = cc;
+    name[len] = cc;
+
     if (v != NULL && v->di_tv.v_type == VAR_FUNC)
     {
-	if (v->di_tv.vval.v_string == NULL)
-	{
-	    *lenp = 0;
-	    return (char_u *)"";	/* just in case */
-	}
-	*lenp = (int)STRLEN(v->di_tv.vval.v_string);
-	return v->di_tv.vval.v_string;
+	if (v->di_tv.vval.v_func == NULL)
+	    return NULL;
+	return v->di_tv.vval.v_func;
     }
 
-    return name;
+    name[len] = NUL;
+    if (builtin_function(name))
+    {
+	struct fst	*intfp;
+	intfp = find_internal_func(name);
+
+	if (intfp == NULL)
+	    r = NULL;
+	else
+	{
+	    if (intfp->f_func == NULL)
+	    {
+		intfp->f_func = func_alloc();
+		if (intfp->f_func != NULL)
+		{
+		    ++intfp->f_func->fv_refcount;
+		    intfp->f_func->fv_data = intfp;
+		    intfp->f_func->fv_type = &internal_func_type;
+		}
+	    }
+
+	    r = intfp->f_func;
+	}
+    }
+    else
+    {
+	char_u	*fname = NULL;
+	char_u	*pp;
+	char_u	sid_buf[20];
+	int	lead;
+	int	old_len;
+	ufunc_T	*fp;
+
+	lead = eval_fname_script(name);
+	len -= lead;
+	old_len = len;
+	pp = name + lead;
+
+	if (lead)
+	{
+	    lead = 3;
+	    if (eval_fname_sid(name))
+	    {
+		if (current_SID <= 0)
+		{
+		    EMSG(_(e_usingsid));
+		    len = 0;
+		}
+		else
+		{
+		    sprintf((char *) sid_buf, "%ld_", (long) current_SID);
+		    lead += STRLEN(sid_buf);
+		}
+	    }
+	    else
+		*sid_buf = NUL;
+
+	    if (len)
+		fname = (char_u *) alloc(len + 1);
+
+	    len += lead;
+	}
+	else
+	{
+	    *sid_buf = NUL;
+	    fname = name;
+	}
+
+	if (fname != NULL)
+	{
+	    if (lead)
+	    {
+		fname[0] = K_SPECIAL;
+		fname[1] = KS_EXTRA;
+		fname[2] = (int) KE_SNR;
+
+		if (*sid_buf != NUL)
+		    mch_memmove(fname + 3, sid_buf, lead - 3);
+
+		mch_memmove(fname + lead, pp, (size_t) old_len + 1);
+	    }
+	    fp = find_func(fname);
+
+#ifdef FEAT_AUTOCMD
+	    /* Trigger FuncUndefined event, may load the function. */
+	    if (fp == NULL
+		    && apply_autocmds(EVENT_FUNCUNDEFINED,
+						     fname, fname, TRUE, NULL)
+		    && !aborting())
+		/* executed an autocommand, search for the function again */
+		fp = find_func(name);
+#endif
+
+	    if (fp == NULL)
+	    {
+		if (vim_strchr(fname, AUTOLOAD_CHAR) == NULL)
+		    r = NULL;
+		else
+		{
+		    aufunc_T	*aufp;
+
+		    if ((aufp = aufunc_alloc()) == NULL ||
+			    (r = func_alloc()) == NULL)
+			r = NULL;
+		    else
+		    {
+			aufp->auf_name = vim_strsave(fname);
+			r->fv_data = (void *) aufp;
+			r->fv_type = &autoload_func_type;
+		    }
+		}
+	    }
+	    else
+		r = fp->uf_func;
+
+	    if (lead)
+		vim_free(fname);
+	}
+    }
+    name[len] = cc;
+
+    if (r != NULL)
+	++r->fv_refcount;
+
+    return r;
 }
 
 /*
@@ -8299,10 +8465,9 @@ deref_func_name(name, lenp)
  * Return OK or FAIL.
  */
     static int
-get_func_tv(name, len, rettv, arg, firstline, lastline, doesrange,
+get_func_tv(func, rettv, arg, firstline, lastline, doesrange,
 							   evaluate, selfdict)
-    char_u	*name;		/* name of the function */
-    int		len;		/* length of "name" */
+    func_T	*func;		/* function definition */
     typval_T	*rettv;
     char_u	**arg;		/* argument, pointing to the '(' */
     linenr_T	firstline;	/* first line of range */
@@ -8339,15 +8504,17 @@ get_func_tv(name, len, rettv, arg, firstline, lastline, doesrange,
     else
 	ret = FAIL;
 
-    if (ret == OK)
-	ret = call_func(name, len, rettv, argcount, argvars,
-			  firstline, lastline, doesrange, evaluate, selfdict);
+    if (ret == OK && evaluate)
+	ret = call_func(func, rettv, argcount, argvars,
+			  firstline, lastline, doesrange, selfdict);
     else if (!aborting())
     {
+	char_u	*tofree = FUNC_REPR(func);
 	if (argcount == MAX_FUNC_ARGS)
-	    emsg_funcname(N_("E740: Too many arguments for function %s"), name);
+	    emsg_funcname(N_("E740: Too many arguments for function %s"), tofree);
 	else
-	    emsg_funcname(N_("E116: Invalid arguments for function %s"), name);
+	    emsg_funcname(N_("E116: Invalid arguments for function %s"), tofree);
+	vim_free(tofree);
     }
 
     while (--argcount >= 0)
@@ -8357,17 +8524,66 @@ get_func_tv(name, len, rettv, arg, firstline, lastline, doesrange,
     return ret;
 }
 
-
-/*
- * Call a function with its resolved parameters
- * Return FAIL when the function can't be called,  OK otherwise.
- * Also returns OK when an error was encountered while executing the function.
- */
     static int
-call_func(funcname, len, rettv, argcount, argvars, firstline, lastline,
-						doesrange, evaluate, selfdict)
-    char_u	*funcname;	/* name of the function */
-    int		len;		/* length of "name" */
+call_internal_func(intfp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
+    struct fst	*intfp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
+    int		argcount;	/* nr of args */
+    typval_T	*argvars;	/* arguments */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* is set to True if function handles range */
+    dict_T	*selfdict;	/* Dictionary for "self" */
+{
+    if (argcount < intfp->f_min_argc)
+	return ERROR_TOOFEW;
+    else if (argcount > intfp->f_max_argc)
+	return ERROR_TOOMANY;
+
+    argvars[argcount].v_type = VAR_UNKNOWN;
+    intfp->f_call(argvars, rettv);
+
+    return ERROR_NONE;
+}
+
+    static char_u *
+repr_internal_func(intfp)
+    struct fst	*intfp;
+{
+    return string_quote((char_u *) intfp->f_name, TRUE);
+}
+
+    static void
+dealloc_internal_func(intfp)
+    struct fst	*intfp;
+{
+    return;
+}
+
+    static int
+compare_internal_funcs(intfp1, intfp2)
+    struct fst	*intfp1;
+    struct fst	*intfp2;
+{
+    return intfp1 == intfp2;
+}
+
+static funcdef_T internal_func_type = {
+    (function_caller)		call_internal_func,	/* fd_call */
+    (function_representer)	repr_internal_func,	/* fd_repr */
+    (function_destructor)	dealloc_internal_func,	/* fd_dealloc */
+    (function_cmp)		compare_internal_funcs,	/* fd_compare */
+};
+
+    static aufunc_T *
+aufunc_alloc()
+{
+    return (aufunc_T *) alloc_clear(sizeof(aufunc_T));
+}
+
+    static int
+call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
+    aufunc_T	*aufp;
     typval_T	*rettv;		/* return value goes here */
     int		argcount;	/* number of "argvars" */
     typval_T	*argvars;	/* vars for arguments, must have "argcount"
@@ -8375,212 +8591,122 @@ call_func(funcname, len, rettv, argcount, argvars, firstline, lastline,
     linenr_T	firstline;	/* first line of range */
     linenr_T	lastline;	/* last line of range */
     int		*doesrange;	/* return: function handled range */
-    int		evaluate;
     dict_T	*selfdict;	/* Dictionary for "self" */
 {
-    int		ret = FAIL;
-#define ERROR_UNKNOWN	0
-#define ERROR_TOOMANY	1
-#define ERROR_TOOFEW	2
-#define ERROR_SCRIPT	3
-#define ERROR_DICT	4
-#define ERROR_NONE	5
-#define ERROR_OTHER	6
-    int		error = ERROR_NONE;
-    int		i;
-    int		llen;
-    ufunc_T	*fp;
-#define FLEN_FIXED 40
-    char_u	fname_buf[FLEN_FIXED + 1];
-    char_u	*fname;
-    char_u	*name;
+    /* Try loading a package. */
+    if (aufp->auf_func == NULL && script_autoload(aufp->auf_name, TRUE) &&
+	    !aborting())
+	/* loaded a package, search for the function again */
+	aufp->auf_func = deref_func_name(aufp->auf_name,STRLEN(aufp->auf_name));
 
-    /* Make a copy of the name, if it comes from a funcref variable it could
-     * be changed or deleted in the called function. */
-    name = vim_strnsave(funcname, len);
-    if (name == NULL)
-	return ret;
-
-    /*
-     * In a script change <SID>name() and s:name() to K_SNR 123_name().
-     * Change <SNR>123_name() to K_SNR 123_name().
-     * Use fname_buf[] when it fits, otherwise allocate memory (slow).
-     */
-    llen = eval_fname_script(name);
-    if (llen > 0)
+    if (aufp->auf_func == NULL)
     {
-	fname_buf[0] = K_SPECIAL;
-	fname_buf[1] = KS_EXTRA;
-	fname_buf[2] = (int)KE_SNR;
-	i = 3;
-	if (eval_fname_sid(name))	/* "<SID>" or "s:" */
-	{
-	    if (current_SID <= 0)
-		error = ERROR_SCRIPT;
-	    else
-	    {
-		sprintf((char *)fname_buf + 3, "%ld_", (long)current_SID);
-		i = (int)STRLEN(fname_buf);
-	    }
-	}
-	if (i + STRLEN(name + llen) < FLEN_FIXED)
-	{
-	    STRCPY(fname_buf + i, name + llen);
-	    fname = fname_buf;
-	}
-	else
-	{
-	    fname = alloc((unsigned)(i + STRLEN(name + llen) + 1));
-	    if (fname == NULL)
-		error = ERROR_OTHER;
-	    else
-	    {
-		mch_memmove(fname, fname_buf, (size_t)i);
-		STRCPY(fname + i, name + llen);
-	    }
-	}
+	EMSG2(_(e_unknown_function), aufp->auf_name);
+	return ERROR_OTHER;
     }
-    else
-	fname = name;
+
+    return FUNC_CALL(aufp->auf_func, rettv, argcount, argvars,
+		     firstline, lastline, doesrange, selfdict);
+}
+
+    static char_u *
+repr_autoload_func(aufp)
+    aufunc_T	*aufp;
+{
+    return string_quote(aufp->auf_name, TRUE);
+}
+
+    static void
+dealloc_autoload_func(aufp)
+    aufunc_T	*aufp;
+{
+    if (aufp->auf_func != NULL)
+	func_unref(aufp->auf_func);
+    vim_free(aufp->auf_name);
+    vim_free(aufp);
+}
+
+    static int
+compare_autoload_funcs(aufp1, aufp2)
+    aufunc_T	*aufp1;
+    aufunc_T	*aufp2;
+{
+    return STRCMP(aufp1->auf_name, aufp2->auf_name) == 0;
+}
+
+static funcdef_T autoload_func_type = {
+    (function_caller)		call_autoload_func,	/* fd_call */
+    (function_representer)	repr_autoload_func,	/* fd_repr */
+    (function_destructor)	dealloc_autoload_func,	/* fd_dealloc */
+    (function_cmp)		compare_autoload_funcs,	/* fd_compare */
+};
+
+/*
+ * Call a function with its resolved parameters
+ * Return FAIL when the function can't be called,  OK otherwise.
+ * Also returns OK when an error was encountered while executing the function.
+ */
+    static int
+call_func(func, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
+    func_T	*func;		/* function definition */
+    typval_T	*rettv;		/* return value goes here */
+    int		argcount;	/* number of "argvars" */
+    typval_T	*argvars;	/* vars for arguments, must have "argcount"
+				   PLUS ONE elements! */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* return: function handled range */
+    dict_T	*selfdict;	/* Dictionary for "self" */
+{
+    int		error;
 
     *doesrange = FALSE;
 
+    if (func == NULL)
+	return FAIL;
 
-    /* execute the function if no errors detected and executing */
-    if (evaluate && error == ERROR_NONE)
-    {
-	rettv->v_type = VAR_NUMBER;	/* default rettv is number zero */
-	rettv->vval.v_number = 0;
-	error = ERROR_UNKNOWN;
-
-	if (!builtin_function(fname))
-	{
-	    /*
-	     * User defined function.
-	     */
-	    fp = find_func(fname);
-
-#ifdef FEAT_AUTOCMD
-	    /* Trigger FuncUndefined event, may load the function. */
-	    if (fp == NULL
-		    && apply_autocmds(EVENT_FUNCUNDEFINED,
-						     fname, fname, TRUE, NULL)
-		    && !aborting())
-	    {
-		/* executed an autocommand, search for the function again */
-		fp = find_func(fname);
-	    }
-#endif
-	    /* Try loading a package. */
-	    if (fp == NULL && script_autoload(fname, TRUE) && !aborting())
-	    {
-		/* loaded a package, search for the function again */
-		fp = find_func(fname);
-	    }
-
-	    if (fp != NULL)
-	    {
-		if (fp->uf_flags & FC_RANGE)
-		    *doesrange = TRUE;
-		if (argcount < fp->uf_args.ga_len)
-		    error = ERROR_TOOFEW;
-		else if (!fp->uf_varargs && argcount > fp->uf_args.ga_len)
-		    error = ERROR_TOOMANY;
-		else if ((fp->uf_flags & FC_DICT) && selfdict == NULL)
-		    error = ERROR_DICT;
-		else
-		{
-		    /*
-		     * Call the user function.
-		     * Save and restore search patterns, script variables and
-		     * redo buffer.
-		     */
-		    save_search_patterns();
-		    saveRedobuff();
-		    ++fp->uf_calls;
-		    call_user_func(fp, argcount, argvars, rettv,
-					       firstline, lastline,
-				  (fp->uf_flags & FC_DICT) ? selfdict : NULL);
-		    if (--fp->uf_calls <= 0 && isdigit(*fp->uf_name)
-						      && fp->uf_refcount <= 0)
-			/* Function was unreferenced while being used, free it
-			 * now. */
-			func_free(fp);
-		    restoreRedobuff();
-		    restore_search_patterns();
-		    error = ERROR_NONE;
-		}
-	    }
-	}
-	else
-	{
-	    /*
-	     * Find the function name in the table, call its implementation.
-	     */
-	    i = find_internal_func(fname);
-	    if (i >= 0)
-	    {
-		if (argcount < functions[i].f_min_argc)
-		    error = ERROR_TOOFEW;
-		else if (argcount > functions[i].f_max_argc)
-		    error = ERROR_TOOMANY;
-		else
-		{
-		    argvars[argcount].v_type = VAR_UNKNOWN;
-		    functions[i].f_func(argvars, rettv);
-		    error = ERROR_NONE;
-		}
-	    }
-	}
-	/*
-	 * The function call (or "FuncUndefined" autocommand sequence) might
-	 * have been aborted by an error, an interrupt, or an explicitly thrown
-	 * exception that has not been caught so far.  This situation can be
-	 * tested for by calling aborting().  For an error in an internal
-	 * function or for the "E132" error in call_user_func(), however, the
-	 * throw point at which the "force_abort" flag (temporarily reset by
-	 * emsg()) is normally updated has not been reached yet. We need to
-	 * update that flag first to make aborting() reliable.
-	 */
-	update_force_abort();
-    }
-    if (error == ERROR_NONE)
-	ret = OK;
+    rettv->v_type = VAR_NUMBER;	/* default rettv is number zero */
+    rettv->vval.v_number = 0;
+    error = func->fv_type->fd_call(func->fv_data, rettv, argcount, argvars,
+				   firstline, lastline, doesrange, selfdict);
 
     /*
-     * Report an error unless the argument evaluation or function call has been
-     * cancelled due to an aborting error, an interrupt, or an exception.
+     * The function call (or "FuncUndefined" autocommand sequence) might
+     * have been aborted by an error, an interrupt, or an explicitly thrown
+     * exception that has not been caught so far.  This situation can be
+     * tested for by calling aborting().  For an error in an internal
+     * function or for the "E132" error in call_user_func(), however, the
+     * throw point at which the "force_abort" flag (temporarily reset by
+     * emsg()) is normally updated has not been reached yet. We need to
+     * update that flag first to make aborting() reliable.
      */
+    update_force_abort();
+
     if (!aborting())
     {
+	char_u	*tofree = FUNC_REPR(func);
 	switch (error)
 	{
-	    case ERROR_UNKNOWN:
-		    emsg_funcname(N_("E117: Unknown function: %s"), name);
-		    break;
 	    case ERROR_TOOMANY:
-		    emsg_funcname(e_toomanyarg, name);
+		    emsg_funcname(e_toomanyarg, tofree);
 		    break;
 	    case ERROR_TOOFEW:
 		    emsg_funcname(N_("E119: Not enough arguments for function: %s"),
-									name);
+									tofree);
 		    break;
 	    case ERROR_SCRIPT:
 		    emsg_funcname(N_("E120: Using <SID> not in a script context: %s"),
-									name);
+									tofree);
 		    break;
 	    case ERROR_DICT:
 		    emsg_funcname(N_("E725: Calling dict function without Dictionary: %s"),
-									name);
+									tofree);
 		    break;
 	}
+	vim_free(tofree);
     }
 
-    if (fname != name && fname != fname_buf)
-	vim_free(fname);
-    vim_free(name);
-
-    return ret;
+    return error == ERROR_NONE ? OK : FAIL;
 }
 
 /*
@@ -9212,8 +9338,8 @@ f_byteidx(argvars, rettv)
 }
 
     int
-func_call(name, args, selfdict, rettv)
-    char_u	*name;
+func_call(func, args, selfdict, rettv)
+    func_T	*func;
     typval_T	*args;
     dict_T	*selfdict;
     typval_T	*rettv;
@@ -9239,9 +9365,9 @@ func_call(name, args, selfdict, rettv)
     }
 
     if (item == NULL)
-	r = call_func(name, (int)STRLEN(name), rettv, argc, argv,
+	r = call_func(func, rettv, argc, argv,
 				 curwin->w_cursor.lnum, curwin->w_cursor.lnum,
-						      &dummy, TRUE, selfdict);
+						      &dummy, selfdict);
 
     /* Free the arguments. */
     while (argc > 0)
@@ -9258,7 +9384,7 @@ f_call(argvars, rettv)
     typval_T	*argvars;
     typval_T	*rettv;
 {
-    char_u	*func;
+    func_T	*func;
     dict_T	*selfdict = NULL;
 
     if (argvars[1].v_type != VAR_LIST)
@@ -9270,11 +9396,18 @@ f_call(argvars, rettv)
 	return;
 
     if (argvars[0].v_type == VAR_FUNC)
-	func = argvars[0].vval.v_string;
+    {
+	func = argvars[0].vval.v_func;
+	++func->fv_refcount;
+    }
     else
-	func = get_tv_string(&argvars[0]);
-    if (*func == NUL)
-	return;		/* type error or empty name */
+    {
+	char_u	*name;
+	name = get_tv_string(&argvars[0]);
+	if (name == NUL)
+	    return;		/* type error or empty name */
+	func = deref_func_name(name, STRLEN(name));
+    }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
@@ -9287,6 +9420,8 @@ f_call(argvars, rettv)
     }
 
     (void)func_call(func, &argvars[1], selfdict, rettv);
+
+    func_unref(func);
 }
 
 #ifdef FEAT_FLOAT
@@ -10977,36 +11112,20 @@ f_function(argvars, rettv)
     typval_T	*rettv;
 {
     char_u	*s;
+    func_T	*func;
 
     s = get_tv_string(&argvars[0]);
-    if (s == NULL || *s == NUL || VIM_ISDIGIT(*s))
-	EMSG2(_(e_invarg2), s);
-    /* Don't check an autoload name for existence here. */
-    else if (vim_strchr(s, AUTOLOAD_CHAR) == NULL && !function_exists(s))
-	EMSG2(_("E700: Unknown function: %s"), s);
+
+    func = deref_func_name(s, STRLEN(s));
+
+    if (func != NULL)
+    {
+	rettv->v_type = VAR_FUNC;
+	rettv->vval.v_func = func;
+    }
     else
     {
-	if (STRNCMP(s, "s:", 2) == 0 || STRNCMP(s, "<SID>", 5) == 0)
-	{
-	    char	sid_buf[25];
-	    int		off = *s == 's' ? 2 : 5;
-
-	    /* Expand s: and <SID> into <SNR>nr_, so that the function can
-	     * also be called from another script. Using trans_function_name()
-	     * would also work, but some plugins depend on the name being
-	     * printable text. */
-	    sprintf(sid_buf, "<SNR>%ld_", (long)current_SID);
-	    rettv->vval.v_string =
-			    alloc((int)(STRLEN(sid_buf) + STRLEN(s + off) + 1));
-	    if (rettv->vval.v_string != NULL)
-	    {
-		STRCPY(rettv->vval.v_string, sid_buf);
-		STRCAT(rettv->vval.v_string, s + off);
-	    }
-	}
-	else
-	    rettv->vval.v_string = vim_strsave(s);
-	rettv->v_type = VAR_FUNC;
+	EMSG2(_(e_unknown_function), s);
     }
 }
 
@@ -16948,7 +17067,7 @@ static int
 	item_compare2 __ARGS((const void *s1, const void *s2));
 
 static int	item_compare_ic;
-static char_u	*item_compare_func;
+static func_T	*item_compare_func;
 static dict_T	*item_compare_selfdict;
 static int	item_compare_func_err;
 #define ITEM_COMPARE_FAIL 999
@@ -17008,8 +17127,8 @@ item_compare2(s1, s2)
     copy_tv(&(*(listitem_T **)s2)->li_tv, &argv[1]);
 
     rettv.v_type = VAR_UNKNOWN;		/* clear_tv() uses this */
-    res = call_func(item_compare_func, (int)STRLEN(item_compare_func),
-				 &rettv, 2, argv, 0L, 0L, &dummy, TRUE,
+    res = call_func(item_compare_func,
+				 &rettv, 2, argv, 0L, 0L, &dummy,
 				 item_compare_selfdict);
     clear_tv(&argv[0]);
     clear_tv(&argv[1]);
@@ -17061,7 +17180,7 @@ f_sort(argvars, rettv)
 	{
 	    /* optional second argument: {func} */
 	    if (argvars[1].v_type == VAR_FUNC)
-		item_compare_func = argvars[1].vval.v_string;
+		item_compare_func = argvars[1].vval.v_func;
 	    else
 	    {
 		int	    error = FALSE;
@@ -17072,7 +17191,17 @@ f_sort(argvars, rettv)
 		if (i == 1)
 		    item_compare_ic = TRUE;
 		else
-		    item_compare_func = get_tv_string(&argvars[1]);
+		{
+		    char_u	*name;
+
+		    name = get_tv_string(&argvars[1]);
+		    if (*name == NUL)
+			return;
+
+		    item_compare_func = deref_func_name(name, STRLEN(name));
+		    if (item_compare_func == NULL)
+			return;
+		}
 	    }
 
 	    if (argvars[2].v_type != VAR_UNKNOWN)
@@ -17116,6 +17245,9 @@ f_sort(argvars, rettv)
 		    list_append(l, ptrs[i]);
 	    }
 	}
+
+	if (item_compare_func != NULL)
+	    func_unref(item_compare_func);
 
 	vim_free(ptrs);
     }
@@ -19795,13 +19927,14 @@ handle_subscript(arg, rettv, evaluate, verbose)
     {
 	if (**arg == '(')
 	{
+	    func_T	*func;
 	    /* need to copy the funcref so that we can clear rettv */
 	    functv = *rettv;
 	    rettv->v_type = VAR_UNKNOWN;
 
 	    /* Invoke the function.  Recursive! */
-	    s = functv.vval.v_string;
-	    ret = get_func_tv(s, (int)STRLEN(s), rettv, arg,
+	    func = functv.vval.v_func;
+	    ret = get_func_tv(func, rettv, arg,
 			curwin->w_cursor.lnum, curwin->w_cursor.lnum,
 			&len, evaluate, selfdict);
 
@@ -19887,7 +20020,7 @@ free_tv(varp)
 	switch (varp->v_type)
 	{
 	    case VAR_FUNC:
-		func_unref(varp->vval.v_string);
+		func_unref(varp->vval.v_func);
 		/*FALLTHROUGH*/
 	    case VAR_STRING:
 		vim_free(varp->vval.v_string);
@@ -19924,8 +20057,9 @@ clear_tv(varp)
 	switch (varp->v_type)
 	{
 	    case VAR_FUNC:
-		func_unref(varp->vval.v_string);
-		/*FALLTHROUGH*/
+		func_unref(varp->vval.v_func);
+		varp->vval.v_func = NULL;
+		break;
 	    case VAR_STRING:
 		vim_free(varp->vval.v_string);
 		varp->vval.v_string = NULL;
@@ -20739,14 +20873,18 @@ copy_tv(from, to)
 	    break;
 #endif
 	case VAR_STRING:
-	case VAR_FUNC:
 	    if (from->vval.v_string == NULL)
 		to->vval.v_string = NULL;
 	    else
-	    {
 		to->vval.v_string = vim_strsave(from->vval.v_string);
-		if (from->v_type == VAR_FUNC)
-		    func_ref(to->vval.v_string);
+	    break;
+	case VAR_FUNC:
+	    if (from->vval.v_func == NULL)
+		to->vval.v_func = NULL;
+	    else
+	    {
+		to->vval.v_func = from->vval.v_func;
+		++to->vval.v_func->fv_refcount;
 	    }
 	    break;
 	case VAR_LIST:
@@ -21124,7 +21262,6 @@ ex_function(eap)
     char_u	*skip_until = NULL;
     dictitem_T	*v;
     funcdict_T	fudi;
-    static int	func_nr = 0;	    /* number for nameless function */
     int		paren;
     hashtab_T	*ht;
     int		todo;
@@ -21620,23 +21757,10 @@ ex_function(eap)
 		emsg_funcname(e_funcexts, name);
 		goto erret;
 	    }
-	    if (fp->uf_calls > 0)
-	    {
-		emsg_funcname(N_("E127: Cannot redefine function %s: It is in use"),
-									name);
-		goto erret;
-	    }
-	    /* redefine existing function */
-	    ga_clear_strings(&(fp->uf_args));
-	    ga_clear_strings(&(fp->uf_lines));
-	    vim_free(name);
-	    name = NULL;
 	}
     }
     else
     {
-	char	numbuf[20];
-
 	fp = NULL;
 	if (fudi.fd_newkey == NULL && !eap->forceit)
 	{
@@ -21653,83 +21777,97 @@ ex_function(eap)
 	else if (tv_check_lock(fudi.fd_di->di_tv.v_lock, eap->arg))
 	    goto erret;
 
-	/* Give the function a sequential number.  Can only be used with a
-	 * Funcref! */
 	vim_free(name);
-	sprintf(numbuf, "%d", ++func_nr);
-	name = vim_strsave((char_u *)numbuf);
+	name = vim_strsave((char_u *) "");
 	if (name == NULL)
 	    goto erret;
     }
 
-    if (fp == NULL)
+    if (fp != NULL)
     {
-	if (fudi.fd_dict == NULL && vim_strchr(name, AUTOLOAD_CHAR) != NULL)
-	{
-	    int	    slen, plen;
-	    char_u  *scriptname;
+	remove_user_func(fp);
+	func_unref(fp->uf_func);
+	fp = NULL;
+    }
 
-	    /* Check that the autoload name matches the script name. */
-	    j = FAIL;
-	    if (sourcing_name != NULL)
+    if (fudi.fd_dict == NULL && vim_strchr(name, AUTOLOAD_CHAR) != NULL)
+    {
+	int	    slen, plen;
+	char_u  *scriptname;
+
+	/* Check that the autoload name matches the script name. */
+	j = FAIL;
+	if (sourcing_name != NULL)
+	{
+	    scriptname = autoload_name(name);
+	    if (scriptname != NULL)
 	    {
-		scriptname = autoload_name(name);
-		if (scriptname != NULL)
-		{
-		    p = vim_strchr(scriptname, '/');
-		    plen = (int)STRLEN(p);
-		    slen = (int)STRLEN(sourcing_name);
-		    if (slen > plen && fnamecmp(p,
-					    sourcing_name + slen - plen) == 0)
-			j = OK;
-		    vim_free(scriptname);
-		}
+		p = vim_strchr(scriptname, '/');
+		plen = (int)STRLEN(p);
+		slen = (int)STRLEN(sourcing_name);
+		if (slen > plen && fnamecmp(p,
+					sourcing_name + slen - plen) == 0)
+		    j = OK;
+		vim_free(scriptname);
 	    }
-	    if (j == FAIL)
+	}
+	if (j == FAIL)
+	{
+	    EMSG2(_("E746: Function name does not match script file name: %s"), name);
+	    goto erret;
+	}
+    }
+
+    fp = (ufunc_T *)alloc((unsigned)(sizeof(ufunc_T) + STRLEN(name)));
+    if (fp == NULL)
+	goto erret;
+
+    fp->uf_func = func_alloc();
+    if (fp->uf_func == NULL)
+    {
+	vim_free(fp);
+	goto erret;
+    }
+
+    fp->uf_func->fv_data = fp;
+    ++fp->uf_func->fv_refcount;
+    fp->uf_func->fv_type = &user_func_type;
+
+    if (fudi.fd_dict != NULL)
+    {
+	if (fudi.fd_di == NULL)
+	{
+	    /* add new dict entry */
+	    fudi.fd_di = dictitem_alloc(fudi.fd_newkey);
+	    if (fudi.fd_di == NULL)
 	    {
-		EMSG2(_("E746: Function name does not match script file name: %s"), name);
+		func_unref(fp->uf_func);
+		vim_free(fp);
+		goto erret;
+	    }
+	    if (dict_add(fudi.fd_dict, fudi.fd_di) == FAIL)
+	    {
+		func_unref(fp->uf_func);
+		vim_free(fudi.fd_di);
+		vim_free(fp);
 		goto erret;
 	    }
 	}
+	else
+	    /* overwrite existing dict entry */
+	    clear_tv(&fudi.fd_di->di_tv);
+	fudi.fd_di->di_tv.v_type = VAR_FUNC;
+	fudi.fd_di->di_tv.v_lock = 0;
+	fudi.fd_di->di_tv.vval.v_func = fp->uf_func;
 
-	fp = (ufunc_T *)alloc((unsigned)(sizeof(ufunc_T) + STRLEN(name)));
-	if (fp == NULL)
-	    goto erret;
-
-	if (fudi.fd_dict != NULL)
-	{
-	    if (fudi.fd_di == NULL)
-	    {
-		/* add new dict entry */
-		fudi.fd_di = dictitem_alloc(fudi.fd_newkey);
-		if (fudi.fd_di == NULL)
-		{
-		    vim_free(fp);
-		    goto erret;
-		}
-		if (dict_add(fudi.fd_dict, fudi.fd_di) == FAIL)
-		{
-		    vim_free(fudi.fd_di);
-		    vim_free(fp);
-		    goto erret;
-		}
-	    }
-	    else
-		/* overwrite existing dict entry */
-		clear_tv(&fudi.fd_di->di_tv);
-	    fudi.fd_di->di_tv.v_type = VAR_FUNC;
-	    fudi.fd_di->di_tv.v_lock = 0;
-	    fudi.fd_di->di_tv.vval.v_string = vim_strsave(name);
-	    fp->uf_refcount = 1;
-
-	    /* behave like "dict" was used */
-	    flags |= FC_DICT;
-	}
-
-	/* insert the new function in the function list */
-	STRCPY(fp->uf_name, name);
-	hash_add(&func_hashtab, UF2HIKEY(fp));
+	/* behave like "dict" was used */
+	flags |= FC_DICT;
     }
+
+    /* insert the new function in the function list */
+    STRCPY(fp->uf_name, name);
+    hash_add(&func_hashtab, UF2HIKEY(fp));
+
     fp->uf_args = newargs;
     fp->uf_lines = newlines;
 #ifdef FEAT_PROFILE
@@ -21742,7 +21880,6 @@ ex_function(eap)
 #endif
     fp->uf_varargs = varargs;
     fp->uf_flags = flags;
-    fp->uf_calls = 0;
     fp->uf_script_ID = current_SID;
     goto ret_free;
 
@@ -21755,6 +21892,117 @@ ret_free:
     vim_free(name);
     did_emsg |= saved_did_emsg;
     need_wait_return |= saved_wait_return;
+}
+
+/*
+ * Get the func_T reference which will be then called.
+ */
+    static func_T *
+get_called_function(pp, skip, fdp)
+    char_u	**pp;
+    int		skip;
+    funcdict_T	*fdp;
+{
+    func_T	*func = NULL;
+    char_u	*start;
+    char_u	*end;
+    lval_T	lv;
+    int		len;
+    int		lead;
+
+    if (fdp != NULL)
+	vim_memset(fdp, 0, sizeof(funcdict_T));
+    start = *pp;
+
+    /* Check for hard coded <SNR>: already translated function ID (from a user
+     * command). */
+    if ((*pp)[0] == K_SPECIAL && (*pp)[1] == KS_EXTRA
+						   && (*pp)[2] == (int)KE_SNR)
+    {
+	*pp += 3;
+	len = get_id_len(pp) + 3;
+	return deref_func_name(start, len);
+    }
+
+    /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
+     * don't skip over "s:", get_lval() needs it for "s:dict.func". */
+    lead = eval_fname_script(start);
+    if (lead > 2)
+	start += lead;
+
+    end = get_lval(start, NULL, &lv, FALSE, skip, FALSE,
+					      lead > 2 ? 0 : FNE_CHECK_START);
+    if (end == start)
+    {
+	if (!skip)
+	    EMSG(_("E129: Function name required"));
+	goto theend;
+    }
+    if (end == NULL || (lv.ll_tv != NULL && (lead > 2 || lv.ll_range)))
+    {
+	/*
+	 * Report an invalid expression in braces, unless the expression
+	 * evaluation has been cancelled due to an aborting error, an
+	 * interrupt, or an exception.
+	 */
+	if (!aborting())
+	{
+	    if (end != NULL)
+		EMSG2(_(e_invarg2), start);
+	}
+	else
+	    *pp = find_name_end(start, NULL, NULL, FNE_INCL_BR);
+	goto theend;
+    }
+
+    if (lv.ll_tv != NULL)
+    {
+	if (fdp != NULL)
+	{
+	    fdp->fd_dict = lv.ll_dict;
+	    fdp->fd_newkey = lv.ll_newkey;
+	    lv.ll_newkey = NULL;
+	    fdp->fd_di = lv.ll_di;
+	}
+	if (lv.ll_tv->v_type == VAR_FUNC && lv.ll_tv->vval.v_func != NULL)
+	{
+	    func = lv.ll_tv->vval.v_func;
+	    ++func->fv_refcount;
+	    *pp = end;
+	}
+	else
+	{
+	    if (!skip && (fdp == NULL || lv.ll_dict == NULL
+			  || fdp->fd_newkey == NULL))
+		EMSG(_(e_funcref));
+	    else
+		*pp = end;
+	}
+	goto theend;
+    }
+
+    if (lv.ll_name == NULL)
+    {
+	/* Error found, but continue after the function name. */
+	*pp = end;
+	goto theend;
+    }
+
+    /* Check if the name is a Funcref.  If so, use the value. */
+    if (lv.ll_exp_name != NULL)
+    {
+	len = (int)STRLEN(lv.ll_exp_name);
+	func = deref_func_name(lv.ll_exp_name, len);
+    }
+    else
+    {
+	len = (int)(end - *pp);
+	func = deref_func_name(*pp, len);
+    }
+
+theend:
+    clear_lval(&lv);
+    return func;
 }
 
 /*
@@ -21835,9 +22083,11 @@ trans_function_name(pp, skip, flags, fdp)
 	    lv.ll_newkey = NULL;
 	    fdp->fd_di = lv.ll_di;
 	}
-	if (lv.ll_tv->v_type == VAR_FUNC && lv.ll_tv->vval.v_string != NULL)
+	if (lv.ll_tv->v_type == VAR_FUNC && lv.ll_tv->vval.v_func != NULL)
 	{
-	    name = vim_strsave(lv.ll_tv->vval.v_string);
+	    /* FIXME */
+	    /* name = vim_strsave(lv.ll_tv->vval.v_string); */
+	    name = NULL;
 	    *pp = end;
 	}
 	else
@@ -21862,17 +22112,25 @@ trans_function_name(pp, skip, flags, fdp)
     /* Check if the name is a Funcref.  If so, use the value. */
     if (lv.ll_exp_name != NULL)
     {
+	func_T	*func;
 	len = (int)STRLEN(lv.ll_exp_name);
-	name = deref_func_name(lv.ll_exp_name, &len);
-	if (name == lv.ll_exp_name)
+	func = deref_func_name(lv.ll_exp_name, len);
+	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
+	else
+	    name = ((ufunc_T *) func->fv_data)->uf_name;
+	func_unref(func);
     }
     else
     {
+	func_T	*func;
 	len = (int)(end - *pp);
-	name = deref_func_name(*pp, &len);
-	if (name == *pp)
+	func = deref_func_name(*pp, len);
+	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
+	else
+	    name = ((ufunc_T *) func->fv_data)->uf_name;
+	func_unref(func);
     }
     if (name != NULL)
     {
@@ -22046,65 +22304,36 @@ free_all_functions()
 {
     hashitem_T	*hi;
 
-    /* Need to start all over every time, because func_free() may change the
-     * hash table. */
+    /* Need to start all over every time, because dealloc_user_func() may change 
+     * the hash table. */
     while (func_hashtab.ht_used > 0)
 	for (hi = func_hashtab.ht_array; ; ++hi)
 	    if (!HASHITEM_EMPTY(hi))
 	    {
-		func_free(HI2UF(hi));
+		ufunc_T	*fp = HI2UF(hi);
+
+		func_unref(fp->uf_func);
 		break;
 	    }
 }
 #endif
-
-    int
-translated_function_exists(name)
-    char_u	*name;
-{
-    if (builtin_function(name))
-	return find_internal_func(name) >= 0;
-    return find_func(name) != NULL;
-}
 
 /*
  * Return TRUE if a function "name" exists.
  */
     static int
 function_exists(name)
-    char_u *name;
-{
-    char_u  *nm = name;
-    char_u  *p;
-    int	    n = FALSE;
-
-    p = trans_function_name(&nm, FALSE, TFN_INT|TFN_QUIET, NULL);
-    nm = skipwhite(nm);
-
-    /* Only accept "funcname", "funcname ", "funcname (..." and
-     * "funcname(...", not "funcname!...". */
-    if (p != NULL && (*nm == NUL || *nm == '('))
-	n = translated_function_exists(p);
-    vim_free(p);
-    return n;
-}
-
-    char_u *
-get_expanded_name(name, check)
     char_u	*name;
-    int		check;
 {
-    char_u	*nm = name;
-    char_u	*p;
+    func_T	*func;
+    char_u	*p = name;
+    funcdict_T	fudi;
 
-    p = trans_function_name(&nm, FALSE, TFN_INT|TFN_QUIET, NULL);
+    func = get_called_function(&p, FALSE, &fudi);
+    func_unref(func);
+    dict_unref(fudi.fd_dict);
 
-    if (p != NULL && *nm == NUL)
-	if (!check || translated_function_exists(p))
-	    return p;
-
-    vim_free(p);
-    return NULL;
+    return (func == NULL);
 }
 
 /*
@@ -22494,11 +22723,6 @@ ex_delfunction(eap)
 	    EMSG2(_(e_nofunc), eap->arg);
 	    return;
 	}
-	if (fp->uf_calls > 0)
-	{
-	    EMSG2(_("E131: Cannot delete function %s: It is in use"), eap->arg);
-	    return;
-	}
 
 	if (fudi.fd_dict != NULL)
 	{
@@ -22507,36 +22731,11 @@ ex_delfunction(eap)
 	    dictitem_remove(fudi.fd_dict, fudi.fd_di);
 	}
 	else
-	    func_free(fp);
+	{
+	    remove_user_func(fp);
+	    func_unref(fp->uf_func);
+	}
     }
-}
-
-/*
- * Free a function and remove it from the list of functions.
- */
-    static void
-func_free(fp)
-    ufunc_T *fp;
-{
-    hashitem_T	*hi;
-
-    /* clear this function */
-    ga_clear_strings(&(fp->uf_args));
-    ga_clear_strings(&(fp->uf_lines));
-#ifdef FEAT_PROFILE
-    vim_free(fp->uf_tml_count);
-    vim_free(fp->uf_tml_total);
-    vim_free(fp->uf_tml_self);
-#endif
-
-    /* remove the function from the function hashtable */
-    hi = hash_find(&func_hashtab, UF2HIKEY(fp));
-    if (HASHITEM_EMPTY(hi))
-	EMSG2(_(e_intern2), "func_free()");
-    else
-	hash_remove(&func_hashtab, hi);
-
-    vim_free(fp);
 }
 
 /*
@@ -22544,56 +22743,39 @@ func_free(fp)
  * becomes zero.  Only for numbered functions.
  */
     void
-func_unref(name)
-    char_u	*name;
+func_unref(func)
+    func_T	*func;
 {
-    ufunc_T *fp;
-
-    if (name != NULL && isdigit(*name))
-    {
-	fp = find_func(name);
-	if (fp == NULL)
-	    EMSG2(_(e_intern2), "func_unref()");
-	else if (--fp->uf_refcount <= 0)
-	{
-	    /* Only delete it when it's not being used.  Otherwise it's done
-	     * when "uf_calls" becomes zero. */
-	    if (fp->uf_calls == 0)
-		func_free(fp);
-	}
-    }
+    if (func != NULL && --func->fv_refcount <= 0)
+	func_free(func);
 }
 
-/*
- * Count a reference to a Function.
- */
     void
-func_ref(name)
-    char_u	*name;
+func_free(func)
+    func_T	*func;
 {
-    ufunc_T *fp;
+    func->fv_type->fd_dealloc(func->fv_data);
+    vim_free(func);
+}
 
-    if (name != NULL && isdigit(*name))
-    {
-	fp = find_func(name);
-	if (fp == NULL)
-	    EMSG2(_(e_intern2), "func_ref()");
-	else
-	    ++fp->uf_refcount;
-    }
+    func_T *
+func_alloc()
+{
+    return (func_T *) alloc_clear(sizeof(func_T));
 }
 
 /*
  * Call a user function.
  */
-    static void
-call_user_func(fp, argcount, argvars, rettv, firstline, lastline, selfdict)
+    static int
+call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
     ufunc_T	*fp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
     int		argcount;	/* nr of args */
     typval_T	*argvars;	/* arguments */
-    typval_T	*rettv;		/* return value */
     linenr_T	firstline;	/* first line of range */
     linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* is set to True if function handles range */
     dict_T	*selfdict;	/* Dictionary for "self" */
 {
     char_u	*save_sourcing_name;
@@ -22619,11 +22801,30 @@ call_user_func(fp, argcount, argvars, rettv, firstline, lastline, selfdict)
 	EMSG(_("E132: Function call depth is higher than 'maxfuncdepth'"));
 	rettv->v_type = VAR_NUMBER;
 	rettv->vval.v_number = -1;
-	return;
+	return ERROR_OTHER;
     }
     ++depth;
 
     line_breakcheck();		/* check for CTRL-C hit */
+
+    if (argcount < fp->uf_args.ga_len)
+	return ERROR_TOOFEW;
+    else if (!fp->uf_varargs && argcount > fp->uf_args.ga_len)
+	return ERROR_TOOMANY;
+    else if ((fp->uf_flags & FC_DICT) && selfdict == NULL)
+	return ERROR_DICT;
+
+    if (fp->uf_flags & FC_RANGE)
+	*doesrange = TRUE;
+
+    /* Do not allow destroying function while it is in use */
+    ++fp->uf_func->fv_refcount;
+    /*
+     * Save and restore search patterns, script variables and
+     * redo buffer.
+     */
+    save_search_patterns();
+    saveRedobuff();
 
     fc = (funccall_T *)alloc(sizeof(funccall_T));
     fc->caller = current_funccal;
@@ -22944,7 +23145,71 @@ call_user_func(fp, argcount, argvars, rettv, firstline, lastline, selfdict)
 	for (li = fc->l_varlist.lv_first; li != NULL; li = li->li_next)
 	    copy_tv(&li->li_tv, &li->li_tv);
     }
+
+    restoreRedobuff();
+    restore_search_patterns();
+    func_unref(fp->uf_func);
+
+    return ERROR_NONE;
 }
+
+    static char_u *
+repr_user_func(fp)
+    ufunc_T	*fp;
+{
+    return string_quote(fp->uf_name, TRUE);
+}
+
+/*
+ * Remove function from a list of functions
+ */
+    static void
+remove_user_func(fp)
+    ufunc_T *fp;
+{
+    hashitem_T	*hi;
+
+    /* remove the function from the function hashtable */
+    hi = hash_find(&func_hashtab, UF2HIKEY(fp));
+    if (!HASHITEM_EMPTY(hi))
+	hash_remove(&func_hashtab, hi);
+}
+
+/*
+ * Free a function and remove it from the list of functions.
+ */
+    static void
+dealloc_user_func(fp)
+    ufunc_T *fp;
+{
+    /* clear this function */
+    ga_clear_strings(&(fp->uf_args));
+    ga_clear_strings(&(fp->uf_lines));
+#ifdef FEAT_PROFILE
+    vim_free(fp->uf_tml_count);
+    vim_free(fp->uf_tml_total);
+    vim_free(fp->uf_tml_self);
+#endif
+
+    remove_user_func(fp);
+
+    vim_free(fp);
+}
+
+    static int
+compare_user_funcs(fp1, fp2)
+    ufunc_T	*fp1;
+    ufunc_T	*fp2;
+{
+    return fp1 == fp2;
+}
+
+static funcdef_T user_func_type = {
+    (function_caller)		call_user_func,		/* fd_call */
+    (function_representer)	repr_user_func,		/* fd_repr */
+    (function_destructor)	dealloc_user_func,	/* fd_dealloc */
+    (function_cmp)		compare_user_funcs,	/* fd_compare */
+};
 
 /*
  * Return TRUE if items in "fc" do not have "copyID".  That means they are not

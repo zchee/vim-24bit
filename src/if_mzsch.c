@@ -2906,6 +2906,8 @@ vim_to_mzscheme_impl(typval_T *vim_value, int depth, Scheme_Hash_Table *visited)
 	}
 	MZ_GC_UNREG();
     }
+#if 0
+    /* FIXME Support new-style funcrefs */
     else if (vim_value->v_type == VAR_FUNC)
     {
 	Scheme_Object *funcname = NULL;
@@ -2922,6 +2924,7 @@ vim_to_mzscheme_impl(typval_T *vim_value, int depth, Scheme_Hash_Table *visited)
 
 	MZ_GC_UNREG();
     }
+#endif
     else
     {
 	result = scheme_void;
