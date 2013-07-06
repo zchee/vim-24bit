@@ -8509,12 +8509,12 @@ get_func_tv(func, rettv, arg, firstline, lastline, doesrange,
 			  firstline, lastline, doesrange, selfdict);
     else if (!aborting())
     {
-	char_u	*tofree = FUNC_REPR(func);
 	if (argcount == MAX_FUNC_ARGS)
-	    emsg_funcname(N_("E740: Too many arguments for function %s"), tofree);
+	    emsg_funcname(N_("E740: Too many arguments for function %s"),
+				FUNC_NAME(func));
 	else
-	    emsg_funcname(N_("E116: Invalid arguments for function %s"), tofree);
-	vim_free(tofree);
+	    emsg_funcname(N_("E116: Invalid arguments for function %s"),
+				FUNC_NAME(func));
     }
 
     while (--argcount >= 0)
@@ -8568,11 +8568,19 @@ compare_internal_funcs(intfp1, intfp2)
     return intfp1 == intfp2;
 }
 
+    static char_u *
+name_internal_func(intfp)
+    struct fst	*intfp;
+{
+    return (char_u *) intfp->f_name;
+}
+
 static funcdef_T internal_func_type = {
     (function_caller)		call_internal_func,	/* fd_call */
     (function_representer)	repr_internal_func,	/* fd_repr */
     (function_destructor)	dealloc_internal_func,	/* fd_dealloc */
     (function_cmp)		compare_internal_funcs,	/* fd_compare */
+    (function_representer)	name_internal_func,	/* fd_name */
 };
 
     static aufunc_T *
@@ -8634,11 +8642,19 @@ compare_autoload_funcs(aufp1, aufp2)
     return STRCMP(aufp1->auf_name, aufp2->auf_name) == 0;
 }
 
+    static char_u *
+name_autoload_func(aufp)
+    aufunc_T	*aufp;
+{
+    return aufp->auf_name;
+}
+
 static funcdef_T autoload_func_type = {
     (function_caller)		call_autoload_func,	/* fd_call */
     (function_representer)	repr_autoload_func,	/* fd_repr */
     (function_destructor)	dealloc_autoload_func,	/* fd_dealloc */
     (function_cmp)		compare_autoload_funcs,	/* fd_compare */
+    (function_representer)	name_autoload_func,	/* fd_name */
 };
 
 /*
@@ -8684,26 +8700,24 @@ call_func(func, rettv, argcount, argvars, firstline, lastline, doesrange, selfdi
 
     if (!aborting())
     {
-	char_u	*tofree = FUNC_REPR(func);
 	switch (error)
 	{
 	    case ERROR_TOOMANY:
-		    emsg_funcname(e_toomanyarg, tofree);
+		    emsg_funcname(e_toomanyarg, FUNC_NAME(func));
 		    break;
 	    case ERROR_TOOFEW:
 		    emsg_funcname(N_("E119: Not enough arguments for function: %s"),
-									tofree);
+							    FUNC_NAME(func));
 		    break;
 	    case ERROR_SCRIPT:
 		    emsg_funcname(N_("E120: Using <SID> not in a script context: %s"),
-									tofree);
+							    FUNC_NAME(func));
 		    break;
 	    case ERROR_DICT:
 		    emsg_funcname(N_("E725: Calling dict function without Dictionary: %s"),
-									tofree);
+							    FUNC_NAME(func));
 		    break;
 	}
-	vim_free(tofree);
     }
 
     return error == ERROR_NONE ? OK : FAIL;
@@ -22000,6 +22014,8 @@ get_called_function(pp, skip, fdp)
 	func = deref_func_name(*pp, len);
     }
 
+    *pp = end;
+
 theend:
     clear_lval(&lv);
     return func;
@@ -23204,11 +23220,19 @@ compare_user_funcs(fp1, fp2)
     return fp1 == fp2;
 }
 
+    static char_u *
+name_user_func(fp)
+    ufunc_T	*fp;
+{
+    return fp->uf_name;
+}
+
 static funcdef_T user_func_type = {
     (function_caller)		call_user_func,		/* fd_call */
     (function_representer)	repr_user_func,		/* fd_repr */
     (function_destructor)	dealloc_user_func,	/* fd_dealloc */
     (function_cmp)		compare_user_funcs,	/* fd_compare */
+    (function_representer)	name_user_func,		/* fd_name */
 };
 
 /*
