@@ -8325,7 +8325,7 @@ find_internal_func(name)
     func_T *
 deref_func_name(name, len)
     char_u	*name;
-    int		len;
+    const int	len;
 {
     dictitem_T	*v;
     int		cc;
@@ -8373,11 +8373,12 @@ deref_func_name(name, len)
 	char_u	sid_buf[20];
 	int	lead;
 	int	old_len;
+	int	new_len = len;
 	ufunc_T	*fp;
 
 	lead = eval_fname_script(name);
-	len -= lead;
-	old_len = len;
+	new_len -= lead;
+	old_len = new_len;
 	pp = name + lead;
 
 	if (lead)
@@ -8388,7 +8389,7 @@ deref_func_name(name, len)
 		if (current_SID <= 0)
 		{
 		    EMSG(_(e_usingsid));
-		    len = 0;
+		    new_len = 0;
 		}
 		else
 		{
@@ -8399,10 +8400,10 @@ deref_func_name(name, len)
 	    else
 		*sid_buf = NUL;
 
-	    if (len)
-		fname = (char_u *) alloc(len + 1);
+	    if (new_len)
+		fname = (char_u *) alloc(new_len + 1);
 
-	    len += lead;
+	    new_len += lead;
 	}
 	else
 	{
