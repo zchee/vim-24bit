@@ -453,7 +453,6 @@ static char_u *dict2string __ARGS((typval_T *tv, int copyID));
 static int get_dict_tv __ARGS((char_u **arg, typval_T *rettv, int evaluate));
 static char_u *echo_string __ARGS((typval_T *tv, char_u **tofree, char_u *numbuf, int copyID));
 static char_u *tv2string __ARGS((typval_T *tv, char_u **tofree, char_u *numbuf, int copyID));
-static char_u *string_quote __ARGS((char_u *str, int function));
 #ifdef FEAT_FLOAT
 static int string2float __ARGS((char_u *text, float_T *value));
 #endif
@@ -7458,7 +7457,7 @@ dict2string(tv, copyID)
 	    else
 		ga_concat(&ga, (char_u *)", ");
 
-	    tofree = string_quote(hi->hi_key, FALSE);
+	    tofree = string_quote(hi->hi_key, NULL);
 	    if (tofree != NULL)
 	    {
 		ga_concat(&ga, tofree);
@@ -7722,7 +7721,7 @@ tv2string(tv, tofree, numbuf, copyID)
 	    *tofree = FUNC_REPR(tv->vval.v_func);
 	    return *tofree;
 	case VAR_STRING:
-	    *tofree = string_quote(tv->vval.v_string, FALSE);
+	    *tofree = string_quote(tv->vval.v_string, NULL);
 	    return *tofree;
 #ifdef FEAT_FLOAT
 	case VAR_FLOAT:
@@ -7743,17 +7742,25 @@ tv2string(tv, tofree, numbuf, copyID)
 /*
  * Return string "str" in ' quotes, doubling ' characters.
  * If "str" is NULL an empty string is assumed.
- * If "function" is TRUE make it function('string').
+ * If "fname" is not NULL make it fname('string').
  */
-    static char_u *
-string_quote(str, function)
+    char_u *
+string_quote(str, fname)
     char_u	*str;
-    int		function;
+    char	*fname;
 {
     unsigned	len;
+    unsigned	flen = 0;
     char_u	*p, *r, *s;
+    char_u	*fname_u = (char_u *) fname;
 
-    len = (function ? 13 : 3);
+    if (fname_u != NULL)
+	flen = STRLEN(fname_u);
+
+    /*                        +---+- 2 quotes and NUL *
+     *                        |   |   +- parenthesis  *
+     *                        |   |   |               */
+    len = (fname_u == NULL ? 3 : 3 + 2 + flen);
     if (str != NULL)
     {
 	len += (unsigned)STRLEN(str);
@@ -7764,10 +7771,12 @@ string_quote(str, function)
     s = r = alloc(len);
     if (r != NULL)
     {
-	if (function)
+	if (fname_u)
 	{
-	    STRCPY(r, "function('");
-	    r += 10;
+	    STRCPY(r, fname_u);
+	    r += flen;
+	    *r++ = '(';
+	    *r++ = '\'';
 	}
 	else
 	    *r++ = '\'';
@@ -7779,7 +7788,7 @@ string_quote(str, function)
 		MB_COPY_CHAR(p, r);
 	    }
 	*r++ = '\'';
-	if (function)
+	if (fname_u)
 	    *r++ = ')';
 	*r++ = NUL;
     }
@@ -8546,7 +8555,7 @@ call_internal_func(intfp, rettv, argcount, argvars, firstline, lastline, doesran
 repr_internal_func(intfp)
     struct fst	*intfp;
 {
-    return string_quote((char_u *) intfp->f_name, TRUE);
+    return string_quote((char_u *) intfp->f_name, "function");
 }
 
     static void
@@ -8618,7 +8627,7 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
 repr_autoload_func(aufp)
     aufunc_T	*aufp;
 {
-    return string_quote(aufp->auf_name, TRUE);
+    return string_quote(aufp->auf_name, "function");
 }
 
     static void
@@ -23178,7 +23187,7 @@ repr_user_func(fp)
 	 * string(fref) =~# '^function(''\d' */
 	return vim_strsave((char_u *) "function('1')");
     else
-	return string_quote(fp->uf_name, TRUE);
+	return string_quote(fp->uf_name, "function");
 }
 
 /*
