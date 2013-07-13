@@ -22744,8 +22744,10 @@ ex_delfunction(eap)
 	    /* Delete the dict item that refers to the function, it will
 	     * invoke func_unref() and possibly delete the function. */
 	    dictitem_remove(fudi.fd_dict, fudi.fd_di);
-	else
+	else if (!(fp->uf_flags & FC_ANON))
 	{
+	    /* TODO Delete functions from global variables.
+	     */
 	    remove_user_func(fp);
 	    func_unref(fp->uf_func);
 	}
