@@ -1576,10 +1576,35 @@ FunctionGetattro(PyObject *self, PyObject *nameobj)
 
     GET_ATTR_STRING(name, nameobj);
 
-    /* FIXME
-     * if (strcmp(name, "name") == 0)
-     *     return PyUnicode_FromString((char *)(this->name));
-     */
+    if (strcmp(name, "name") == 0)
+    {
+	char_u	*name;
+	VimTryStart();
+	if (!(name = FUNC_NAME(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	return PyString_FromString((char *)name);
+    }
+    else if (strcmp(name, "repr") == 0)
+    {
+	char_u		*tofree;
+	PyObject	*r;
+	VimTryStart();
+	if (!(tofree = FUNC_REPR(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	r = PyString_FromString((char *)tofree);
+	vim_free(tofree);
+	return r;
+    }
 
     return PyObject_GenericGetAttr(self, nameobj);
 }

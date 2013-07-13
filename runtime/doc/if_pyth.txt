@@ -655,7 +655,11 @@ vim.Function object				*python-Function*
     Function-like object, acting like vim |Funcref| object. Supports `.name` 
     attribute and is callable. Accepts special keyword argument `self`, see 
     |Dictionary-function|. You can also use `vim.Function(name)` constructor, 
-    it is the same as `vim.bindeval('function(%s)'%json.dumps(name))`.
+    it is the same as `vim.bindeval('function(%s)'%json.dumps(name))`. Object 
+    supports the following attributes:
+        Attribute  Description ~
+        name       Function name.
+        repr       Same as running `vim.bindeval("string(pyeval('func'))")`.
 
     Examples: >
         f = vim.Function('tr')			# Constructor

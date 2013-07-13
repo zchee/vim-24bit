@@ -203,6 +203,7 @@ EOF
 :try
 :   py f(1, 2, 3)
 :catch
+:   " Should no longer fail
 :   $put =v:exception[:16]
 :endtry
 :if has('float')

@@ -48,7 +48,7 @@ len: 3
 again: 3
 Vim(call):E725: 
 g:dict.func-4
-a:function('3')
+a:function('1')
 Vim(let):E698: 
 same list: 1
 depth is 0

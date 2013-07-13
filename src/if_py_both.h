@@ -2608,9 +2608,7 @@ FunctionDestructor(FunctionObject *self)
 }
 
 static char *FunctionAttrs[] = {
-    /*
-     * "name",
-     */
+    "name", "repr",
     NULL
 };
 
