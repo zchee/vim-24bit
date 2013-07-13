@@ -5435,6 +5435,95 @@ convert_dl(PyObject *obj, typval_T *tv,
     return 0;
 }
 
+typedef struct pyfunc_S {
+    PyObject	*callable;
+    char_u	*name;
+} pyfunc_T;
+
+    static int
+call_python_func(pyfp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
+    pyfunc_T	*pyfp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
+    int		argcount;	/* nr of args */
+    typval_T	*argvars;	/* arguments */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* is set to True if function handles range */
+    dict_T	*selfdict;	/* Dictionary for "self" */
+{
+    PyObject	*args;
+    PyObject	*arg;
+    PyObject	*rObj;
+
+    if (!(args = PyTuple_New(argcount)))
+	return ERROR_OTHER;
+
+    while (--argcount > 0)
+    {
+	if (!(arg = ConvertToPyObject((argvars + argcount))))
+	{
+	    Py_DECREF(args);
+	    return ERROR_OTHER;
+	}
+	PyTuple_SET_ITEM(args, argcount, arg);
+    }
+
+    if (!(rObj = PyObject_Call(pyfp->callable, args, NULL)))
+    {
+	Py_DECREF(args);
+	return ERROR_OTHER;
+    }
+
+    Py_DECREF(args);
+
+    if (ConvertFromPyObject(rObj, rettv) == -1)
+    {
+	Py_DECREF(rObj);
+	return ERROR_OTHER;
+    }
+
+    return ERROR_NONE;
+}
+
+    static char_u *
+repr_python_func(pyfp)
+    pyfunc_T	*pyfp;
+{
+    return string_quote(pyfp->name, "pyeval");
+}
+
+    static void
+dealloc_python_func(pyfp)
+    pyfunc_T	*pyfp;
+{
+    Py_DECREF(pyfp->callable);
+    PyMem_Free(pyfp->name);
+    return;
+}
+
+    static int
+compare_python_funcs(pyfp1, pyfp2)
+    pyfunc_T	*pyfp1;
+    pyfunc_T	*pyfp2;
+{
+    return pyfp1->callable == pyfp2->callable;
+}
+
+    static char_u *
+name_python_func(pyfp)
+    pyfunc_T	*pyfp;
+{
+    return pyfp->name;
+}
+
+static funcdef_T python_func_type = {
+    (function_caller)		call_python_func,	/* fd_call */
+    (function_representer)	repr_python_func,	/* fd_repr */
+    (function_destructor)	dealloc_python_func,	/* fd_dealloc */
+    (function_cmp)		compare_python_funcs,	/* fd_compare */
+    (function_representer)	name_python_func,	/* fd_name */
+};
+
     static int
 ConvertFromPyMapping(PyObject *obj, typval_T *tv)
 {
@@ -5500,6 +5589,20 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
 	tv->vval.v_func = ((FunctionObject *) obj)->func;
 	++tv->vval.v_func->fv_refcount;
     }
+/*
+ *     else if (PyCallable_Check(obj))
+ *     {
+ *         func_T	*func;
+ * 
+ *         if (!(func = func_alloc()))
+ *         {
+ *             PyErr_NoMemory();
+ *             return -1;
+ *         }
+ * 
+ *         tv->v_type = VAR_FUNC;
+ *     }
+ */
     else if (PyBytes_Check(obj))
     {
 	char_u	*str;
