@@ -211,7 +211,8 @@ struct aufunc
 /* function flags */
 #define FC_ABORT    1		/* abort function on error */
 #define FC_RANGE    2		/* function accepts range */
-#define FC_DICT	    4		/* Dict function, uses "self" */
+#define FC_DICT     4		/* Dict function, uses "self" */
+#define FC_ANON     8		/* Anonymous, not stored in func_hashtab */
 
 /*
  * All user-defined functions are found in this hashtable.
@@ -8319,7 +8320,7 @@ deref_func_name(name, len)
 {
     dictitem_T	*v;
     int		cc;
-    func_T	*r;
+    func_T	*r = NULL;
 
     cc = name[len];
     name[len] = NUL;
@@ -8330,6 +8331,7 @@ deref_func_name(name, len)
     {
 	if (v->di_tv.vval.v_func == NULL)
 	    return NULL;
+	++v->di_tv.vval.v_func->fv_refcount;
 	return v->di_tv.vval.v_func;
     }
 
@@ -8339,9 +8341,7 @@ deref_func_name(name, len)
 	struct fst	*intfp;
 	intfp = find_internal_func(name);
 
-	if (intfp == NULL)
-	    r = NULL;
-	else
+	if (intfp != NULL)
 	{
 	    if (intfp->f_func == NULL)
 	    {
@@ -8428,16 +8428,12 @@ deref_func_name(name, len)
 
 	    if (fp == NULL)
 	    {
-		if (vim_strchr(fname, AUTOLOAD_CHAR) == NULL)
-		    r = NULL;
-		else
+		if (vim_strchr(fname, AUTOLOAD_CHAR) != NULL)
 		{
 		    aufunc_T	*aufp;
 
-		    if ((aufp = aufunc_alloc()) == NULL ||
-			    (r = func_alloc()) == NULL)
-			r = NULL;
-		    else
+		    if ((aufp = aufunc_alloc()) != NULL &&
+			    (r = func_alloc()) != NULL)
 		    {
 			aufp->auf_name = vim_strsave(fname);
 			r->fv_data = (void *) aufp;
@@ -8557,6 +8553,7 @@ repr_internal_func(intfp)
 dealloc_internal_func(intfp)
     struct fst	*intfp;
 {
+    intfp->f_func = NULL;
     return;
 }
 
@@ -20035,7 +20032,7 @@ free_tv(varp)
 	{
 	    case VAR_FUNC:
 		func_unref(varp->vval.v_func);
-		/*FALLTHROUGH*/
+		break;
 	    case VAR_STRING:
 		vim_free(varp->vval.v_string);
 		break;
@@ -21792,7 +21789,9 @@ ex_function(eap)
 	    goto erret;
 
 	vim_free(name);
+	/* FIXME Save value */
 	name = vim_strsave((char_u *) "");
+	flags |= FC_ANON;
 	if (name == NULL)
 	    goto erret;
     }
@@ -21880,7 +21879,8 @@ ex_function(eap)
 
     /* insert the new function in the function list */
     STRCPY(fp->uf_name, name);
-    hash_add(&func_hashtab, UF2HIKEY(fp));
+    if (!(flags & FC_ANON))
+	hash_add(&func_hashtab, UF2HIKEY(fp));
 
     fp->uf_args = newargs;
     fp->uf_lines = newlines;
@@ -22741,11 +22741,9 @@ ex_delfunction(eap)
 	}
 
 	if (fudi.fd_dict != NULL)
-	{
 	    /* Delete the dict item that refers to the function, it will
 	     * invoke func_unref() and possibly delete the function. */
 	    dictitem_remove(fudi.fd_dict, fudi.fd_di);
-	}
 	else
 	{
 	    remove_user_func(fp);
@@ -23173,7 +23171,12 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 repr_user_func(fp)
     ufunc_T	*fp;
 {
-    return string_quote(fp->uf_name, TRUE);
+    if (fp->uf_flags & FC_ANON)
+	/* Allow checking for anonymous functions using
+	 * string(fref) =~# '^function(''\d' */
+	return vim_strsave((char_u *) "function('1')");
+    else
+	return string_quote(fp->uf_name, TRUE);
 }
 
 /*
@@ -23207,7 +23210,8 @@ dealloc_user_func(fp)
     vim_free(fp->uf_tml_self);
 #endif
 
-    remove_user_func(fp);
+    if (!(fp->uf_flags & FC_ANON))
+	remove_user_func(fp);
 
     vim_free(fp);
 }

@@ -1503,12 +1503,36 @@ FunctionGetattr(PyObject *self, char *name)
 {
     FunctionObject	*this = (FunctionObject *)(self);
 
-    /* FIXME
-     * if (strcmp(name, "name") == 0)
-     *     return PyString_FromString((char *)(this->name));
-     * else
-     */
-    if (strcmp(name, "__members__") == 0)
+    if (strcmp(name, "name") == 0)
+    {
+	char_u	*name;
+	VimTryStart();
+	if (!(name = FUNC_NAME(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	return PyString_FromString((char *)name);
+    }
+    else if (strcmp(name, "repr") == 0)
+    {
+	char_u		*tofree;
+	PyObject	*r;
+	VimTryStart();
+	if (!(tofree = FUNC_REPR(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	r = PyString_FromString((char *)tofree);
+	vim_free(tofree);
+	return r;
+    }
+    else if (strcmp(name, "__members__") == 0)
 	return ObjectDir(NULL, FunctionAttrs);
     else
 	return Py_FindMethod(FunctionMethods, self, name);

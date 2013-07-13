@@ -6,8 +6,8 @@ Vim(put):E684:
 [0, function('strlen'), [1, 2, function('strlen'), {'a': 1}]]
 1
 ['-1', '0', '1', 'b', 'f']
-['asd', -1L, <vim.Function '1'>, <vim.dictionary object at >, <vim.list object at >]
-[('-1', <vim.dictionary object at >), ('0', -1L), ('1', 'asd'), ('b', <vim.list object at >), ('f', <vim.Function '1'>)]
+['asd', -1L, <vim.Function function('1')>, <vim.dictionary object at >, <vim.list object at >]
+[('-1', <vim.dictionary object at >), ('0', -1L), ('1', 'asd'), ('b', <vim.list object at >), ('f', <vim.Function function('1')>)]
 '-1' : {'a': 1}
 '0' : -1
 '1' : 'asd'
@@ -54,7 +54,6 @@ None
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}, 'New']
 Vim(python):E725:
-Vim(python):E117:
 [0.0, 0.0]
 KeyError
 TypeError
@@ -409,7 +408,7 @@ tabpage:__dir__,__members__,number,valid,vars,window,windows
 range:__dir__,__members__,append,end,start
 dictionary:__dir__,__members__,get,has_key,items,keys,locked,pop,popitem,scope,update,values
 list:__dir__,__members__,extend,locked
-function:__dir__,__members__,softspace
+function:__dir__,__members__,name,repr
 output:__dir__,__members__,flush,softspace,write,writelines
 {}
 {'a': 1}
@@ -969,8 +968,8 @@ l.locked = FailingTrue():NotImplementedError:('bool',)
 l.xxx = True:AttributeError:('cannot set attribute xxx',)
 > Function
 >> FunctionConstructor
-vim.Function("123"):ValueError:('unnamed function 123 does not exist',)
-vim.Function("xxx_non_existent_function_xxx"):ValueError:('function xxx_non_existent_function_xxx does not exist',)
+vim.Function("123"):error:('failed to get function',)
+vim.Function("xxx_non_existent_function_xxx"):error:('failed to get function',)
 vim.Function("xxx#non#existent#function#xxx"):NOT FAILED
 >> FunctionCall
 >>> Testing StringToChars using f({%s : 1})
