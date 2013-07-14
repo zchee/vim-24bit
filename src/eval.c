@@ -21310,6 +21310,7 @@ ex_function(eap)
     int		todo;
     hashitem_T	*hi;
     int		sourcing_lnum_off;
+    int		name_len;
 
     /*
      * ":function" without argument: list functions.
@@ -21389,6 +21390,7 @@ ex_function(eap)
      */
     p = eap->arg;
     name = trans_function_name(&p, eap->skip, 0, &fudi);
+    name_len = p - eap->arg;
     paren = (vim_strchr(p, '(') != NULL);
     if (name == NULL
 	    && (paren
@@ -21829,8 +21831,7 @@ ex_function(eap)
 	    goto erret;
 
 	vim_free(name);
-	/* FIXME Save value */
-	name = vim_strsave((char_u *) "");
+	name = vim_strnsave(eap->arg, name_len);
 	flags |= FC_ANON;
 	if (name == NULL)
 	    goto erret;
