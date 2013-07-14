@@ -8101,6 +8101,8 @@ static struct fst
 #ifdef FEAT_FLOAT
     {"round",		1, 1, f_round, NULL},
 #endif
+    {"screenattr",	2, 2, f_screenattr, NULL},
+    {"screenchar",	2, 2, f_screenchar, NULL},
     {"screencol",	0, 0, f_screencol, NULL},
     {"screenrow",	0, 0, f_screenrow, NULL},
     {"search",		1, 4, f_search, NULL},
