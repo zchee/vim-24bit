@@ -5182,7 +5182,14 @@ eval7(arg, rettv, evaluate, want_string)
 		func = deref_func_name(s, len, TRUE);
 
 		if (func == NULL)
+		{
+		    char_u	cc;
 		    ret = FAIL;
+		    cc = s[len];
+		    s[len] = '\0';
+		    emsg_funcname(N_("E117: Unknown function: %s"), s);
+		    s[len] = cc;
+		}
 		else
 		{
 		    /* Invoke the function. */
