@@ -22364,7 +22364,7 @@ function_exists(name)
     func_unref(func);
     dict_unref(fudi.fd_dict);
 
-    return (func != NULL);
+    return (func != NULL && (*p == NUL || *p == '('));
 }
 
 /*
