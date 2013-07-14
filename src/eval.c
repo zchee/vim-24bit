@@ -287,6 +287,9 @@ typedef struct
     dict_T	*fd_dict;	/* Dictionary used */
     char_u	*fd_newkey;	/* new key in "dict" in allocated memory */
     dictitem_T	*fd_di;		/* Dictionary item used */
+    func_T	*fd_func;	/* Function object, if it was obtained. 
+				 * Contains borrowed reference, no need to 
+				 * decref. */
 } funcdict_T;
 
 
@@ -21387,7 +21390,11 @@ ex_function(eap)
     p = eap->arg;
     name = trans_function_name(&p, eap->skip, 0, &fudi);
     paren = (vim_strchr(p, '(') != NULL);
-    if (name == NULL && (fudi.fd_dict == NULL || !paren) && !eap->skip)
+    if (name == NULL
+	    && (paren
+		? (fudi.fd_dict == NULL)
+		: (fudi.fd_func == NULL))
+	    && !eap->skip)
     {
 	/*
 	 * Return on an invalid expression in braces, unless the expression
@@ -21425,7 +21432,11 @@ ex_function(eap)
 	    *p = NUL;
 	if (!eap->skip && !got_int)
 	{
-	    fp = find_func(name);
+	    if (fudi.fd_func != NULL
+		    && fudi.fd_func->fv_type == &user_func_type)
+		fp = (ufunc_T *) fudi.fd_func->fv_data;
+	    else
+		fp = find_func(name);
 	    if (fp != NULL)
 	    {
 		list_func_head(fp, TRUE);
@@ -22131,8 +22142,8 @@ trans_function_name(pp, skip, flags, fdp)
 	}
 	if (lv.ll_tv->v_type == VAR_FUNC && lv.ll_tv->vval.v_func != NULL)
 	{
-	    /* FIXME */
-	    /* name = vim_strsave(lv.ll_tv->vval.v_string); */
+	    if (fdp != NULL)
+		fdp->fd_func = lv.ll_tv->vval.v_func;
 	    name = NULL;
 	    *pp = end;
 	}
@@ -22166,6 +22177,8 @@ trans_function_name(pp, skip, flags, fdp)
 	else
 	    name = ((ufunc_T *) func->fv_data)->uf_name;
 	func_unref(func);
+	if (fdp != NULL)
+	    fdp->fd_func = func;
     }
     else
     {
@@ -22177,6 +22190,8 @@ trans_function_name(pp, skip, flags, fdp)
 	else
 	    name = ((ufunc_T *) func->fv_data)->uf_name;
 	func_unref(func);
+	if (fdp != NULL)
+	    fdp->fd_func = func;
     }
     if (name != NULL)
     {
