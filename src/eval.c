@@ -8512,17 +8512,20 @@ get_func_tv(func, rettv, arg, firstline, lastline, doesrange,
     else
 	ret = FAIL;
 
-    if (ret == OK && evaluate)
-	ret = call_func(func, rettv, argcount, argvars,
-			  firstline, lastline, doesrange, selfdict);
-    else if (!aborting())
+    if (evaluate)
     {
-	if (argcount == MAX_FUNC_ARGS)
-	    emsg_funcname(N_("E740: Too many arguments for function %s"),
-				FUNC_NAME(func));
-	else
-	    emsg_funcname(N_("E116: Invalid arguments for function %s"),
-				FUNC_NAME(func));
+	if (ret == OK)
+	    ret = call_func(func, rettv, argcount, argvars,
+			      firstline, lastline, doesrange, selfdict);
+	else if (!aborting())
+	{
+	    if (argcount == MAX_FUNC_ARGS)
+		emsg_funcname(N_("E740: Too many arguments for function %s"),
+				    FUNC_NAME(func));
+	    else
+		emsg_funcname(N_("E116: Invalid arguments for function %s"),
+				    FUNC_NAME(func));
+	}
     }
 
     while (--argcount >= 0)
