@@ -70,6 +70,8 @@ static PyObject *WindowNew(win_T *, tabpage_T *);
 static PyObject *BufferNew (buf_T *);
 static PyObject *LineToString(const char *);
 
+static void DoPyCommand(const char *, rangeinitializer, runner, void *);
+
 static PyInt RangeStart;
 static PyInt RangeEnd;
 
@@ -85,6 +87,19 @@ static PyObject *py_find_module;
 static PyObject *py_load_module;
 
 static PyObject *VimError;
+
+    static void *
+py_memsave(void *p, size_t len)
+{
+    void	*r;
+
+    if (!(r = PyMem_Malloc(len)))
+	return NULL;
+    mch_memmove(r, p, len);
+    return r;
+}
+
+#define PY_STRSAVE(s) ((char_u *) py_memsave(s, STRLEN(s) + 1))
 
 /*
  * obtain a lock on the Vim data structures
@@ -5440,6 +5455,73 @@ typedef struct pyfunc_S {
     char_u	*name;
 } pyfunc_T;
 
+typedef struct pyfunc_args_S {
+    pyfunc_T	*pyfp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
+    int		argcount;	/* nr of args */
+    typval_T	*argvars;	/* arguments */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		result;
+} pyfunc_args_T;
+
+    static void
+init_range_func(pyfunc_args_T *pyargs)
+{
+    RangeStart = pyargs->firstline;
+    RangeEnd = pyargs->lastline;
+}
+
+    static void
+run_func(const char *cmd, pyfunc_args_T *pyargs
+#ifdef PY_CAN_RECURSE
+	, PyGILState_STATE *pygilstate UNUSED
+#endif
+	)
+{
+    PyObject	*args;
+    PyObject	*arg;
+    PyObject	*rObj;
+    int		argcount = pyargs->argcount;
+
+    if (!(args = PyTuple_New(argcount)))
+    {
+	pyargs->result = ERROR_OTHER;
+	return;
+    }
+
+    while (--argcount >= 0)
+    {
+	if (!(arg = ConvertToPyObject((pyargs->argvars + argcount))))
+	{
+	    Py_DECREF(args);
+	    pyargs->result = ERROR_OTHER;
+	    return;
+	}
+	PyTuple_SET_ITEM(args, argcount, arg);
+    }
+
+    if (!(rObj = PyObject_Call(pyargs->pyfp->callable, args, NULL)))
+    {
+	Py_DECREF(args);
+	pyargs->result = ERROR_OTHER;
+	return;
+    }
+
+    Py_DECREF(args);
+
+    if (ConvertFromPyObject(rObj, pyargs->rettv) == -1)
+    {
+	Py_DECREF(rObj);
+	pyargs->result = ERROR_OTHER;
+	return;
+    }
+
+    Py_DECREF(rObj);
+    pyargs->result = ERROR_NONE;
+    return;
+}
+
     static int
 call_python_func(pyfp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
     pyfunc_T	*pyfp;		/* pointer to function */
@@ -5451,38 +5533,21 @@ call_python_func(pyfp, rettv, argcount, argvars, firstline, lastline, doesrange,
     int		*doesrange;	/* is set to True if function handles range */
     dict_T	*selfdict;	/* Dictionary for "self" */
 {
-    PyObject	*args;
-    PyObject	*arg;
-    PyObject	*rObj;
+    pyfunc_args_T	pyargs;
 
-    if (!(args = PyTuple_New(argcount)))
-	return ERROR_OTHER;
+    pyargs.pyfp		= pyfp;
+    pyargs.rettv	= rettv;
+    pyargs.argcount	= argcount;
+    pyargs.argvars	= argvars;
+    pyargs.firstline	= firstline;
+    pyargs.lastline	= lastline;
 
-    while (--argcount > 0)
-    {
-	if (!(arg = ConvertToPyObject((argvars + argcount))))
-	{
-	    Py_DECREF(args);
-	    return ERROR_OTHER;
-	}
-	PyTuple_SET_ITEM(args, argcount, arg);
-    }
+    *doesrange = TRUE;
 
-    if (!(rObj = PyObject_Call(pyfp->callable, args, NULL)))
-    {
-	Py_DECREF(args);
-	return ERROR_OTHER;
-    }
+    DoPyCommand(NULL, (rangeinitializer) init_range_func, (runner) run_func,
+		&pyargs);
 
-    Py_DECREF(args);
-
-    if (ConvertFromPyObject(rObj, rettv) == -1)
-    {
-	Py_DECREF(rObj);
-	return ERROR_OTHER;
-    }
-
-    return ERROR_NONE;
+    return pyargs.result;
 }
 
     static char_u *
@@ -5498,6 +5563,7 @@ dealloc_python_func(pyfp)
 {
     Py_DECREF(pyfp->callable);
     PyMem_Free(pyfp->name);
+    PyMem_Free(pyfp);
     return;
 }
 
@@ -5589,20 +5655,54 @@ _ConvertFromPyObject(PyObject *obj, typval_T *tv, PyObject *lookup_dict)
 	tv->vval.v_func = ((FunctionObject *) obj)->func;
 	++tv->vval.v_func->fv_refcount;
     }
-/*
- *     else if (PyCallable_Check(obj))
- *     {
- *         func_T	*func;
- * 
- *         if (!(func = func_alloc()))
- *         {
- *             PyErr_NoMemory();
- *             return -1;
- *         }
- * 
- *         tv->v_type = VAR_FUNC;
- *     }
- */
+    else if (PyCallable_Check(obj))
+    {
+	func_T		*func;
+	pyfunc_T	*pyfp;
+	PyObject	*reprObj;
+	PyObject	*todecref;
+	char_u		*repr;
+
+	if (!(reprObj = PyObject_Repr(obj)))
+	    return -1;
+
+	if (!(repr = StringToChars(reprObj, &todecref)))
+	{
+	    Py_DECREF(reprObj);
+	    return -1;
+	}
+
+	if (!(func = func_alloc()) || !(pyfp = PyMem_New(pyfunc_T, 1)))
+	{
+	    if (func != NULL)
+		vim_free(func);
+	    PyErr_NoMemory();
+	    return -1;
+	}
+
+	func->fv_data = pyfp;
+	func->fv_type = &python_func_type;
+	pyfp->callable = obj;
+
+	if (!(pyfp->name = PY_STRSAVE(repr)))
+	{
+	    PyErr_NoMemory();
+	    Py_DECREF(reprObj);
+	    Py_XDECREF(todecref);
+	    vim_free(func);
+	    PyMem_Free(pyfp);
+	    return -1;
+	}
+
+	Py_DECREF(reprObj);
+	Py_XDECREF(todecref);
+
+	Py_INCREF(obj);
+
+	tv->v_type = VAR_FUNC;
+	tv->vval.v_func = func;
+	++tv->vval.v_func->fv_refcount;
+    }
     else if (PyBytes_Check(obj))
     {
 	char_u	*str;
