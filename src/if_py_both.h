@@ -2581,7 +2581,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 
     VimTryStart();
 
-    func = deref_func_name(name, STRLEN(name));
+    func = deref_func_name(name, STRLEN(name), FALSE);
 
     if (VimTryEnd())
 	return NULL;

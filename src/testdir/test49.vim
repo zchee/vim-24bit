@@ -8508,7 +8508,7 @@ if ExtraVim()
 		    \ '^Vim\((\a\+)\)\=:', '', "")
 		let caught = 1
 	    finally
-		if t <= 8 && t != 3 && t != 7
+		if t <= 8 && t != 3
 		    call MSG(t, 'E475', 'Invalid argument\>')
 		else
 		    if !caught	" no error exceptions ($VIMNOERRTHROW set)
