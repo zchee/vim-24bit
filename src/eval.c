@@ -808,7 +808,7 @@ static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
 static char_u *trans_function_name __ARGS((char_u **pp, int skip, int flags, funcdict_T *fd));
-static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd));
+static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int runevent));
 static int eval_fname_script __ARGS((char_u *p));
 static int eval_fname_sid __ARGS((char_u *p));
 static void list_func_head __ARGS((ufunc_T *fp, int indent));
@@ -1600,7 +1600,7 @@ call_vim_function(name, argc, argv, safe, str_arg_only, rettv)
     if (argvars == NULL)
 	return FAIL;
 
-    func = deref_func_name(name, STRLEN(name));
+    func = deref_func_name(name, STRLEN(name), TRUE);
     if (func == NULL)
     {
 	vim_free(argvars);
@@ -3433,7 +3433,7 @@ ex_call(eap)
 	return;
     }
 
-    func = get_called_function(&arg, eap->skip, &fudi);
+    func = get_called_function(&arg, eap->skip, &fudi, TRUE);
     if (fudi.fd_newkey != NULL)
     {
 	/* Still need to give an error message for missing key. */
@@ -5179,7 +5179,7 @@ eval7(arg, rettv, evaluate, want_string)
 		func_T	*func;
 		/* If "s" is the name of a variable of type VAR_FUNC
 		 * use its contents. */
-		func = deref_func_name(s, len);
+		func = deref_func_name(s, len, TRUE);
 
 		if (func == NULL)
 		    ret = FAIL;
@@ -8323,11 +8323,14 @@ find_internal_func(name)
  * Check if "name" is a variable of type VAR_FUNC.  If so, return the function
  * definition it contains, otherwise try to find internal or user-defined 
  * function with the given name. Returns NULL on failure.
+ *
+ * With runevent set to FALSE FuncUndefined event is not called.
  */
     func_T *
-deref_func_name(name, len)
+deref_func_name(name, len, runevent)
     char_u	*name;
     const int	len;
+    int		runevent;
 {
     dictitem_T	*v;
     int		cc;
@@ -8430,7 +8433,8 @@ deref_func_name(name, len)
 
 #ifdef FEAT_AUTOCMD
 	    /* Trigger FuncUndefined event, may load the function. */
-	    if (fp == NULL
+	    if (runevent
+		    && fp == NULL
 		    && apply_autocmds(EVENT_FUNCUNDEFINED,
 						     fname, fname, TRUE, NULL)
 		    && !aborting())
@@ -8617,7 +8621,9 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
     if (aufp->auf_func == NULL && script_autoload(aufp->auf_name, TRUE) &&
 	    !aborting())
 	/* loaded a package, search for the function again */
-	aufp->auf_func = deref_func_name(aufp->auf_name,STRLEN(aufp->auf_name));
+	aufp->auf_func = deref_func_name(aufp->auf_name,
+					 STRLEN(aufp->auf_name),
+					 TRUE);
 
     if (aufp->auf_func == NULL)
     {
@@ -9432,7 +9438,7 @@ f_call(argvars, rettv)
 	name = get_tv_string(&argvars[0]);
 	if (name == NUL)
 	    return;		/* type error or empty name */
-	func = deref_func_name(name, STRLEN(name));
+	func = deref_func_name(name, STRLEN(name), TRUE);
     }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -11142,7 +11148,7 @@ f_function(argvars, rettv)
 
     s = get_tv_string(&argvars[0]);
 
-    func = deref_func_name(s, STRLEN(s));
+    func = deref_func_name(s, STRLEN(s), FALSE);
 
     if (func != NULL)
     {
@@ -17224,7 +17230,8 @@ f_sort(argvars, rettv)
 		    if (*name == NUL)
 			return;
 
-		    item_compare_func = deref_func_name(name, STRLEN(name));
+		    item_compare_func = deref_func_name(name, STRLEN(name),
+							TRUE);
 		    if (item_compare_func == NULL)
 			return;
 		}
@@ -21927,10 +21934,11 @@ ret_free:
  * Get the func_T reference which will be then called.
  */
     static func_T *
-get_called_function(pp, skip, fdp)
+get_called_function(pp, skip, fdp, runevent)
     char_u	**pp;
     int		skip;
     funcdict_T	*fdp;
+    int		runevent;
 {
     func_T	*func = NULL;
     char_u	*start;
@@ -21950,7 +21958,7 @@ get_called_function(pp, skip, fdp)
     {
 	*pp += 3;
 	len = get_id_len(pp) + 3;
-	return deref_func_name(start, len);
+	return deref_func_name(start, len, TRUE);
     }
 
     /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
@@ -22021,12 +22029,12 @@ get_called_function(pp, skip, fdp)
     if (lv.ll_exp_name != NULL)
     {
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len);
+	func = deref_func_name(lv.ll_exp_name, len, !skip && runevent);
     }
     else
     {
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len);
+	func = deref_func_name(*pp, len, !skip && runevent);
     }
 
     *pp = end;
@@ -22145,7 +22153,7 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len);
+	func = deref_func_name(lv.ll_exp_name, len, FALSE);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
@@ -22156,7 +22164,7 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len);
+	func = deref_func_name(*pp, len, FALSE);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
@@ -22360,7 +22368,7 @@ function_exists(name)
     char_u	*p = name;
     funcdict_T	fudi;
 
-    func = get_called_function(&p, FALSE, &fudi);
+    func = get_called_function(&p, FALSE, &fudi, FALSE);
     func_unref(func);
     dict_unref(fudi.fd_dict);
 
