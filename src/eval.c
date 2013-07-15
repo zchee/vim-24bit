@@ -4973,6 +4973,92 @@ eval6(arg, rettv, evaluate, want_string)
     return OK;
 }
 
+    static int
+get_function_args(argp, endchar, newargs, varargs, skip)
+    char_u	**argp;
+    char_u	endchar;
+    garray_T	*newargs;
+    int		*varargs;
+    int		skip;
+{
+    int		mustend = FALSE;
+    char_u	end;
+    char_u	*arg = *argp;
+    char_u	*p = arg;
+    int		c;
+    int		i;
+
+    ga_init2(newargs, (int)sizeof(char_u *), 3);
+
+    *varargs = FALSE;
+
+    /*
+     * Isolate the arguments: "arg1, arg2, ...)"
+     */
+    while (*p != endchar)
+    {
+	if (p[0] == '.' && p[1] == '.' && p[2] == '.')
+	{
+	    *varargs = TRUE;
+	    p += 3;
+	    mustend = TRUE;
+	}
+	else
+	{
+	    arg = p;
+	    while (ASCII_ISALNUM(*p) || *p == '_')
+		++p;
+	    if (arg == p || isdigit(*arg)
+		    || (p - arg == 9 && STRNCMP(arg, "firstline", 9) == 0)
+		    || (p - arg == 8 && STRNCMP(arg, "lastline", 8) == 0))
+	    {
+		if (!skip)
+		    EMSG2(_("E125: Illegal argument: %s"), arg);
+		break;
+	    }
+	    if (ga_grow(newargs, 1) == FAIL)
+		return FAIL;
+	    c = *p;
+	    *p = NUL;
+	    arg = vim_strsave(arg);
+	    if (arg == NULL)
+		goto err_ret;
+
+	    /* Check for duplicate argument name. */
+	    for (i = 0; i < newargs->ga_len; ++i)
+		if (STRCMP(((char_u **)(newargs->ga_data))[i], arg) == 0)
+		{
+		    EMSG2(_("E853: Duplicate argument name: %s"), arg);
+		    goto err_ret;
+		}
+
+	    ((char_u **)(newargs->ga_data))[newargs->ga_len] = arg;
+	    *p = c;
+	    newargs->ga_len++;
+	    if (*p == ',')
+		++p;
+	    else
+		mustend = TRUE;
+	}
+	p = skipwhite(p);
+	if (mustend && *p != ')')
+	{
+	    if (!skip)
+		EMSG2(_(e_invarg2), *argp);
+	    break;
+	}
+    }
+    ++p;	/* skip the ')' */
+
+    *argp = p;
+
+    return OK;
+
+err_ret:
+    ga_clear_strings(newargs);
+    return FAIL;
+}
+
 /*
  * Handle sixth level expression:
  *  number		number constant
@@ -5158,6 +5244,29 @@ eval7(arg, rettv, evaluate, want_string)
 		}
 		break;
 
+    /*
+     * Lambdas: \a, b: expr1
+     */
+    case '\\':	{
+		    garray_T	newargs;
+		    char_u	*body_start;
+		    int		body_len;
+		    int		varargs;
+
+		    *arg = skipwhite(*arg + 1);
+		    ret = get_function_args(arg, ':', &newargs, varargs,
+					    !evaluate);
+		    if (ret == FAIL)
+			break;
+
+		    body_start = *arg;
+		    ret = eval1(arg, rettv, FALSE);
+		    if (ret == FAIL)
+			break;
+		    body_len = *arg - body_start;
+
+		    break;
+		}
     default:	ret = NOTDONE;
 		break;
     }
@@ -21297,7 +21406,6 @@ ex_function(eap)
     garray_T	newargs;
     garray_T	newlines;
     int		varargs = FALSE;
-    int		mustend = FALSE;
     int		flags = 0;
     ufunc_T	*fp;
     int		indent;
@@ -21485,7 +21593,6 @@ ex_function(eap)
     }
     p = skipwhite(p + 1);
 
-    ga_init2(&newargs, (int)sizeof(char_u *), 3);
     ga_init2(&newlines, (int)sizeof(char_u *), 3);
 
     if (!eap->skip)
@@ -21514,63 +21621,8 @@ ex_function(eap)
 	    EMSG(_("E862: Cannot use g: here"));
     }
 
-    /*
-     * Isolate the arguments: "arg1, arg2, ...)"
-     */
-    while (*p != ')')
-    {
-	if (p[0] == '.' && p[1] == '.' && p[2] == '.')
-	{
-	    varargs = TRUE;
-	    p += 3;
-	    mustend = TRUE;
-	}
-	else
-	{
-	    arg = p;
-	    while (ASCII_ISALNUM(*p) || *p == '_')
-		++p;
-	    if (arg == p || isdigit(*arg)
-		    || (p - arg == 9 && STRNCMP(arg, "firstline", 9) == 0)
-		    || (p - arg == 8 && STRNCMP(arg, "lastline", 8) == 0))
-	    {
-		if (!eap->skip)
-		    EMSG2(_("E125: Illegal argument: %s"), arg);
-		break;
-	    }
-	    if (ga_grow(&newargs, 1) == FAIL)
-		goto erret;
-	    c = *p;
-	    *p = NUL;
-	    arg = vim_strsave(arg);
-	    if (arg == NULL)
-		goto erret;
-
-	    /* Check for duplicate argument name. */
-	    for (i = 0; i < newargs.ga_len; ++i)
-		if (STRCMP(((char_u **)(newargs.ga_data))[i], arg) == 0)
-		{
-		    EMSG2(_("E853: Duplicate argument name: %s"), arg);
-		    goto erret;
-		}
-
-	    ((char_u **)(newargs.ga_data))[newargs.ga_len] = arg;
-	    *p = c;
-	    newargs.ga_len++;
-	    if (*p == ',')
-		++p;
-	    else
-		mustend = TRUE;
-	}
-	p = skipwhite(p);
-	if (mustend && *p != ')')
-	{
-	    if (!eap->skip)
-		EMSG2(_(e_invarg2), eap->arg);
-	    break;
-	}
-    }
-    ++p;	/* skip the ')' */
+    if (get_function_args(&p, ')', &newargs, &varargs, eap->skip) == FAIL)
+	goto erret_2;
 
     /* find extra arguments "range", "dict" and "abort" */
     for (;;)
@@ -21940,6 +21992,7 @@ ex_function(eap)
 
 erret:
     ga_clear_strings(&newargs);
+erret_2:
     ga_clear_strings(&newlines);
 ret_free:
     vim_free(skip_until);
