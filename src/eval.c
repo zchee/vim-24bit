@@ -23223,6 +23223,31 @@ repr_user_func(fp)
 	/* Allow checking for anonymous functions using
 	 * string(fref) =~# '^function(''\d' */
 	return vim_strsave((char_u *) "function('1')");
+    else if (fp->uf_name[0] == K_SPECIAL &&
+	     fp->uf_name[1] == KS_EXTRA  &&
+	     fp->uf_name[2] == KE_SNR)
+    {
+	char_u	*buffer;
+	char_u	*r;
+
+	/*  translated <SNR>: K_SPECIAL, KS_EXTRA, KE_SNR --------+  NUL *
+	 *                                        "<SNR>" ----+   |   |  *
+	 *                                                    |   |   |  */
+	if (!(buffer = (char_u *) alloc(STRLEN(fp->uf_name) + 5 - 3 + 1)))
+	    return NULL;
+	buffer[0] = '<';
+	buffer[1] = 'S';
+	buffer[2] = 'N';
+	buffer[3] = 'R';
+	buffer[4] = '>';
+	STRCPY((buffer + 5), (fp->uf_name + 3));
+
+	r = string_quote(buffer, "function");
+
+	vim_free(buffer);
+
+	return r;
+    }
     else
 	return string_quote(fp->uf_name, "function");
 }
