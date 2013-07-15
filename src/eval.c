@@ -8416,9 +8416,7 @@ deref_func_name(name, len, runevent)
 		*sid_buf = NUL;
 
 	    if (new_len)
-		fname = (char_u *) alloc(new_len + 1);
-
-	    new_len += lead;
+		fname = (char_u *) alloc(new_len + lead + 1);
 	}
 	else
 	{
