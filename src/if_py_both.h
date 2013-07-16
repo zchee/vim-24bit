@@ -88,6 +88,8 @@ static PyObject *py_load_module;
 
 static PyObject *VimError;
 
+static int pyquit = FALSE;
+
     static void *
 py_memsave(void *p, size_t len)
 {
@@ -5466,14 +5468,14 @@ typedef struct pyfunc_args_S {
 } pyfunc_args_T;
 
     static void
-init_range_func(pyfunc_args_T *pyargs)
+init_range_func_call(pyfunc_args_T *pyargs)
 {
     RangeStart = pyargs->firstline;
     RangeEnd = pyargs->lastline;
 }
 
     static void
-run_func(const char *cmd, pyfunc_args_T *pyargs
+run_func_call(const char *cmd, pyfunc_args_T *pyargs
 #ifdef PY_CAN_RECURSE
 	, PyGILState_STATE *pygilstate UNUSED
 #endif
@@ -5544,8 +5546,12 @@ call_python_func(pyfp, rettv, argcount, argvars, firstline, lastline, doesrange,
 
     *doesrange = TRUE;
 
-    DoPyCommand(NULL, (rangeinitializer) init_range_func, (runner) run_func,
-		&pyargs);
+    DoPyCommand(
+	    NULL,
+	    (rangeinitializer) init_range_func_call,
+	    (runner) run_func_call,
+	    &pyargs
+	);
 
     return pyargs.result;
 }
@@ -5558,12 +5564,40 @@ repr_python_func(pyfp)
 }
 
     static void
-dealloc_python_func(pyfp)
-    pyfunc_T	*pyfp;
+dummy_init_range(void *arg UNUSED)
+{
+    return;
+}
+
+    static void
+run_func_dealloc(const char *cmd, pyfunc_T *pyfp
+#ifdef PY_CAN_RECURSE
+	, PyGILState_STATE *pygilstate UNUSED
+#endif
+	)
 {
     Py_DECREF(pyfp->callable);
     PyMem_Free(pyfp->name);
     PyMem_Free(pyfp);
+    return;
+}
+
+    static void
+dealloc_python_func(pyfp)
+    pyfunc_T	*pyfp;
+{
+    if (!pyquit) /* If we are exiting python is already deinitialized 
+		  * by the time we start freeing memory in mch_exit (that 
+		  * indirectly calls eval_clear).
+		  * FIXME: handle this in a nicer way (i.e. decref python 
+		  * function references in python_end()).
+		  */
+	DoPyCommand(
+		NULL,
+		(rangeinitializer) dummy_init_range,
+		(runner) run_func_dealloc,
+		pyfp
+	    );
     return;
 }
 
