@@ -1258,7 +1258,7 @@ gui_mch_prepare(int *argc, char **argv)
 
 #ifdef FEAT_NETBEANS_INTG
     {
-	/* stolen from gui_x11.x */
+	/* stolen from gui_x11.c */
 	int arg;
 
 	for (arg = 1; arg < *argc; arg++)
@@ -1614,7 +1614,7 @@ gui_mch_init(void)
 #endif
 
 #ifdef FEAT_EVAL
-# if _MSC_VER < 1400
+# ifndef HandleToLong
 /* HandleToLong() only exists in compilers that can do 64 bit builds */
 #  define HandleToLong(h) ((long)(h))
 # endif
@@ -1676,7 +1676,7 @@ gui_mch_set_shellsize(int width, int height,
      * used by the taskbar or appbars. */
     get_work_area(&workarea_rect);
 
-    /* Get current posision of our window.  Note that the .left and .top are
+    /* Get current position of our window.  Note that the .left and .top are
      * relative to the work area.  */
     wndpl.length = sizeof(WINDOWPLACEMENT);
     GetWindowPlacement(s_hwnd, &wndpl);
@@ -3100,7 +3100,7 @@ gui_mch_dialog(
 	return -1;
 
     /*
-     * make a copy of 'buttons' to fiddle with it.  complier grizzles because
+     * make a copy of 'buttons' to fiddle with it.  compiler grizzles because
      * vim_strsave() doesn't take a const arg (why not?), so cast away the
      * const.
      */
@@ -3216,7 +3216,7 @@ gui_mch_dialog(
 	    if (l == 1 && vim_iswhite(*pend)
 					&& textWidth > maxDialogWidth * 3 / 4)
 		last_white = pend;
-	    textWidth += GetTextWidth(hdc, pend, l);
+	    textWidth += GetTextWidthEnc(hdc, pend, l);
 	    if (textWidth >= maxDialogWidth)
 	    {
 		/* Line will wrap. */
@@ -3282,7 +3282,7 @@ gui_mch_dialog(
 	    pend = vim_strchr(pstart, DLG_BUTTON_SEP);
 	    if (pend == NULL)
 		pend = pstart + STRLEN(pstart);	// Last button name.
-	    textWidth = GetTextWidth(hdc, pstart, (int)(pend - pstart));
+	    textWidth = GetTextWidthEnc(hdc, pstart, (int)(pend - pstart));
 	    if (textWidth < minButtonWidth)
 		textWidth = minButtonWidth;
 	    textWidth += dlgPaddingX;	    /* Padding within button */
@@ -3307,7 +3307,7 @@ gui_mch_dialog(
 	    pend = vim_strchr(pstart, DLG_BUTTON_SEP);
 	    if (pend == NULL)
 		pend = pstart + STRLEN(pstart);	// Last button name.
-	    textWidth = GetTextWidth(hdc, pstart, (int)(pend - pstart));
+	    textWidth = GetTextWidthEnc(hdc, pstart, (int)(pend - pstart));
 	    textWidth += dlgPaddingX;		/* Padding within button */
 	    textWidth += DLG_VERT_PADDING_X * 2; /* Padding around button */
 	    if (textWidth > dlgwidth)
@@ -4163,7 +4163,11 @@ get_toolbar_bitmap(vimmenu_T *menu)
 	 * didn't exist or wasn't specified, try the menu name
 	 */
 	if (hbitmap == NULL
-		&& (gui_find_bitmap(menu->name, fname, "bmp") == OK))
+		&& (gui_find_bitmap(
+#ifdef FEAT_MULTI_LANG
+			    menu->en_dname != NULL ? menu->en_dname :
+#endif
+					menu->dname, fname, "bmp") == OK))
 	    hbitmap = LoadImage(
 		    NULL,
 		    fname,
@@ -4391,7 +4395,7 @@ gui_mch_register_sign(signfile)
     }
 
     sign.hImage = NULL;
-    ext = signfile + STRLEN(signfile) - 4; /* get extention */
+    ext = signfile + STRLEN(signfile) - 4; /* get extension */
     if (ext > signfile)
     {
 	int do_load = 1;
