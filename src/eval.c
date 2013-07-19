@@ -5182,9 +5182,12 @@ eval7(arg, rettv, evaluate, want_string)
 		func_T	*func;
 		/* If "s" is the name of a variable of type VAR_FUNC
 		 * use its contents. */
-		func = deref_func_name(s, len, TRUE);
+		if (evaluate)
+		    func = deref_func_name(s, len, TRUE);
+		else
+		    func = NULL;
 
-		if (func == NULL)
+		if (evaluate && func == NULL)
 		{
 		    char_u	cc;
 		    ret = FAIL;
