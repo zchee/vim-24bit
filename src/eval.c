@@ -284,7 +284,8 @@ typedef struct
  */
 typedef struct
 {
-    dict_T	*fd_dict;	/* Dictionary used */
+    dict_T	*fd_dict;	/* Dictionary used. Contains borrowed reference.
+				 */
     char_u	*fd_newkey;	/* new key in "dict" in allocated memory */
     dictitem_T	*fd_di;		/* Dictionary item used */
     func_T	*fd_func;	/* Function object, if it was obtained. 
@@ -811,7 +812,7 @@ static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
 static char_u *trans_function_name __ARGS((char_u **pp, int skip, int flags, funcdict_T *fd));
-static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int runevent));
+static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int runevent, int raise));
 static int eval_fname_script __ARGS((char_u *p));
 static int eval_fname_sid __ARGS((char_u *p));
 static void list_func_head __ARGS((ufunc_T *fp, int indent));
@@ -3436,7 +3437,7 @@ ex_call(eap)
 	return;
     }
 
-    func = get_called_function(&arg, eap->skip, &fudi, TRUE);
+    func = get_called_function(&arg, eap->skip, &fudi, TRUE, TRUE);
     if (fudi.fd_newkey != NULL)
     {
 	/* Still need to give an error message for missing key. */
@@ -21954,11 +21955,12 @@ ret_free:
  * Get the func_T reference which will be then called.
  */
     static func_T *
-get_called_function(pp, skip, fdp, runevent)
+get_called_function(pp, skip, fdp, runevent, raise)
     char_u	**pp;
     int		skip;
     funcdict_T	*fdp;
     int		runevent;
+    int		raise;
 {
     func_T	*func = NULL;
     char_u	*start;
@@ -21991,7 +21993,7 @@ get_called_function(pp, skip, fdp, runevent)
 					      lead > 2 ? 0 : FNE_CHECK_START);
     if (end == start)
     {
-	if (!skip)
+	if (!skip && raise)
 	    EMSG(_("E129: Function name required"));
 	goto theend;
     }
@@ -22004,7 +22006,7 @@ get_called_function(pp, skip, fdp, runevent)
 	 */
 	if (!aborting())
 	{
-	    if (end != NULL)
+	    if (end != NULL && raise)
 		EMSG2(_(e_invarg2), start);
 	}
 	else
@@ -22029,8 +22031,10 @@ get_called_function(pp, skip, fdp, runevent)
 	}
 	else
 	{
-	    if (!skip && (fdp == NULL || lv.ll_dict == NULL
-			  || fdp->fd_newkey == NULL))
+	    if (raise
+		    && !skip
+		    && (fdp == NULL || lv.ll_dict == NULL
+			|| fdp->fd_newkey == NULL))
 		EMSG(_(e_funcref));
 	    else
 		*pp = end;
@@ -22392,9 +22396,8 @@ function_exists(name)
     char_u	*p = name;
     funcdict_T	fudi;
 
-    func = get_called_function(&p, FALSE, &fudi, FALSE);
+    func = get_called_function(&p, FALSE, &fudi, FALSE, FALSE);
     func_unref(func);
-    dict_unref(fudi.fd_dict);
 
     return (func != NULL && (*p == NUL || *p == '('));
 }
