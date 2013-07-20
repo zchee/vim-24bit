@@ -11168,9 +11168,7 @@ f_function(argvars, rettv)
 	rettv->vval.v_func = func;
     }
     else
-    {
 	EMSG2(_(e_unknown_function), s);
-    }
 }
 
 /*
@@ -17224,7 +17222,10 @@ f_sort(argvars, rettv)
 	{
 	    /* optional second argument: {func} */
 	    if (argvars[1].v_type == VAR_FUNC)
+	    {
 		item_compare_func = argvars[1].vval.v_func;
+		++item_compare_func->fv_refcount;
+	    }
 	    else
 	    {
 		int	    error = FALSE;
@@ -17291,8 +17292,7 @@ f_sort(argvars, rettv)
 	    }
 	}
 
-	if (item_compare_func != NULL)
-	    func_unref(item_compare_func);
+	func_unref(item_compare_func);
 
 	vim_free(ptrs);
     }
