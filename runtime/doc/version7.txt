@@ -1,4 +1,4 @@
-*version7.txt*  For Vim version 7.4a.  Last change: 2013 Jul 07
+*version7.txt*  For Vim version 7.4a.  Last change: 2013 Jul 13
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -70,7 +70,7 @@ Fixed					|fixed-7.3|
 
 VERSION 7.4			|version-7.4|
 New regexp engine			|new-regexp-engine|
-Better vim ↔ python interface		|new-python-interfac|
+Better Python interface			|better-python-interface|
 Changed					|changed-7.4|
 Added					|added-7.4|
 Fixed					|fixed-7.4|
@@ -10164,6 +10164,9 @@ This section is about improvements made between version 7.3 and 7.4.
 This release has hundreds of bug fixes and there are a few new features.  The
 most notable new features are:
 
+- New regexp engine			|new-regexp-engine|
+- A more pythonic Python interface	|better-python-interface|
+
 
 New regexp engine					*new-regexp-engine*
 -----------------
@@ -10183,18 +10186,19 @@ is now working fine.  Previously Vim could get stuck.
 
 More information here: |two-engines|
 
-Better vim ↔ python interface			*new-python-interface*
------------------------------
+
+Better Python interface				*better-python-interface*
+-----------------------
 
 Added |python-bindeval| function. Unlike |python-eval| this one returns 
-  |python-Dictionary|, |python-List| and |python-Function| objects for 
-  dictionaries lists and functions respectively in place of their python 
-  built-in equivalents (or None if we are talking about function references).
-For simple types this function returns python built-in types and not only 
-  python `str()` like |python-eval| does. On python 3 it will return `bytes()` 
-  objects in place of `str()` ones avoiding possibility of UnicodeDecodeError.
-Interface of new objects mimics standard python `dict()` and `list()` 
-  interfaces to some extent. Extent will be improved in the future.
+|python-Dictionary|, |python-List| and |python-Function| objects for 
+dictionaries lists and functions respectively in place of their python 
+built-in equivalents (or None if we are talking about function references).
+   For simple types this function returns python built-in types and not only 
+python `str()` like |python-eval| does. On python 3 it will return `bytes()` 
+objects in place of `str()` ones avoiding possibility of UnicodeDecodeError.
+   Interface of new objects mimics standard python `dict()` and `list()`
+interfaces to some extent. Extent will be improved in the future.
 
 Added special |python-vars| objects also available for |python-buffer| and 
 |python-window|. They ease access to VimL variables from python.
@@ -10229,6 +10233,7 @@ Added or fixed support for `dir()` in vim python objects.
 
 Old python versions (≤2.2) are no longer supported. Building with them did 
 not work anyway.
+
 
 Changed							*changed-7.4*
 -------
@@ -11883,7 +11888,7 @@ Solution:   Don't trigger CursorHold when there is typeahead.
 Files:	    src/fileio.c
 
 Patch 7.3.261
-Problem:    G++ error message errornously recognized as error.
+Problem:    G++ error message erroneously recognized as error.
 Solution:   Ignore "In file included from" line also when it ends in a colon.
 	    (Fernando Castillo)
 Files:	    src/option.h
@@ -13835,7 +13840,7 @@ Files:	    src/buffer.c, src/eval.c, src/proto/eval.pro, src/structs.h,
 Patch 7.3.604
 Problem:    inputdialog() doesn't use the cancel argument in the console.
 	    (David Fishburn)
-Solution:   Use the third argument. (Christian Brabant)
+Solution:   Use the third argument. (Christian Brabandt)
 Files:	    src/eval.c
 
 Patch 7.3.605 (after 7.3.577)
@@ -15676,7 +15681,7 @@ Patch 7.3.926
 Problem:    Autocommands are triggered by setwinvar() et al. Missing BufEnter
 	    on :tabclose. Duplicate WinEnter on :tabclose. Wrong order of
 	    events for :tablose and :tabnew.
-Solution:   Fix these autocommand events. (Zyx)
+Solution:   Fix these autocommand events. (ZyX)
 Files:	    runtime/doc/eval.txt, src/buffer.c, src/eval.c, src/ex_cmds2.c,
 	    src/fileio.c, src/proto/window.pro, src/testdir/test62.in,
 	    src/testdir/test62.ok, src/window.c
