@@ -11472,6 +11472,7 @@ change_compatible(on)
 
 /*
  * Return TRUE when option "name" has been set.
+ * Only works correctly for global options.
  */
     int
 option_was_set(name)

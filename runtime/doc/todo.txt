@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 7.4a.  Last change: 2013 Jul 17
+*todo.txt*      For Vim version 7.4.  Last change: 2013 Aug 10
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -34,18 +34,6 @@ not be repeated below, unless there is extra information.
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-Edit changed-7.4 text.
-
-Patch for this bug: (Ken Takata, 2013 Jul 17)
-8   Win32: When mouse is hidden and in the toolbar, moving it won't make it
-    appear. (Sami Salonen)
-
-This results in 'fileformat' set to "dos" instead of "unix". (Ingo Karkat,
-2013 Jul 16)
-    :set fileformats=dos,unix
-    :new ++ff=unix
-Also for ++bin and ++enc.
-
 Python: ":py raw_input('prompt')" doesn't work. (Manu Hack)
 
 Patch to add "acl" and "xpm" as a feature. (Ken Takata, 2013 Jul 8)
@@ -58,7 +46,17 @@ highlight group.  Add a "\zs" after it?
 
 Go through more coverity reports.
 
+"gUgn" cannot be repeated, while "dgn" can.
+
+Several Win32 functions are not using Unicode.
+Patches to fix this. (Ken Takata, 2013 Aug 9)
+
+/[b-a] gives error E16, should probably be E769.
+
 Discussion about canonicalization of Hebrew. (Ron Aaron, 2011 April 10)
+
+Patch to make external commands work with multi-byte characters on Win32 when
+'encoding' differs from the active codepage. (Yasuhiro Matsumoto, 2013 Aug 5)
 
 Checking runtime scripts: Thilo Six, 2012 Jun 6.
 
@@ -69,6 +67,10 @@ GTK: problem with 'L' in 'guioptions' changing the window width.
 (Aaron Cornelius, 2012 Feb 6)
 
 Javascript file where indent gets stuck on: GalaxyMaster, 2012 May 3.
+
+The BufUnload event is triggered when re-using the empty buffer.
+(Pokey Rule, 2013 Jul 22)
+Patch by Marcin Szamotulski, 2013 Jul 22.
 
 The CompleteDone autocommand needs some info passed to it:
 - The word that was selected (empty if abandoned complete)
@@ -187,7 +189,6 @@ Python: Be able to define a Python function that can be called directly from
 Vim script.  Requires converting the arguments and return value, like with
 vim.bindeval().
 
-
 Patch for :tabcloseleft, after closing a tab go to left tab. (William Bowers,
 2012 Aug 4)
 
@@ -208,8 +209,6 @@ Crash in autocmd that unloads buffers in a BufUnload event. (Andrew Pimlott,
 2012 Aug 11)  Disallow :new when BufUnload is being handled?
 
 Issue 72: 'autochdir' causes problems for :vimgrep.
-
-'autochdir' causes problems for setbufvar(). (Ben Fritz, 2013 Jul 16)
 
 Session file creation: 'autochdir' causes trouble.  Keep it off until after
 loading all files.
@@ -305,9 +304,6 @@ Patch to pass list to or(), and() and xor(). (Yasuhiro Matsumoto, 2012 Feb 8)
 
 Patch to improve "it" and "at" text object matching. (Christian Brabandt, 2011
 Nov 20)
-
-Windows 7 confirm() dialog can be taller than the screen. (David Fishburn,
-2013 Jul 9)  Does not count the height of the buttons?
 
 Patch to improve GUI find/replace dialog. (Christian Brabandt, 2012 May 26)
 Update Jun 2.
@@ -451,7 +447,7 @@ May 24)  Update May 26.
 
 Patch for :tabrecently. (Hirokazu Yoshida, 2012 Jan 30)
 
-Problem with "syn sync gouphere". (Gustavo Niemeyer, 2011 Jan 27)
+Problem with "syn sync grouphere". (Gustavo Niemeyer, 2011 Jan 27)
 
 Loading autoload script even when usage is inside "if 0". (Christian Brabandt,
 2010 Dec 18)
@@ -930,6 +926,9 @@ probably causes this.
 
 'scrollbind' is not respected when deleting lines or undo. (Milan Vancura,
 2009 Jan 16)
+
+Patch to support strikethrough next to bold and italic. (Christian Brabandt,
+2013 Jul 30)
 
 Document that default font in Athena can be set with resources:
    XtDefaultFont: "9x15"
@@ -4116,6 +4115,8 @@ Select mode:
 
 
 Visual mode:
+8   Support using "." in Visual mode. Use the operator applied to the Visual
+    selection, if possible.
 -   When dragging the Visual selection with the mouse and 'scrolloff' is zero,
     behave like 'scrolloff' is one, so that the text scrolls when the pointer
     is in the top line.
