@@ -2926,9 +2926,14 @@ check_for_cryptkey(cryptkey, ptr, sizep, filesizep, newfile, fname, did_ask)
     int		*did_ask;	/* flag: whether already asked for key */
 {
     int method = crypt_method_from_magic((char *)ptr, *sizep);
+    int b_p_ro = curbuf->b_p_ro;
 
     if (method >= 0)
     {
+	/* Mark the buffer as read-only until the decryption has taken place.
+	 * Avoids accidentally overwriting the file with garbage. */
+	curbuf->b_p_ro = TRUE;
+
 	set_crypt_method(curbuf, method);
 	if (method > 0)
 	    (void)blowfish_self_test();
@@ -2977,6 +2982,8 @@ check_for_cryptkey(cryptkey, ptr, sizep, filesizep, newfile, fname, did_ask)
 	    *sizep -= CRYPT_MAGIC_LEN + salt_len + seed_len;
 	    mch_memmove(ptr, ptr + CRYPT_MAGIC_LEN + salt_len + seed_len,
 							      (size_t)*sizep);
+	    /* Restore the read-only flag. */
+	    curbuf->b_p_ro = b_p_ro;
 	}
     }
     /* When starting to edit a new file which does not have encryption, clear
@@ -8861,6 +8868,9 @@ aucmd_prepbuf(aco, buf)
 #ifdef FEAT_WINDOWS
     int		save_ea;
 #endif
+#ifdef FEAT_AUTOCHDIR
+    int		save_acd;
+#endif
 
     /* Find a window that is for the new buffer */
     if (buf == curbuf)		/* be quick when buf is curbuf */
@@ -8909,11 +8919,10 @@ aucmd_prepbuf(aco, buf)
 	aucmd_win->w_s = &buf->b_s;
 	++buf->b_nwindows;
 	win_init_empty(aucmd_win); /* set cursor and topline to safe values */
-	vim_free(aucmd_win->w_localdir);
-	aucmd_win->w_localdir = NULL;
 
 	/* Make sure w_localdir and globaldir are NULL to avoid a chdir() in
 	 * win_enter_ext(). */
+	vim_free(aucmd_win->w_localdir);
 	aucmd_win->w_localdir = NULL;
 	aco->globaldir = globaldir;
 	globaldir = NULL;
@@ -8926,9 +8935,19 @@ aucmd_prepbuf(aco, buf)
 	make_snapshot(SNAP_AUCMD_IDX);
 	save_ea = p_ea;
 	p_ea = FALSE;
+
+# ifdef FEAT_AUTOCHDIR
+	/* Prevent chdir() call in win_enter_ext(), through do_autochdir(). */
+	save_acd = p_acd;
+	p_acd = FALSE;
+# endif
+
 	(void)win_split_ins(0, WSP_TOP, aucmd_win, 0);
 	(void)win_comp_pos();   /* recompute window positions */
 	p_ea = save_ea;
+# ifdef FEAT_AUTOCHDIR
+	p_acd = save_acd;
+# endif
 	unblock_autocmds();
 #endif
 	curwin = aucmd_win;
@@ -10327,7 +10346,7 @@ file_pat_to_reg_pat(pat, pat_end, allow_dirs, no_bslash)
 		 * Don't unescape \, * and others that are also special in a
 		 * regexp.
 		 * An escaped { must be unescaped since we use magic not
-		 * verymagic.
+		 * verymagic.  Use "\\\{n,m\}"" to get "\{n,m}".
 		 */
 		if (*++p == '?'
 #ifdef BACKSLASH_IN_FILENAME
@@ -10337,8 +10356,14 @@ file_pat_to_reg_pat(pat, pat_end, allow_dirs, no_bslash)
 		    reg_pat[i++] = '?';
 		else
 		    if (*p == ',' || *p == '%' || *p == '#'
-						    || *p == ' ' || *p == '{')
+				       || *p == ' ' || *p == '{' || *p == '}')
 			reg_pat[i++] = *p;
+		    else if (*p == '\\' && p[1] == '\\' && p[2] == '{')
+		    {
+			reg_pat[i++] = '\\';
+			reg_pat[i++] = '{';
+			p += 2;
+		    }
 		    else
 		    {
 			if (allow_dirs != NULL && vim_ispathsep(*p)

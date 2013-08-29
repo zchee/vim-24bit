@@ -2429,8 +2429,13 @@ swapchars(op_type, pos, length)
     {
 # ifdef FEAT_MBYTE
 	if (has_mbyte)
+	{
+	    int len = (*mb_ptr2len)(ml_get_pos(pos));
+
 	    /* we're counting bytes, not characters */
-	    todo -= (*mb_ptr2len)(ml_get_pos(pos)) - 1;
+	    if (len > 0)
+		todo -= len - 1;
+	}
 # endif
 	did_change |= swapchar(op_type, pos);
 	if (inc(pos) == -1)    /* at end of file */
@@ -2891,7 +2896,7 @@ free_yank_all()
  * register and then concatenate the old and the new one (so we keep the old
  * one in case of out-of-memory).
  *
- * return FAIL for failure, OK otherwise
+ * Return FAIL for failure, OK otherwise.
  */
     int
 op_yank(oap, deleting, mess)

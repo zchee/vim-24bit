@@ -29,6 +29,9 @@
 # define NFA_REGEXP_DEBUG_LOG	"nfa_regexp_debug.log"
 #endif
 
+/* Added to NFA_ANY - NFA_NUPPER_IC to include a NL. */
+#define NFA_ADD_NL		31
+
 enum
 {
     NFA_SPLIT = -1024,
@@ -183,6 +186,13 @@ enum
     NFA_NLOWER,		/*	Match non-lowercase char */
     NFA_UPPER,		/*	Match uppercase char */
     NFA_NUPPER,		/*	Match non-uppercase char */
+    NFA_LOWER_IC,	/*	Match [a-z] */
+    NFA_NLOWER_IC,	/*	Match [^a-z] */
+    NFA_UPPER_IC,	/*	Match [A-Z] */
+    NFA_NUPPER_IC,	/*	Match [^A-Z] */
+
+    NFA_FIRST_NL = NFA_ANY + NFA_ADD_NL,
+    NFA_LAST_NL = NFA_NUPPER_IC + NFA_ADD_NL,
 
     NFA_CURSOR,		/*	Match cursor pos */
     NFA_LNUM,		/*	Match line number */
@@ -198,9 +208,6 @@ enum
     NFA_MARK_GT,	/*	Match > mark */
     NFA_MARK_LT,	/*	Match < mark */
     NFA_VISUAL,		/*	Match Visual area */
-
-    NFA_FIRST_NL = NFA_ANY + ADD_NL,
-    NFA_LAST_NL = NFA_NUPPER + ADD_NL,
 
     /* Character classes [:alnum:] etc */
     NFA_CLASS_ALNUM,
@@ -578,6 +585,8 @@ realloc_post_list()
  * On failure, return 0 (=FAIL)
  * Start points to the first char of the range, while end should point
  * to the closing brace.
+ * Keep in mind that 'ignorecase' applies at execution time, thus [a-z] may
+ * need to be interpreted as [a-zA-Z].
  */
     static int
 nfa_recognize_char_class(start, end, extra_newl)
@@ -681,7 +690,7 @@ nfa_recognize_char_class(start, end, extra_newl)
 	return FAIL;
 
     if (newl == TRUE)
-	extra_newl = ADD_NL;
+	extra_newl = NFA_ADD_NL;
 
     switch (config)
     {
@@ -710,13 +719,13 @@ nfa_recognize_char_class(start, end, extra_newl)
 	case CLASS_not | CLASS_az | CLASS_AZ:
 	    return extra_newl + NFA_NALPHA;
 	case CLASS_az:
-	   return extra_newl + NFA_LOWER;
+	   return extra_newl + NFA_LOWER_IC;
 	case CLASS_not | CLASS_az:
-	    return extra_newl + NFA_NLOWER;
+	    return extra_newl + NFA_NLOWER_IC;
 	case CLASS_AZ:
-	    return extra_newl + NFA_UPPER;
+	    return extra_newl + NFA_UPPER_IC;
 	case CLASS_not | CLASS_AZ:
-	    return extra_newl + NFA_NUPPER;
+	    return extra_newl + NFA_NUPPER_IC;
     }
     return FAIL;
 }
@@ -744,8 +753,8 @@ nfa_emit_equi_class(c)
 	{
 	    case 'A': case 0300: case 0301: case 0302:
 	    case 0303: case 0304: case 0305:
-		    EMIT2('A');	    EMIT2(0300);  EMIT2(0301);
-		    EMIT2(0302);  EMIT2(0303);  EMIT2(0304);
+		    EMIT2('A');	    EMIT2(0300);    EMIT2(0301);
+		    EMIT2(0302);    EMIT2(0303);    EMIT2(0304);
 		    EMIT2(0305);
 		    return OK;
 
@@ -754,13 +763,13 @@ nfa_emit_equi_class(c)
 		    return OK;
 
 	    case 'E': case 0310: case 0311: case 0312: case 0313:
-		    EMIT2('E');	    EMIT2(0310);  EMIT2(0311);
-		    EMIT2(0312);  EMIT2(0313);
+		    EMIT2('E');	    EMIT2(0310);    EMIT2(0311);
+		    EMIT2(0312);    EMIT2(0313);
 		    return OK;
 
 	    case 'I': case 0314: case 0315: case 0316: case 0317:
-		    EMIT2('I');	    EMIT2(0314);  EMIT2(0315);
-		    EMIT2(0316);  EMIT2(0317);
+		    EMIT2('I');	    EMIT2(0314);    EMIT2(0315);
+		    EMIT2(0316);    EMIT2(0317);
 		    return OK;
 
 	    case 'N': case 0321:
@@ -769,13 +778,13 @@ nfa_emit_equi_class(c)
 
 	    case 'O': case 0322: case 0323: case 0324: case 0325:
 	    case 0326:
-		    EMIT2('O');	    EMIT2(0322);  EMIT2(0323);
-		    EMIT2(0324);  EMIT2(0325);  EMIT2(0326);
+		    EMIT2('O');	    EMIT2(0322);    EMIT2(0323);
+		    EMIT2(0324);    EMIT2(0325);    EMIT2(0326);
 		    return OK;
 
 	    case 'U': case 0331: case 0332: case 0333: case 0334:
-		    EMIT2('U');	    EMIT2(0331);  EMIT2(0332);
-		    EMIT2(0333);  EMIT2(0334);
+		    EMIT2('U');	    EMIT2(0331);    EMIT2(0332);
+		    EMIT2(0333);    EMIT2(0334);
 		    return OK;
 
 	    case 'Y': case 0335:
@@ -784,8 +793,8 @@ nfa_emit_equi_class(c)
 
 	    case 'a': case 0340: case 0341: case 0342:
 	    case 0343: case 0344: case 0345:
-		    EMIT2('a');	    EMIT2(0340);  EMIT2(0341);
-		    EMIT2(0342);  EMIT2(0343);  EMIT2(0344);
+		    EMIT2('a');	    EMIT2(0340);    EMIT2(0341);
+		    EMIT2(0342);    EMIT2(0343);    EMIT2(0344);
 		    EMIT2(0345);
 		    return OK;
 
@@ -794,13 +803,13 @@ nfa_emit_equi_class(c)
 		    return OK;
 
 	    case 'e': case 0350: case 0351: case 0352: case 0353:
-		    EMIT2('e');	    EMIT2(0350);  EMIT2(0351);
-		    EMIT2(0352);  EMIT2(0353);
+		    EMIT2('e');	    EMIT2(0350);    EMIT2(0351);
+		    EMIT2(0352);    EMIT2(0353);
 		    return OK;
 
 	    case 'i': case 0354: case 0355: case 0356: case 0357:
-		    EMIT2('i');	    EMIT2(0354);  EMIT2(0355);
-		    EMIT2(0356);  EMIT2(0357);
+		    EMIT2('i');	    EMIT2(0354);    EMIT2(0355);
+		    EMIT2(0356);    EMIT2(0357);
 		    return OK;
 
 	    case 'n': case 0361:
@@ -809,17 +818,17 @@ nfa_emit_equi_class(c)
 
 	    case 'o': case 0362: case 0363: case 0364: case 0365:
 	    case 0366:
-		    EMIT2('o');	    EMIT2(0362);  EMIT2(0363);
-		    EMIT2(0364);  EMIT2(0365);  EMIT2(0366);
+		    EMIT2('o');	    EMIT2(0362);    EMIT2(0363);
+		    EMIT2(0364);    EMIT2(0365);    EMIT2(0366);
 		    return OK;
 
 	    case 'u': case 0371: case 0372: case 0373: case 0374:
-		    EMIT2('u');	    EMIT2(0371);  EMIT2(0372);
-		    EMIT2(0373);  EMIT2(0374);
+		    EMIT2('u');	    EMIT2(0371);    EMIT2(0372);
+		    EMIT2(0373);    EMIT2(0374);
 		    return OK;
 
 	    case 'y': case 0375: case 0377:
-		    EMIT2('y');	    EMIT2(0375);  EMIT2(0377);
+		    EMIT2('y');	    EMIT2(0375);    EMIT2(0377);
 		    return OK;
 
 	    default:
@@ -914,7 +923,7 @@ nfa_regatom()
 		break;
 	    }
 
-	    extra = ADD_NL;
+	    extra = NFA_ADD_NL;
 
 	    /* "\_[" is collection plus newline */
 	    if (c == '[')
@@ -970,7 +979,7 @@ nfa_regatom()
 	    }
 #endif
 	    EMIT(nfa_classcodes[p - classchars]);
-	    if (extra == ADD_NL)
+	    if (extra == NFA_ADD_NL)
 	    {
 		EMIT(NFA_NEWL);
 		EMIT(NFA_OR);
@@ -1166,6 +1175,15 @@ nfa_regatom()
 						      reg_magic == MAGIC_ALL);
 			EMIT(NFA_OPT_CHARS);
 			EMIT(n);
+
+			/* Emit as "\%(\%[abc]\)" to be able to handle
+			 * "\%[abc]*" which would cause the empty string to be
+			 * matched an unlimited number of times. NFA_NOPEN is
+			 * added only once at a position, while NFA_SPLIT is
+			 * added multiple times.  This is more efficient than
+			 * not allowsing NFA_SPLIT multiple times, it is used
+			 * a lot. */
+			EMIT(NFA_NOPEN);
 			break;
 		    }
 
@@ -1231,21 +1249,21 @@ collection:
 	    {
 		/*
 		 * Try to reverse engineer character classes. For example,
-		 * recognize that [0-9] stands for  \d and [A-Za-z_] with \h,
+		 * recognize that [0-9] stands for \d and [A-Za-z_] for \h,
 		 * and perform the necessary substitutions in the NFA.
 		 */
 		result = nfa_recognize_char_class(regparse, endp,
-							    extra == ADD_NL);
+							 extra == NFA_ADD_NL);
 		if (result != FAIL)
 		{
-		    if (result >= NFA_DIGIT && result <= NFA_NUPPER)
-			EMIT(result);
-		    else	/* must be char class + newline */
+		    if (result >= NFA_FIRST_NL && result <= NFA_LAST_NL)
 		    {
-			EMIT(result - ADD_NL);
+			EMIT(result - NFA_ADD_NL);
 			EMIT(NFA_NEWL);
 			EMIT(NFA_OR);
 		    }
+		    else
+			EMIT(result);
 		    regparse = endp;
 		    mb_ptr_adv(regparse);
 		    return OK;
@@ -1495,7 +1513,7 @@ collection:
 			     * collection, add an OR below. But not for negated
 			     * range. */
 			    if (!negated)
-				extra = ADD_NL;
+				extra = NFA_ADD_NL;
 			}
 			else
 			{
@@ -1528,7 +1546,7 @@ collection:
 		    EMIT(NFA_END_COLL);
 
 		/* \_[] also matches \n but it's not negated */
-		if (extra == ADD_NL)
+		if (extra == NFA_ADD_NL)
 		{
 		    EMIT(reg_string ? NL : NFA_NEWL);
 		    EMIT(NFA_OR);
@@ -1641,7 +1659,7 @@ nfa_regpiece()
 	     * engine interprets the plus as "try matching one more time", and
 	     * a* matches a second time at the end of the input, the empty
 	     * string.
-	     * The submatch will the empty string.
+	     * The submatch will be the empty string.
 	     *
 	     * In order to be consistent with the old engine, we replace
 	     * <atom>+ with <atom><atom>*
@@ -2002,7 +2020,7 @@ nfa_set_code(c)
     if (c >= NFA_FIRST_NL && c <= NFA_LAST_NL)
     {
 	addnl = TRUE;
-	c -= ADD_NL;
+	c -= NFA_ADD_NL;
     }
 
     STRCPY(code, "");
@@ -2208,6 +2226,10 @@ nfa_set_code(c)
 	case NFA_NLOWER:STRCPY(code, "NFA_NLOWER"); break;
 	case NFA_UPPER:	STRCPY(code, "NFA_UPPER"); break;
 	case NFA_NUPPER:STRCPY(code, "NFA_NUPPER"); break;
+	case NFA_LOWER_IC:  STRCPY(code, "NFA_LOWER_IC"); break;
+	case NFA_NLOWER_IC: STRCPY(code, "NFA_NLOWER_IC"); break;
+	case NFA_UPPER_IC:  STRCPY(code, "NFA_UPPER_IC"); break;
+	case NFA_NUPPER_IC: STRCPY(code, "NFA_NUPPER_IC"); break;
 
 	default:
 	    STRCPY(code, "CHAR(x)");
@@ -2242,13 +2264,13 @@ nfa_postfix_dump(expr, retval)
 	else if (retval == OK)
 	    fprintf(f, ">>> NFA engine succeeded !\n");
 	fprintf(f, "Regexp: \"%s\"\nPostfix notation (char): \"", expr);
-	for (p = post_start; *p && p < post_end; p++)
+	for (p = post_start; *p && p < post_ptr; p++)
 	{
 	    nfa_set_code(*p);
 	    fprintf(f, "%s, ", code);
 	}
 	fprintf(f, "\"\nPostfix notation (int): ");
-	for (p = post_start; *p && p < post_end; p++)
+	for (p = post_start; *p && p < post_ptr; p++)
 		fprintf(f, "%d ", *p);
 	fprintf(f, "\n\n");
 	fclose(f);
@@ -2678,6 +2700,10 @@ nfa_max_width(startstate, depth)
 	    case NFA_NLOWER:
 	    case NFA_UPPER:
 	    case NFA_NUPPER:
+	    case NFA_LOWER_IC:
+	    case NFA_NLOWER_IC:
+	    case NFA_UPPER_IC:
+	    case NFA_NUPPER_IC:
 		/* possibly non-ascii */
 #ifdef FEAT_MBYTE
 		if (has_mbyte)
@@ -3005,7 +3031,18 @@ post2nfa(postfix, end, nfa_calc_size)
 	  {
 	    int    n;
 
-	    /* \%[abc] */
+	    /* \%[abc] implemented as:
+	     *    NFA_SPLIT
+	     *    +-CHAR(a)
+	     *    | +-NFA_SPLIT
+	     *    |   +-CHAR(b)
+	     *    |   | +-NFA_SPLIT
+	     *    |   |   +-CHAR(c)
+	     *    |   |   | +-next
+	     *    |   |   +- next
+	     *    |   +- next
+	     *    +- next
+	     */
 	    n = *++p; /* get number of characters */
 	    if (nfa_calc_size == TRUE)
 	    {
@@ -3745,6 +3782,9 @@ pim_equal(one, two)
     if (two_unused)
 	/* one is used and two is not: not equal */
 	return FALSE;
+    /* compare the state id */
+    if (one->state->id != two->state->id)
+	return FALSE;
     /* compare the position */
     if (REG_MULTI)
 	return one->end.pos.lnum == two->end.pos.lnum
@@ -3821,6 +3861,10 @@ match_follows(startstate, depth)
 	    case NFA_NLOWER:
 	    case NFA_UPPER:
 	    case NFA_NUPPER:
+	    case NFA_LOWER_IC:
+	    case NFA_NLOWER_IC:
+	    case NFA_UPPER_IC:
+	    case NFA_NUPPER_IC:
 	    case NFA_START_COLL:
 	    case NFA_START_NEG_COLL:
 	    case NFA_NEWL:
@@ -3910,15 +3954,27 @@ addstate(l, state, subs_arg, pim, off)
 	case NFA_ZCLOSE8:
 	case NFA_ZCLOSE9:
 #endif
+	case NFA_MOPEN:
 	case NFA_ZEND:
 	case NFA_SPLIT:
-	case NFA_NOPEN:
 	case NFA_SKIP_CHAR:
 	    /* These nodes are not added themselves but their "out" and/or
 	     * "out1" may be added below.  */
 	    break;
 
-	case NFA_MOPEN:
+	case NFA_BOL:
+	case NFA_BOF:
+	    /* "^" won't match past end-of-line, don't bother trying.
+	     * Except when at the end of the line, or when we are going to the
+	     * next line for a look-behind match. */
+	    if (reginput > regline
+		    && *reginput != NUL
+		    && (nfa_endp == NULL
+			|| !REG_MULTI
+			|| reglnum == nfa_endp->se_u.pos.lnum))
+		goto skip_add;
+	    /* FALLTHROUGH */
+
 	case NFA_MOPEN1:
 	case NFA_MOPEN2:
 	case NFA_MOPEN3:
@@ -3940,26 +3996,11 @@ addstate(l, state, subs_arg, pim, off)
 	case NFA_ZOPEN8:
 	case NFA_ZOPEN9:
 #endif
+	case NFA_NOPEN:
 	case NFA_ZSTART:
-	    /* These nodes do not need to be added, but we need to bail out
-	     * when it was tried to be added to this list before. */
-	    if (state->lastlist[nfa_ll_index] == l->id)
-		goto skip_add;
-	    state->lastlist[nfa_ll_index] = l->id;
-	    break;
-
-	case NFA_BOL:
-	case NFA_BOF:
-	    /* "^" won't match past end-of-line, don't bother trying.
-	     * Except when at the end of the line, or when we are going to the
-	     * next line for a look-behind match. */
-	    if (reginput > regline
-		    && *reginput != NUL
-		    && (nfa_endp == NULL
-			|| !REG_MULTI
-			|| reglnum == nfa_endp->se_u.pos.lnum))
-		goto skip_add;
-	    /* FALLTHROUGH */
+	    /* These nodes need to be added so that we can bail out when it
+	     * was added to this list before at the same position to avoid an
+	     * endless loop for "\(\)*" */
 
 	default:
 	    if (state->lastlist[nfa_ll_index] == l->id)
@@ -4079,7 +4120,7 @@ skip_add:
 		sub = &subs->norm;
 	    }
 #ifdef FEAT_SYN_HL
-	    else if (state->c >= NFA_ZOPEN)
+	    else if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9)
 	    {
 		subidx = state->c - NFA_ZOPEN;
 		sub = &subs->synt;
@@ -4148,6 +4189,13 @@ skip_add:
 	    }
 
 	    subs = addstate(l, state->out, subs, pim, off);
+	    /* "subs" may have changed, need to set "sub" again */
+#ifdef FEAT_SYN_HL
+	    if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9)
+		sub = &subs->synt;
+	    else
+#endif
+		sub = &subs->norm;
 
 	    if (save_in_use == -1)
 	    {
@@ -4196,7 +4244,7 @@ skip_add:
 		sub = &subs->norm;
 	    }
 #ifdef FEAT_SYN_HL
-	    else if (state->c >= NFA_ZCLOSE)
+	    else if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9)
 	    {
 		subidx = state->c - NFA_ZCLOSE;
 		sub = &subs->synt;
@@ -4240,6 +4288,13 @@ skip_add:
 	    }
 
 	    subs = addstate(l, state->out, subs, pim, off);
+	    /* "subs" may have changed, need to set "sub" again */
+#ifdef FEAT_SYN_HL
+	    if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9)
+		sub = &subs->synt;
+	    else
+#endif
+		sub = &subs->norm;
 
 	    if (REG_MULTI)
 		sub->list.multi[subidx].end = save_lpos;
@@ -5034,6 +5089,12 @@ nfa_regmatch(prog, start, submatch, m)
 	return FALSE;
     }
 #endif
+    /* Some patterns may take a long time to match, especially when using
+     * recursive_regmatch(). Allow interrupting them with CTRL-C. */
+    fast_breakcheck();
+    if (got_int)
+	return FALSE;
+
     nfa_match = FALSE;
 
     /* Allocate memory for the lists of nodes. */
@@ -5855,6 +5916,28 @@ nfa_regmatch(prog, start, submatch, m)
 		ADD_STATE_IF_MATCH(t->state);
 		break;
 
+	    case NFA_LOWER_IC:	/* [a-z] */
+		result = ri_lower(curc) || (ireg_ic && ri_upper(curc));
+		ADD_STATE_IF_MATCH(t->state);
+		break;
+
+	    case NFA_NLOWER_IC:	/* [^a-z] */
+		result = curc != NUL
+			  && !(ri_lower(curc) || (ireg_ic && ri_upper(curc)));
+		ADD_STATE_IF_MATCH(t->state);
+		break;
+
+	    case NFA_UPPER_IC:	/* [A-Z] */
+		result = ri_upper(curc) || (ireg_ic && ri_lower(curc));
+		ADD_STATE_IF_MATCH(t->state);
+		break;
+
+	    case NFA_NUPPER_IC:	/* ^[A-Z] */
+		result = curc != NUL
+			  && !(ri_upper(curc) || (ireg_ic && ri_lower(curc)));
+		ADD_STATE_IF_MATCH(t->state);
+		break;
+
 	    case NFA_BACKREF1:
 	    case NFA_BACKREF2:
 	    case NFA_BACKREF3:
@@ -6025,13 +6108,41 @@ nfa_regmatch(prog, start, submatch, m)
 #endif
 		break;
 
+	    case NFA_MOPEN1:
+	    case NFA_MOPEN2:
+	    case NFA_MOPEN3:
+	    case NFA_MOPEN4:
+	    case NFA_MOPEN5:
+	    case NFA_MOPEN6:
+	    case NFA_MOPEN7:
+	    case NFA_MOPEN8:
+	    case NFA_MOPEN9:
+#ifdef FEAT_SYN_HL
+	    case NFA_ZOPEN:
+	    case NFA_ZOPEN1:
+	    case NFA_ZOPEN2:
+	    case NFA_ZOPEN3:
+	    case NFA_ZOPEN4:
+	    case NFA_ZOPEN5:
+	    case NFA_ZOPEN6:
+	    case NFA_ZOPEN7:
+	    case NFA_ZOPEN8:
+	    case NFA_ZOPEN9:
+#endif
+	    case NFA_NOPEN:
+	    case NFA_ZSTART:
+		/* These states are only added to be able to bail out when
+		 * they are added again, nothing is to be done. */
+		break;
+
 	    default:	/* regular character */
 	      {
 		int c = t->state->c;
 
-		/* TODO: put this in #ifdef later */
+#ifdef DEBUG
 		if (c < 0)
 		    EMSGN("INTERNAL: Negative state char: %ld", c);
+#endif
 		result = (c == curc);
 
 		if (!result && ireg_ic)
