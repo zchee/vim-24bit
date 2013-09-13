@@ -3361,6 +3361,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
+						*'guicolors'* *'gcol'*
+'guicolors' 'gcol'	boolean (default off)
+			global
+			{not in Vi}
+			{not available when compiled without the 
+			|+termtruecolor| feature}
+	When on, uses |highlight-guifg| and |highlight-guibg| attributes in 
+	terminal (thus using 24-bit color). Requires ISO-8613-3 compatible 
+	terminal.
+
 			*'guicursor'* *'gcr'* *E545* *E546* *E548* *E549*
 'guicursor' 'gcr'	string	(default "n-v-c:block-Cursor/lCursor,
 					ve:ver35-Cursor,
