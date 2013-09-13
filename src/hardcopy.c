@@ -284,8 +284,8 @@ prt_get_attr(hl_id, pattr, modec)
     pattr->underline = (highlight_has_attr(hl_id, HL_UNDERLINE, modec) != NULL);
     pattr->undercurl = (highlight_has_attr(hl_id, HL_UNDERCURL, modec) != NULL);
 
-# ifdef FEAT_GUI
-    if (gui.in_use)
+# if defined(FEAT_GUI) || defined(FEAT_TERMTRUECOLOR)
+    if (USE_24BIT)
     {
 	bg_color = highlight_gui_color_rgb(hl_id, FALSE);
 	if (bg_color == PRCOLOR_BLACK)
