@@ -7771,9 +7771,9 @@ string_quote(str, fname)
     if (fname_u != NULL)
 	flen = STRLEN(fname_u);
 
-    /*                        +---+- 2 quotes and NUL *
-     *                        |   |   +- parenthesis  *
-     *                        |   |   |               */
+    /*                       +---+- 2 quotes and NUL *
+     *                       |   |   +- parenthesis  *
+     *                       |   |   |               */
     len = (fname_u == NULL ? 3 : 3 + 2 + flen);
     if (str != NULL)
     {
@@ -7787,13 +7787,11 @@ string_quote(str, fname)
     {
 	if (fname_u)
 	{
-	    STRCPY(r, fname_u);
+	    mch_memmove(r, fname_u, flen);
 	    r += flen;
 	    *r++ = '(';
-	    *r++ = '\'';
 	}
-	else
-	    *r++ = '\'';
+	*r++ = '\'';
 	if (str != NULL)
 	    for (p = str; *p != NUL; )
 	    {
