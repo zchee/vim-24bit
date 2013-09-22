@@ -4311,8 +4311,8 @@ regmatch(scan)
    */
   for (;;)
   {
-    /* Some patterns may cause a long time to match, even though they are not
-     * illegal.  E.g., "\([a-z]\+\)\+Q".  Allow breaking them with CTRL-C. */
+    /* Some patterns may take a long time to match, e.g., "\([a-z]\+\)\+Q".
+     * Allow interrupting them with CTRL-C. */
     fast_breakcheck();
 
 #ifdef DEBUG
@@ -8016,12 +8016,11 @@ vim_regcomp(expr_arg, re_flags)
 	}
 #endif
 	/*
-	 * If NFA engine failed, then revert to the backtracking engine.
-	 * Except when there was a syntax error, which was properly handled by
-	 * NFA engine.
-	 */
+	 * If the NFA engine failed, the backtracking engine won't work either.
+	 *
 	if (regexp_engine == AUTOMATIC_ENGINE)
 	    prog = bt_regengine.regcomp(expr, re_flags);
+	 */
     }
 
     return prog;
