@@ -196,6 +196,7 @@ EOF
 :try
 :   py3 f(1, 2, 3)
 :catch
+:   " Should no longer fail
 :   $put =v:exception[:13]
 :endtry
 :if has('float')

@@ -1097,6 +1097,7 @@ typedef double	float_T;
 
 typedef struct listvar_S list_T;
 typedef struct dictvar_S dict_T;
+typedef struct funcvar_S func_T;
 
 /*
  * Structure to hold an internal variable without a name.
@@ -1114,6 +1115,7 @@ typedef struct
 	char_u		*v_string;	/* string value (can be NULL!) */
 	list_T		*v_list;	/* list value (can be NULL!) */
 	dict_T		*v_dict;	/* dict value (can be NULL!) */
+	func_T		*v_func;	/* func value (can be NULL!) */
     }		vval;
 } typval_T;
 
@@ -1209,6 +1211,44 @@ struct dictvar_S
     dict_T	*dv_copydict;	/* copied dict used by deepcopy() */
     dict_T	*dv_used_next;	/* next dict in used dicts list */
     dict_T	*dv_used_prev;	/* previous dict in used dicts list */
+};
+
+#define ERROR_NONE	0
+#define ERROR_TOOMANY	1
+#define ERROR_TOOFEW	2
+#define ERROR_SCRIPT	3
+#define ERROR_DICT	4
+#define ERROR_OTHER	5
+
+#define FUNC_REPR(func) func->fv_type->fd_repr(func->fv_data)
+#define FUNC_CALL(func, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict) \
+    func->fv_type->fd_call(func->fv_data, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
+#define FUNC_NAME(func) (func == NULL \
+			    ? ((char_u *) "<NULL>") \
+			    : func->fv_type->fd_name(func->fv_data))
+
+typedef int (*function_caller) __ARGS((void *, typval_T *, int, typval_T *,
+				       linenr_T, linenr_T, int *, dict_T *));
+typedef char_u *(*function_representer) __ARGS((void *));
+typedef void (*function_destructor) __ARGS((void *));
+typedef int (*function_cmp) __ARGS((void *, void *));
+
+struct funcdef_S
+{
+    function_caller		fd_call;	/* funcref(args) */
+    function_representer	fd_repr;	/* string(funcref) */
+    function_destructor		fd_dealloc;	/* unlet funcref */
+    function_cmp		fd_compare;	/* funcref1 == funcref2 */
+    function_representer	fd_name;	/* used in error messages */
+};
+
+typedef struct funcdef_S funcdef_T;
+
+struct funcvar_S
+{
+    int		fv_refcount;	/* reference count */
+    void	*fv_data;	/* function description */
+    funcdef_T	*fv_type;	/* function implementation */
 };
 
 /* values for b_syn_spell: what to do with toplevel text */
