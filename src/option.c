@@ -7792,6 +7792,9 @@ set_bool_option(opt_idx, varp, value, opt_flags)
     else if ((int *)varp == &p_hls)
     {
 	no_hlsearch = FALSE;
+# ifdef FEAT_EVAL
+	set_vim_var_nr(VV_HLSEARCH, !no_hlsearch);
+# endif
     }
 #endif
 
