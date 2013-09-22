@@ -5305,7 +5305,7 @@ if ExtraVim()
 
     function! T(line)
 	if a:line == 2
-	    delfunction T		" error (function in use) in line 2
+	    echoerr "T"		" error (T) in line 2
 	elseif a:line == 4
 	    let dummy = 0		" INTERRUPT1 - interrupt in line 4
 	endif
@@ -5318,7 +5318,7 @@ if ExtraVim()
 	    call T(2)
 	catch /.*/
 	    let caught = 1
-	    if v:exception !~ 'Vim(delfunction):'
+	    if v:exception !~ 'Vim(echoerr):'
 		Xpath 2				" X: 0
 	    endif
 	    if v:throwpoint !~ '\<T\>'
@@ -8508,7 +8508,7 @@ if ExtraVim()
 		    \ '^Vim\((\a\+)\)\=:', '', "")
 		let caught = 1
 	    finally
-		if t <= 8 && t != 3 && t != 7
+		if t <= 8 && t != 3
 		    call MSG(t, 'E475', 'Invalid argument\>')
 		else
 		    if !caught	" no error exceptions ($VIMNOERRTHROW set)
