@@ -11390,6 +11390,9 @@ ex_nohlsearch(eap)
     exarg_T	*eap UNUSED;
 {
     no_hlsearch = TRUE;
+#ifdef FEAT_EVAL
+    set_vim_var_nr(VV_HLSEARCH, !no_hlsearch);
+#endif
     redraw_all_later(SOME_VALID);
 }
 
