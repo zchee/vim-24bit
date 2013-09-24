@@ -1611,7 +1611,7 @@ call_vim_function(name, argc, argv, safe, str_arg_only, rettv)
     if (argvars == NULL)
 	return FAIL;
 
-    func = deref_func_name(name, STRLEN(name), TRUE);
+    func = deref_func_name(name, STRLEN(name), TRUE, TRUE);
     if (func == NULL)
     {
 	vim_free(argvars);
@@ -5191,7 +5191,7 @@ eval7(arg, rettv, evaluate, want_string)
 		/* If "s" is the name of a variable of type VAR_FUNC
 		 * use its contents. */
 		if (evaluate)
-		    func = deref_func_name(s, len, TRUE);
+		    func = deref_func_name(s, len, TRUE, TRUE);
 		else
 		    func = NULL;
 
@@ -8343,12 +8343,15 @@ find_internal_func(name)
  * definition it contains, otherwise try to find internal or user-defined 
  * function with the given name. Returns NULL on failure.
  *
+ * With check_var set to FALSE deref_func_name does not attempt to lookup 
+ * function reference in a variable.
  * With runevent set to FALSE FuncUndefined event is not called.
  */
     func_T *
-deref_func_name(name, len, runevent)
+deref_func_name(name, len, check_var, runevent)
     char_u	*name;
     const int	len;
+    int		check_var;
     int		runevent;
 {
     dictitem_T	*v;
@@ -8356,16 +8359,19 @@ deref_func_name(name, len, runevent)
     func_T	*r = NULL;
 
     cc = name[len];
-    name[len] = NUL;
-    v = find_var(name, NULL);
-    name[len] = cc;
-
-    if (v != NULL && v->di_tv.v_type == VAR_FUNC)
+    if (check_var)
     {
-	if (v->di_tv.vval.v_func == NULL)
-	    return NULL;
-	++v->di_tv.vval.v_func->fv_refcount;
-	return v->di_tv.vval.v_func;
+	name[len] = NUL;
+	v = find_var(name, NULL);
+	name[len] = cc;
+
+	if (v != NULL && v->di_tv.v_type == VAR_FUNC)
+	{
+	    if (v->di_tv.vval.v_func == NULL)
+		return NULL;
+	    ++v->di_tv.vval.v_func->fv_refcount;
+	    return v->di_tv.vval.v_func;
+	}
     }
 
     name[len] = NUL;
@@ -8638,9 +8644,11 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
     if (aufp->auf_func == NULL && script_autoload(aufp->auf_name, TRUE) &&
 	    !aborting())
 	/* loaded a package, search for the function again */
+	/* Note: it is allowed for loaded function to be defined in a variable 
+	 */
 	aufp->auf_func = deref_func_name(aufp->auf_name,
 					 STRLEN(aufp->auf_name),
-					 TRUE);
+					 TRUE, TRUE);
 
     if (aufp->auf_func == NULL)
     {
@@ -9455,7 +9463,7 @@ f_call(argvars, rettv)
 	name = get_tv_string(&argvars[0]);
 	if (name == NUL)
 	    return;		/* type error or empty name */
-	func = deref_func_name(name, STRLEN(name), TRUE);
+	func = deref_func_name(name, STRLEN(name), FALSE, TRUE);
     }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -11165,7 +11173,7 @@ f_function(argvars, rettv)
 
     s = get_tv_string(&argvars[0]);
 
-    func = deref_func_name(s, STRLEN(s), FALSE);
+    func = deref_func_name(s, STRLEN(s), FALSE, FALSE);
 
     if (func != NULL)
     {
@@ -17266,7 +17274,7 @@ f_sort(argvars, rettv)
 			return;
 
 		    item_compare_func = deref_func_name(name, STRLEN(name),
-							TRUE);
+							FALSE, TRUE);
 		    if (item_compare_func == NULL)
 			return;
 		}
@@ -21461,6 +21469,13 @@ ex_function(eap)
 	    if (fudi.fd_func != NULL
 		    && fudi.fd_func->fv_type == &user_func_type)
 		fp = (ufunc_T *) fudi.fd_func->fv_data;
+	    else if (fudi.fd_func != NULL
+		    && fudi.fd_func->fv_type == &autoload_func_type
+		    && ((aufunc_T *) fudi.fd_func->fv_data)->auf_func != NULL
+		    && ((aufunc_T *) fudi.fd_func->fv_data)->auf_func->fv_type
+							     == &user_func_type)
+		fp = ((ufunc_T *)
+			((aufunc_T *)fudi.fd_func->fv_data)->auf_func->fv_data);
 	    else
 		fp = find_func(name);
 	    if (fp != NULL)
@@ -22003,7 +22018,9 @@ get_called_function(pp, skip, fdp, runevent, raise)
     {
 	*pp += 3;
 	len = get_id_len(pp) + 3;
-	return deref_func_name(start, len, TRUE);
+	/* It is impossible for a variable name to start with <SNR>, thus 
+	 * variables are not checked */
+	return deref_func_name(start, len, FALSE, TRUE);
     }
 
     /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
@@ -22076,12 +22093,12 @@ get_called_function(pp, skip, fdp, runevent, raise)
     if (lv.ll_exp_name != NULL)
     {
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len, !skip && runevent);
+	func = deref_func_name(lv.ll_exp_name, len, TRUE, !skip && runevent);
     }
     else
     {
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len, !skip && runevent);
+	func = deref_func_name(*pp, len, TRUE, !skip && runevent);
     }
 
     *pp = end;
@@ -22200,7 +22217,7 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len, FALSE);
+	func = deref_func_name(lv.ll_exp_name, len, TRUE, FALSE);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
@@ -22213,7 +22230,7 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len, FALSE);
+	func = deref_func_name(*pp, len, TRUE, FALSE);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
