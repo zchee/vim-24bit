@@ -2598,7 +2598,8 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
 
     VimTryStart();
 
-    func = deref_func_name(name, STRLEN(name), FALSE);
+    /* Do neither load functions from variables nor run FuncUndefined event */
+    func = deref_func_name(name, STRLEN(name), FALSE, FALSE);
 
     if (VimTryEnd())
 	return NULL;
