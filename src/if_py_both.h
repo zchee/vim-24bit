@@ -2599,7 +2599,7 @@ FunctionConstructor(PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
     VimTryStart();
 
     /* Do neither load functions from variables nor run FuncUndefined event */
-    func = deref_func_name(name, STRLEN(name), FALSE, FALSE);
+    func = deref_func_name(name, STRLEN(name), DF_CREATE_AUTOLOAD);
 
     if (VimTryEnd())
 	return NULL;
