@@ -815,6 +815,7 @@ static int var_check_ro __ARGS((int flags, char_u *name));
 static int var_check_fixed __ARGS((int flags, char_u *name));
 static int var_check_func_name __ARGS((char_u *name, int new_var));
 static int valid_varname __ARGS((char_u *varname));
+static int valid_autoload_name __ARGS((char_u *varname));
 static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
@@ -8467,7 +8468,8 @@ deref_func_name(name, len, flags)
 	    if (fp == NULL)
 	    {
 		if (flags & DF_CREATE_AUTOLOAD
-			&& vim_strchr(fname, AUTOLOAD_CHAR) != NULL)
+			&& vim_strchr(fname, AUTOLOAD_CHAR) != NULL
+			&& valid_autoload_name(fname))
 		{
 		    aufunc_T	*aufp;
 
@@ -20896,6 +20898,50 @@ valid_varname(varname)
 	    EMSG2(_(e_illvar), varname);
 	    return FALSE;
 	}
+    return TRUE;
+}
+
+/*
+ * Check if a name is a valid name for an autoload function or variable.
+ * Return FALSE if not. Does not throw an error.
+ */
+    static int
+valid_autoload_name(varname)
+    char_u	*varname;
+{
+    char_u	*p;
+
+    /*
+     * Only two possible patterns are valid: g:script#varname (script#varname) 
+     * and script#function. Note that it is allowed to autoload function 
+     * reference from the variable hence g: is allowed.
+     *
+     * Presence of AUTOLOAD_CHAR is not checked.
+     */
+    if (varname[1] == ':')
+    {
+	if (varname[0] == 'g')
+	    p = varname + 2;
+	else
+	    return FALSE;
+    }
+    else
+	p = varname;
+
+    if (!eval_isnamec1(*p))
+	return FALSE;
+
+    while (*(++p) != NUL)
+    {
+	if (!eval_isnamec(*p))
+	    return FALSE;
+	/* There cannot be autoload functions with two consequent hashes.
+	 * There *can* be such variable, but I do not think it is worth caring 
+	 * about such variable names. */
+	if (*p == AUTOLOAD_CHAR && *(p-1) == AUTOLOAD_CHAR)
+	    return FALSE;
+    }
+
     return TRUE;
 }
 
