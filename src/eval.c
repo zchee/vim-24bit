@@ -956,7 +956,9 @@ eval_clear()
     /* autoloaded script names */
     ga_clear_strings(&ga_loaded);
 
-    /* script-local variables */
+    /* Script-local variables. First clear all the variables and in a second
+     * loop free the scriptvar_T, because a variable in one script might hold
+     * a reference to the whole scope of another script. */
     for (i = 1; i <= ga_scripts.ga_len; ++i)
 	vars_clear(&SCRIPT_VARS(i));
     for (i = 1; i <= ga_scripts.ga_len; ++i)
