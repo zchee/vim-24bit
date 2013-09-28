@@ -154,9 +154,15 @@ static garray_T	    ga_scripts = {0, 0, sizeof(scriptvar_T *), 4, NULL};
 
 static int echo_attr = 0;   /* attributes used for ":echo" */
 
-/* Values for trans_function_name() argument: */
+/* Values for trans_function_name() flags argument: */
 #define TFN_INT		1	/* internal function name OK */
 #define TFN_QUIET	2	/* no error messages */
+
+/* Values for get_called_function() flags argument: */
+#define GCF_AUTOLOAD	1	/* it is OK to create autoload functions */
+#define GCF_RUN_EVENT	2	/* run FuncUndefined event */
+#define GCF_QUIET	4	/* no error messages */
+#define GCF_ANY_FUNC	GCF_AUTOLOAD|GCF_RUN_EVENT
 
 /*
  * Structure to hold info for a user function.
@@ -559,6 +565,7 @@ static void f_foldtext __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_foldtextresult __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_foreground __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_function __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_functype __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_garbagecollect __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_get __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getbufline __ARGS((typval_T *argvars, typval_T *rettv));
@@ -820,7 +827,7 @@ static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
 static char_u *trans_function_name __ARGS((char_u **pp, int skip, int flags, funcdict_T *fd));
-static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int runevent, int raise));
+static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int flags));
 static int eval_fname_script __ARGS((char_u *p));
 static int eval_fname_sid __ARGS((char_u *p));
 static void list_func_head __ARGS((ufunc_T *fp, int indent));
@@ -3445,7 +3452,7 @@ ex_call(eap)
 	return;
     }
 
-    func = get_called_function(&arg, eap->skip, &fudi, TRUE, TRUE);
+    func = get_called_function(&arg, eap->skip, &fudi, GCF_ANY_FUNC);
     if (fudi.fd_newkey != NULL)
     {
 	/* Still need to give an error message for missing key. */
@@ -7995,6 +8002,7 @@ static struct fst
     {"foldtextresult",	1, 1, f_foldtextresult, NULL},
     {"foreground",	0, 0, f_foreground, NULL},
     {"function",	1, 1, f_function, NULL},
+    {"functype",	1, 1, f_functype, NULL},
     {"garbagecollect",	0, 1, f_garbagecollect, NULL},
     {"get",		2, 3, f_get, NULL},
     {"getbufline",	2, 3, f_getbufline, NULL},
@@ -8344,9 +8352,12 @@ find_internal_func(name)
  * definition it contains, otherwise try to find internal or user-defined 
  * function with the given name. Returns NULL on failure.
  *
- * With check_var set to FALSE deref_func_name does not attempt to lookup 
- * function reference in a variable.
- * With runevent set to FALSE FuncUndefined event is not called.
+ * Flags:
+ * DF_CHECK_VAR      : Try loading function from a variable.
+ * DF_RUN_EVENT      : Run FuncUndefined event if function was not found
+ * DF_CREATE_AUTOLOAD: Create references to autoload function
+ * DF_NO_VAR         : DF_RUN_EVENT and DF_CREATE_AUTOLOAD
+ * DF_ALL            : All of the above
  */
     func_T *
 deref_func_name(name, len, flags)
@@ -8616,12 +8627,23 @@ name_internal_func(intfp)
     return (char_u *) intfp->f_name;
 }
 
+static char_u	*internal_func_type_name = "internal";
+#define INTERNAL_FUNC_TYPE_LEN 8
+
+    static char_u *
+type_internal_func(intfp)
+    struct fst	*intfp UNUSED;
+{
+    return vim_strnsave(internal_func_type_name, INTERNAL_FUNC_TYPE_LEN);
+}
+
 static funcdef_T internal_func_type = {
     (function_caller)		call_internal_func,	/* fd_call */
     (function_representer)	repr_internal_func,	/* fd_repr */
     (function_destructor)	dealloc_internal_func,	/* fd_dealloc */
     (function_cmp)		compare_internal_funcs,	/* fd_compare */
     (function_representer)	name_internal_func,	/* fd_name */
+    (function_representer)	type_internal_func,	/* fd_type */
 };
 
     static aufunc_T *
@@ -8642,7 +8664,13 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
     int		*doesrange;	/* return: function handled range */
     dict_T	*selfdict;	/* Dictionary for "self" */
 {
-    /* Try loading a package. */
+    /* First, check whether function was already loaded. */
+    if (aufp->auf_func == NULL && !aborting())
+	aufp->auf_func = deref_func_name(aufp->auf_name,
+					 STRLEN(aufp->auf_name),
+					 DF_CHECK_VAR|DF_RUN_EVENT);
+
+    /* If not then try loading a package. */
     if (aufp->auf_func == NULL && script_autoload(aufp->auf_name, TRUE) &&
 	    !aborting())
 	/* loaded a package, search for the function again */
@@ -8650,7 +8678,7 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
 	 */
 	aufp->auf_func = deref_func_name(aufp->auf_name,
 					 STRLEN(aufp->auf_name),
-					 DF_CHECK_VAR|DF_RUN_EVENT);
+					 DF_CHECK_VAR);
 
     if (aufp->auf_func == NULL)
     {
@@ -8694,12 +8722,51 @@ name_autoload_func(aufp)
     return aufp->auf_name;
 }
 
+static char_u	*autoload_func_type_name = "autoload";
+#define AUTOLOAD_FUNC_TYPE_LEN 8
+
+    static char_u *
+type_autoload_func(aufp)
+    aufunc_T	*aufp;
+{
+    if (aufp->auf_func == NULL)
+	return vim_strnsave(autoload_func_type_name, AUTOLOAD_FUNC_TYPE_LEN);
+    else
+    {
+	char_u	*loaded_type;
+	int	loaded_type_len;
+	char_u	*ret_type;
+
+	if ((loaded_type = FUNC_TYPE(aufp->auf_func)) == NULL)
+	    return NULL;
+
+	loaded_type_len = STRLEN(loaded_type);
+
+	/* 2: colon and NUL */
+	ret_type = (char_u*)alloc(loaded_type_len + 2 + AUTOLOAD_FUNC_TYPE_LEN);
+
+	if (ret_type == NULL)
+	    return NULL;
+
+	mch_memmove(ret_type, autoload_func_type_name,
+		    (size_t) AUTOLOAD_FUNC_TYPE_LEN);
+	ret_type[AUTOLOAD_FUNC_TYPE_LEN] = ':';
+	mch_memmove(ret_type + AUTOLOAD_FUNC_TYPE_LEN + 1, loaded_type,
+		    loaded_type_len);
+	ret_type[AUTOLOAD_FUNC_TYPE_LEN + loaded_type_len + 1] = NUL;
+
+	vim_free(loaded_type);
+	return ret_type;
+    }
+}
+
 static funcdef_T autoload_func_type = {
     (function_caller)		call_autoload_func,	/* fd_call */
     (function_representer)	repr_autoload_func,	/* fd_repr */
     (function_destructor)	dealloc_autoload_func,	/* fd_dealloc */
     (function_cmp)		compare_autoload_funcs,	/* fd_compare */
     (function_representer)	name_autoload_func,	/* fd_name */
+    (function_representer)	type_autoload_func,	/* fd_type */
 };
 
 /*
@@ -11184,6 +11251,25 @@ f_function(argvars, rettv)
     }
     else
 	EMSG2(_(e_unknown_function), s);
+}
+
+/*
+ * "functype()" function
+ */
+    static void
+f_functype(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    if (argvars[0].v_type != VAR_FUNC || argvars[0].vval.v_func == NULL)
+    {
+	EMSG(_(e_funcref));
+	return;
+    }
+
+    if ((rettv->vval.v_string = FUNC_TYPE(argvars[0].vval.v_func)) == NULL)
+	return;
+    rettv->v_type = VAR_STRING;
 }
 
 /*
@@ -20872,7 +20958,7 @@ var_check_func_name(name, new_var)
     /* Don't allow hiding a function.  When "v" is not NULL we might be
      * assigning another function to the same var, the type is checked
      * below. */
-    if (new_var && function_exists(name))
+    if (new_var && !HASHITEM_EMPTY(hash_find(&func_hashtab, name)))
     {
 	EMSG2(_("E705: Variable name conflicts with existing function: %s"),
 								    name);
@@ -22037,14 +22123,18 @@ ret_free:
 
 /*
  * Get the func_T reference which will be then called.
+ * Flags:
+ * GCF_QUIET    : do not throw exceptions
+ * GCF_AUTOLOAD : allow autoload function creation
+ * GCF_RUN_EVENT: run FuncUndefined event
+ * GCF_ANY_FUNC : GCF_AUTOLOAD and GCF_RUN_EVENT
  */
     static func_T *
-get_called_function(pp, skip, fdp, runevent, raise)
+get_called_function(pp, skip, fdp, flags)
     char_u	**pp;
     int		skip;
     funcdict_T	*fdp;
-    int		runevent;
-    int		raise;
+    int		flags;
 {
     func_T	*func = NULL;
     char_u	*start;
@@ -22066,7 +22156,9 @@ get_called_function(pp, skip, fdp, runevent, raise)
 	len = get_id_len(pp) + 3;
 	/* It is impossible for a variable name to start with <SNR>, thus 
 	 * variables are not checked */
-	return deref_func_name(start, len, DF_NO_VAR);
+	return deref_func_name(start, len,
+				(flags&GCF_AUTOLOAD?  DF_CREATE_AUTOLOAD : 0)|
+				(flags&GCF_RUN_EVENT? DF_RUN_EVENT       : 0));
     }
 
     /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
@@ -22079,7 +22171,7 @@ get_called_function(pp, skip, fdp, runevent, raise)
 					      lead > 2 ? 0 : FNE_CHECK_START);
     if (end == start)
     {
-	if (!skip && raise)
+	if (!skip && !(flags&GCF_QUIET))
 	    EMSG(_("E129: Function name required"));
 	goto theend;
     }
@@ -22092,7 +22184,7 @@ get_called_function(pp, skip, fdp, runevent, raise)
 	 */
 	if (!aborting())
 	{
-	    if (end != NULL && raise)
+	    if (end != NULL && !(flags&GCF_QUIET))
 		EMSG2(_(e_invarg2), start);
 	}
 	else
@@ -22117,7 +22209,7 @@ get_called_function(pp, skip, fdp, runevent, raise)
 	}
 	else
 	{
-	    if (raise
+	    if (!(flags&GCF_QUIET)
 		    && !skip
 		    && (fdp == NULL || lv.ll_dict == NULL
 			|| fdp->fd_newkey == NULL))
@@ -22141,14 +22233,14 @@ get_called_function(pp, skip, fdp, runevent, raise)
 	len = (int)STRLEN(lv.ll_exp_name);
 	func = deref_func_name(lv.ll_exp_name, len,
 		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
-		|(!skip && runevent ? DF_RUN_EVENT : 0));
+		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
     }
     else
     {
 	len = (int)(end - *pp);
 	func = deref_func_name(*pp, len,
 		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
-		|(!skip && runevent ? DF_RUN_EVENT : 0));
+		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
     }
 
     *pp = end;
@@ -22489,7 +22581,7 @@ function_exists(name)
     char_u	*p = name;
     funcdict_T	fudi;
 
-    func = get_called_function(&p, FALSE, &fudi, FALSE, FALSE);
+    func = get_called_function(&p, FALSE, &fudi, GCF_QUIET);
     func_unref(func);
 
     return (func != NULL && (*p == NUL || *p == '('));
@@ -23447,12 +23539,23 @@ name_user_func(fp)
     return fp->uf_name;
 }
 
+static char_u	*user_func_type_name = "user";
+#define USER_FUNC_TYPE_LEN 4
+
+    static char_u *
+type_user_func(fp)
+    ufunc_T	*fp UNUSED;
+{
+    return vim_strnsave(user_func_type_name, USER_FUNC_TYPE_LEN);
+}
+
 static funcdef_T user_func_type = {
     (function_caller)		call_user_func,		/* fd_call */
     (function_representer)	repr_user_func,		/* fd_repr */
     (function_destructor)	dealloc_user_func,	/* fd_dealloc */
     (function_cmp)		compare_user_funcs,	/* fd_compare */
     (function_representer)	name_user_func,		/* fd_name */
+    (function_representer)	type_user_func,		/* fd_type */
 };
 
 /*

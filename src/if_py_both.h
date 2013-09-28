@@ -5666,12 +5666,46 @@ name_python_func(pyfp)
     return pyfp->name;
 }
 
+#if PY_MAJOR_VERSION < 3
+static char_u	*python_func_type_name = "python";
+# define PYTHON_FUNC_TYPE_LEN 6
+#else
+static char_u	*python_func_type_name = "python3";
+# define PYTHON_FUNC_TYPE_LEN 7
+#endif
+
+    static char_u *
+type_python_func(pyfp)
+    pyfunc_T	*pyfp;
+{
+    char_u	*py_type;
+    char_u	*ret_type;
+    int		py_type_len;
+
+    py_type = (char_u *) Py_TYPE_NAME(pyfp->callable);
+    py_type_len = STRLEN(py_type);
+
+    /* 2: colon and NUL */
+    ret_type = (char_u *) alloc(py_type_len + 2 + PYTHON_FUNC_TYPE_LEN);
+
+    if (ret_type == NULL)
+	return NULL;
+
+    mch_memmove(ret_type, python_func_type_name, (size_t) PYTHON_FUNC_TYPE_LEN);
+    ret_type[PYTHON_FUNC_TYPE_LEN] = ':';
+    mch_memmove(ret_type + PYTHON_FUNC_TYPE_LEN + 1, py_type, py_type_len);
+    ret_type[PYTHON_FUNC_TYPE_LEN + py_type_len + 1] = NUL;
+
+    return ret_type;
+}
+
 static funcdef_T python_func_type = {
     (function_caller)		call_python_func,	/* fd_call */
     (function_representer)	repr_python_func,	/* fd_repr */
     (function_destructor)	dealloc_python_func,	/* fd_dealloc */
     (function_cmp)		compare_python_funcs,	/* fd_compare */
     (function_representer)	name_python_func,	/* fd_name */
+    (function_representer)	type_python_func,	/* fd_type */
 };
 
     static int

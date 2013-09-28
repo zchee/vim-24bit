@@ -10,6 +10,7 @@ command -nargs=0 ECEnd              :call append('$', '}}}')
 command -nargs=1 EmptyCommandsStart :let ecm=<q-args>|redir =>ecm_messages
 command -nargs=0 EmptyCommandsEnd   :redir END|execute 'ECStart' ecm|$put =ecm_messages|execute 'ECEnd'|unlet ecm ecm_messages
 command -nargs=1 EmptyCommand       :execute 'ECStart' <q-args>|execute 'TryPut OutPut' <q-args>|ECEnd
+command -nargs=1 LogCommand         :call append('$', 'Running '.<q-args>)|redir =>ecmf_messages|try|execute <q-args>|catch|let ecmf_exception=v:exception|endtry|redir END|if ecmf_messages=~#'\S'|call append('$', ['Not empty output while running '.<q-args>.':', ecmf_messages])|endif|unlet ecmf_messages|if exists('ecmf_exception')|call append('$', ['Exception while running '.<q-args>.':', ecmf_exception])|unlet ecmf_exception|endif
 let s:f={}
 function s:f.defsnr(s)
     let s:snr=matchstr(a:s, '\(<SNR>\)\@<=\d\+')
@@ -261,6 +262,7 @@ endtry
 silent $put =messages
 unlet messages
 unlet s:F
+delfunction test#function
 
 TestHeader Autoloading unexisting function
 " It should not fall into infinite recursion in case requested to autoload 
@@ -276,6 +278,40 @@ TryPut let s:F=function('g:1file#function')
 TryPut let s:F=function('#file#function')
 " g:file#function is legal name
 $put =string(function('g:file#varname'))
+
+TestHeader Double loading of autoload scripts
+let F1=function('test3#function')
+let F2=function('test3#function')
+OutPut silent call F1()
+OutPut silent call F2()
+"▶1 New functionality
+TestHeader functype() function
+function T()
+endfunction
+command -nargs=1 PutExprType :call append('$', <q-args>.': '.string(<args>).': '.functype(<args>))
+command -nargs=1 PutFuncType :call append('$', 'function('''.<q-args>.'''): '.functype(function(<q-args>)))
+PutFuncType tr
+PutFuncType T
+LogCommand let F=function('test#function')
+PutExprType F
+LogCommand call F()
+PutExprType F
+LogCommand delfunction test#function
+LogCommand let F=function('Test100#function')
+PutExprType F
+LogCommand let Test100#function=function('Test100#function2')
+TryPut call F()
+PutExprType F
+LogCommand let Test100#function2=function('test#function')
+LogCommand call F()
+PutExprType F
+unlet F
+delfunction test#function
+unlet Test100#function
+unlet Test100#function2
+delfunction T
+delcommand PutExprType
+delcommand PutFuncType
 "▲1
 unlet s:f
 delcommand TryPut
@@ -286,4 +322,5 @@ delcommand ECEnd
 delcommand EmptyCommandsStart
 delcommand EmptyCommandsEnd
 delcommand EmptyCommand
+delcommand LogCommand
 call garbagecollect(1)

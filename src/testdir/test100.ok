@@ -100,3 +100,24 @@ Vim(let):E700: Unknown function: <>#<>
 Vim(let):E700: Unknown function: g:1file#function
 Vim(let):E700: Unknown function: #file#function
 function('g:file#varname')
+
+{{{1 Double loading of autoload scripts
+
+Loading test3.vim
+
+{{{1 functype() function
+function('tr'): internal
+function('T'): user
+Running let F=function('test#function')
+F: function('test#function'): autoload
+Running call F()
+F: function('test#function'): autoload:user
+Running delfunction test#function
+Running let F=function('Test100#function')
+F: function('Test100#function'): autoload
+Running let Test100#function=function('Test100#function2')
+Vim(call):E700: Unknown function: Test100#function2
+F: function('Test100#function'): autoload:autoload
+Running let Test100#function2=function('test#function')
+Running call F()
+F: function('Test100#function'): autoload:autoload:autoload:user
