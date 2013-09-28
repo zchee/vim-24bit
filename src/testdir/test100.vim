@@ -239,7 +239,7 @@ TestHeader function('filename#funcname'), :func AuFref
 " function('filename#funcname') should not cause file loading
 " :function on such function reference should return function body once the 
 " function was loaded
-set rtp=./test99
+set rtp=./test100
 redir => messages
     silent scriptnames
 redir END
