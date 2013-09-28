@@ -1772,7 +1772,8 @@ foldlevel( {lnum})		Number	fold level at {lnum}
 foldtext( )			String	line displayed for closed fold
 foldtextresult( {lnum})		String	text for closed fold at {lnum}
 foreground( )			Number	bring the Vim window to the foreground
-function( {name})		Funcref reference to function {name}
+function( {name})		Funcref	reference to function {name}
+functype( {func})		String	type of function reference {func}
 garbagecollect( [{atexit}])	none	free memory, breaking cyclic references
 get( {list}, {idx} [, {def}])	any	get item {idx} from {list} or {def}
 get( {dict}, {key} [, {def}])	any	get item {key} from {dict} or {def}
@@ -3102,6 +3103,31 @@ foreground()	Move the Vim window to the foreground.	Useful when sent from
 function({name})					*function()* *E700*
 		Return a |Funcref| variable that refers to function {name}.
 		{name} can be a user defined function or an internal function.
+
+
+functype({func})					*functype()*
+		Given a |Funcref| return string describing its type. Possible 
+		values:
+		Value		Description ~
+		internal	Reference to one of the built-in |functions|.
+				Example: `function('tr')`.
+		user		Reference to one of the |user-functions|.
+				Example: `function('NetrwStatusLine')`.
+		autoload	Reference to one of the |autoload-functions| 
+				that was not yet loaded.
+				Example: `function('zip#Browse')`.
+		autoload:{type}	Same as above, but for functions that were 
+				already loaded. For `function('zip#Browse')` 
+				it will return "autoload:user". {type} may be 
+				anything that |functype()| can return 
+				(including e.g. "autoload:autoload:internal").
+		python:{type}	Reference to some python function. {type} is 
+				the python type name.
+				Example: `pyeval('id')` has function type 
+				"python:builtin_function_or_method".
+		python3:{type}	Same as above, but for python 3 functions.
+				Example: `py3eval('id')` has function type 
+				"python3:builtin_function_or_method".
 
 
 garbagecollect([{atexit}])				*garbagecollect()*

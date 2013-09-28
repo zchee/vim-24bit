@@ -1226,6 +1226,7 @@ struct dictvar_S
 #define FUNC_NAME(func) (func == NULL \
 			    ? ((char_u *) "<NULL>") \
 			    : func->fv_type->fd_name(func->fv_data))
+#define FUNC_TYPE(func) func->fv_type->fd_type(func->fv_data)
 
 typedef int (*function_caller) __ARGS((void *, typval_T *, int, typval_T *,
 				       linenr_T, linenr_T, int *, dict_T *));
@@ -1240,6 +1241,7 @@ struct funcdef_S
     function_destructor		fd_dealloc;	/* unlet funcref */
     function_cmp		fd_compare;	/* funcref1 == funcref2 */
     function_representer	fd_name;	/* used in error messages */
+    function_representer	fd_type;	/* functype(func) */
 };
 
 typedef struct funcdef_S funcdef_T;
