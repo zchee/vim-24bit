@@ -1,0 +1,12 @@
+Test for changes in funcref handling     vim: set ft=vim :
+
+STARTTEST
+:" Last abc: Q
+:source small.vim
+:source test100.vim
+:wq! test.out
+:" vim: et ts=4 isk-=\:
+:call getchar()
+ENDTEST
+
+start:
