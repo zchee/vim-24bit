@@ -13059,9 +13059,18 @@ get_user_input(argvars, rettv, inputdialog)
 	}
 
 	if (defstr != NULL)
+	{
+# ifdef FEAT_EX_EXTRA
+	    int save_ex_normal_busy = ex_normal_busy;
+	    ex_normal_busy = 0;
+# endif
 	    rettv->vval.v_string =
 		getcmdline_prompt(inputsecret_flag ? NUL : '@', p, echo_attr,
 				  xp_type, xp_arg);
+# ifdef FEAT_EX_EXTRA
+	    ex_normal_busy = save_ex_normal_busy;
+# endif
+	}
 	if (inputdialog && rettv->vval.v_string == NULL
 		&& argvars[1].v_type != VAR_UNKNOWN
 		&& argvars[2].v_type != VAR_UNKNOWN)
@@ -24313,6 +24322,7 @@ do_string_sub(str, pat, sub, flags)
     garray_T	ga;
     char_u	*ret;
     char_u	*save_cpo;
+    int		zero_width;
 
     /* Make 'cpoptions' empty, so that the 'l' flag doesn't work here */
     save_cpo = p_cpo;
@@ -24351,19 +24361,16 @@ do_string_sub(str, pat, sub, flags)
 	    (void)vim_regsub(&regmatch, sub, (char_u *)ga.ga_data
 					  + ga.ga_len + i, TRUE, TRUE, FALSE);
 	    ga.ga_len += i + sublen - 1;
-	    /* avoid getting stuck on a match with an empty string */
-	    if (tail == regmatch.endp[0])
+	    zero_width = (tail == regmatch.endp[0]
+				    || regmatch.startp[0] == regmatch.endp[0]);
+	    tail = regmatch.endp[0];
+	    if (*tail == NUL)
+		break;
+	    if (zero_width)
 	    {
-		if (*tail == NUL)
-		    break;
+		/* avoid getting stuck on a match with an empty string */
 		*((char_u *)ga.ga_data + ga.ga_len) = *tail++;
 		++ga.ga_len;
-	    }
-	    else
-	    {
-		tail = regmatch.endp[0];
-		if (*tail == NUL)
-		    break;
 	    }
 	    if (!do_all)
 		break;
