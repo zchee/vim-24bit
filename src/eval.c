@@ -154,9 +154,15 @@ static garray_T	    ga_scripts = {0, 0, sizeof(scriptvar_T *), 4, NULL};
 
 static int echo_attr = 0;   /* attributes used for ":echo" */
 
-/* Values for trans_function_name() argument: */
+/* Values for trans_function_name() flags argument: */
 #define TFN_INT		1	/* internal function name OK */
 #define TFN_QUIET	2	/* no error messages */
+
+/* Values for get_called_function() flags argument: */
+#define GCF_AUTOLOAD	1	/* it is OK to create autoload functions */
+#define GCF_RUN_EVENT	2	/* run FuncUndefined event */
+#define GCF_QUIET	4	/* no error messages */
+#define GCF_ANY_FUNC	GCF_AUTOLOAD|GCF_RUN_EVENT
 
 /*
  * Structure to hold info for a user function.
@@ -185,6 +191,7 @@ struct ufunc
     proftime_T	uf_tml_wait;	/* start wait time for current line */
     int		uf_tml_idx;	/* index of line being timed; -1 if none */
     int		uf_tml_execed;	/* line being timed was executed */
+    ufunc_T	*uf_prof_next;	/* next profiled function */
 #endif
     scid_T	uf_script_ID;	/* ID of script where function was defined,
 				   used for s: variables */
@@ -225,6 +232,12 @@ static garray_T		ga_loaded = {0, 0, sizeof(char_u *), 4, NULL};
 /* list heads for garbage collection */
 static dict_T		*first_dict = NULL;	/* list of all dicts */
 static list_T		*first_list = NULL;	/* list of all lists */
+
+#ifdef FEAT_PROFILE
+/* Functions being profiled */
+static ufunc_T		*fp_profiled_first = NULL;
+static ufunc_T		*fp_profiled_last = NULL;
+#endif
 
 /* From user function to hashitem and back. */
 static ufunc_T dumuf;
@@ -284,7 +297,8 @@ typedef struct
  */
 typedef struct
 {
-    dict_T	*fd_dict;	/* Dictionary used */
+    dict_T	*fd_dict;	/* Dictionary used. Contains borrowed reference.
+				 */
     char_u	*fd_newkey;	/* new key in "dict" in allocated memory */
     dictitem_T	*fd_di;		/* Dictionary item used */
     func_T	*fd_func;	/* Function object, if it was obtained. 
@@ -551,6 +565,7 @@ static void f_foldtext __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_foldtextresult __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_foreground __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_function __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_functype __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_garbagecollect __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_get __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getbufline __ARGS((typval_T *argvars, typval_T *rettv));
@@ -807,11 +822,12 @@ static int var_check_ro __ARGS((int flags, char_u *name));
 static int var_check_fixed __ARGS((int flags, char_u *name));
 static int var_check_func_name __ARGS((char_u *name, int new_var));
 static int valid_varname __ARGS((char_u *varname));
+static int valid_autoload_name __ARGS((char_u *varname));
 static int tv_check_lock __ARGS((int lock, char_u *name));
 static int item_copy __ARGS((typval_T *from, typval_T *to, int deep, int copyID));
 static char_u *find_option_end __ARGS((char_u **arg, int *opt_flags));
 static char_u *trans_function_name __ARGS((char_u **pp, int skip, int flags, funcdict_T *fd));
-static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int runevent));
+static func_T *get_called_function __ARGS((char_u **pp, int skip, funcdict_T *fd, int flags));
 static int eval_fname_script __ARGS((char_u *p));
 static int eval_fname_sid __ARGS((char_u *p));
 static void list_func_head __ARGS((ufunc_T *fp, int indent));
@@ -820,6 +836,7 @@ static int function_exists __ARGS((char_u *name));
 static int builtin_function __ARGS((char_u *name));
 #ifdef FEAT_PROFILE
 static void func_do_profile __ARGS((ufunc_T *fp));
+static void func_clear_profile __ARGS((ufunc_T *fp));
 static void prof_sort_list __ARGS((FILE *fd, ufunc_T **sorttab, int st_len, char *title, int prefer_self));
 static void prof_func_line __ARGS((FILE *fd, int count, proftime_T *total, proftime_T *self, int prefer_self));
 static int
@@ -939,12 +956,13 @@ eval_clear()
     /* autoloaded script names */
     ga_clear_strings(&ga_loaded);
 
-    /* script-local variables */
+    /* Script-local variables. First clear all the variables and in a second
+     * loop free the scriptvar_T, because a variable in one script might hold
+     * a reference to the whole scope of another script. */
     for (i = 1; i <= ga_scripts.ga_len; ++i)
-    {
 	vars_clear(&SCRIPT_VARS(i));
+    for (i = 1; i <= ga_scripts.ga_len; ++i)
 	vim_free(SCRIPT_SV(i));
-    }
     ga_clear(&ga_scripts);
 
     /* unreferenced lists and dicts */
@@ -1603,7 +1621,7 @@ call_vim_function(name, argc, argv, safe, str_arg_only, rettv)
     if (argvars == NULL)
 	return FAIL;
 
-    func = deref_func_name(name, STRLEN(name), TRUE);
+    func = deref_func_name(name, STRLEN(name), DF_ALL);
     if (func == NULL)
     {
 	vim_free(argvars);
@@ -3436,7 +3454,7 @@ ex_call(eap)
 	return;
     }
 
-    func = get_called_function(&arg, eap->skip, &fudi, TRUE);
+    func = get_called_function(&arg, eap->skip, &fudi, GCF_ANY_FUNC);
     if (fudi.fd_newkey != NULL)
     {
 	/* Still need to give an error message for missing key. */
@@ -5291,9 +5309,12 @@ eval7(arg, rettv, evaluate, want_string)
 		func_T	*func;
 		/* If "s" is the name of a variable of type VAR_FUNC
 		 * use its contents. */
-		func = deref_func_name(s, len, TRUE);
+		if (evaluate)
+		    func = deref_func_name(s, len, DF_ALL);
+		else
+		    func = NULL;
 
-		if (func == NULL)
+		if (evaluate && func == NULL)
 		{
 		    char_u	cc;
 		    ret = FAIL;
@@ -7876,9 +7897,9 @@ string_quote(str, fname)
     if (fname_u != NULL)
 	flen = STRLEN(fname_u);
 
-    /*                        +---+- 2 quotes and NUL *
-     *                        |   |   +- parenthesis  *
-     *                        |   |   |               */
+    /*                       +---+- 2 quotes and NUL *
+     *                       |   |   +- parenthesis  *
+     *                       |   |   |               */
     len = (fname_u == NULL ? 3 : 3 + 2 + flen);
     if (str != NULL)
     {
@@ -7892,13 +7913,11 @@ string_quote(str, fname)
     {
 	if (fname_u)
 	{
-	    STRCPY(r, fname_u);
+	    mch_memmove(r, fname_u, flen);
 	    r += flen;
 	    *r++ = '(';
-	    *r++ = '\'';
 	}
-	else
-	    *r++ = '\'';
+	*r++ = '\'';
 	if (str != NULL)
 	    for (p = str; *p != NUL; )
 	    {
@@ -8094,6 +8113,7 @@ static struct fst
     {"foldtextresult",	1, 1, f_foldtextresult, NULL},
     {"foreground",	0, 0, f_foreground, NULL},
     {"function",	1, 1, f_function, NULL},
+    {"functype",	1, 1, f_functype, NULL},
     {"garbagecollect",	0, 1, f_garbagecollect, NULL},
     {"get",		2, 3, f_get, NULL},
     {"getbufline",	2, 3, f_getbufline, NULL},
@@ -8443,29 +8463,37 @@ find_internal_func(name)
  * definition it contains, otherwise try to find internal or user-defined 
  * function with the given name. Returns NULL on failure.
  *
- * With runevent set to FALSE FuncUndefined event is not called.
+ * Flags:
+ * DF_CHECK_VAR      : Try loading function from a variable.
+ * DF_RUN_EVENT      : Run FuncUndefined event if function was not found
+ * DF_CREATE_AUTOLOAD: Create references to autoload function
+ * DF_NO_VAR         : DF_RUN_EVENT and DF_CREATE_AUTOLOAD
+ * DF_ALL            : All of the above
  */
     func_T *
-deref_func_name(name, len, runevent)
+deref_func_name(name, len, flags)
     char_u	*name;
     const int	len;
-    int		runevent;
+    int		flags;
 {
     dictitem_T	*v;
     int		cc;
     func_T	*r = NULL;
 
     cc = name[len];
-    name[len] = NUL;
-    v = find_var(name, NULL);
-    name[len] = cc;
-
-    if (v != NULL && v->di_tv.v_type == VAR_FUNC)
+    if (flags & DF_CHECK_VAR)
     {
-	if (v->di_tv.vval.v_func == NULL)
-	    return NULL;
-	++v->di_tv.vval.v_func->fv_refcount;
-	return v->di_tv.vval.v_func;
+	name[len] = NUL;
+	v = find_var(name, NULL);
+	name[len] = cc;
+
+	if (v != NULL && v->di_tv.v_type == VAR_FUNC)
+	{
+	    if (v->di_tv.vval.v_func == NULL)
+		return NULL;
+	    ++v->di_tv.vval.v_func->fv_refcount;
+	    return v->di_tv.vval.v_func;
+	}
     }
 
     name[len] = NUL;
@@ -8525,9 +8553,7 @@ deref_func_name(name, len, runevent)
 		*sid_buf = NUL;
 
 	    if (new_len)
-		fname = (char_u *) alloc(new_len + 1);
-
-	    new_len += lead;
+		fname = (char_u *) alloc(new_len + lead + 1);
 	}
 	else
 	{
@@ -8552,7 +8578,7 @@ deref_func_name(name, len, runevent)
 
 #ifdef FEAT_AUTOCMD
 	    /* Trigger FuncUndefined event, may load the function. */
-	    if (runevent
+	    if (flags & DF_RUN_EVENT
 		    && fp == NULL
 		    && apply_autocmds(EVENT_FUNCUNDEFINED,
 						     fname, fname, TRUE, NULL)
@@ -8563,7 +8589,9 @@ deref_func_name(name, len, runevent)
 
 	    if (fp == NULL)
 	    {
-		if (vim_strchr(fname, AUTOLOAD_CHAR) != NULL)
+		if (flags & DF_CREATE_AUTOLOAD
+			&& vim_strchr(fname, AUTOLOAD_CHAR) != NULL
+			&& valid_autoload_name(fname))
 		{
 		    aufunc_T	*aufp;
 
@@ -8710,12 +8738,23 @@ name_internal_func(intfp)
     return (char_u *) intfp->f_name;
 }
 
+static char_u	*internal_func_type_name = "internal";
+#define INTERNAL_FUNC_TYPE_LEN 8
+
+    static char_u *
+type_internal_func(intfp)
+    struct fst	*intfp UNUSED;
+{
+    return vim_strnsave(internal_func_type_name, INTERNAL_FUNC_TYPE_LEN);
+}
+
 static funcdef_T internal_func_type = {
     (function_caller)		call_internal_func,	/* fd_call */
     (function_representer)	repr_internal_func,	/* fd_repr */
     (function_destructor)	dealloc_internal_func,	/* fd_dealloc */
     (function_cmp)		compare_internal_funcs,	/* fd_compare */
     (function_representer)	name_internal_func,	/* fd_name */
+    (function_representer)	type_internal_func,	/* fd_type */
 };
 
     static aufunc_T *
@@ -8736,13 +8775,21 @@ call_autoload_func(aufp, rettv, argcount, argvars, firstline, lastline, doesrang
     int		*doesrange;	/* return: function handled range */
     dict_T	*selfdict;	/* Dictionary for "self" */
 {
-    /* Try loading a package. */
+    /* First, check whether function was already loaded. */
+    if (aufp->auf_func == NULL && !aborting())
+	aufp->auf_func = deref_func_name(aufp->auf_name,
+					 STRLEN(aufp->auf_name),
+					 DF_CHECK_VAR|DF_RUN_EVENT);
+
+    /* If not then try loading a package. */
     if (aufp->auf_func == NULL && script_autoload(aufp->auf_name, TRUE) &&
 	    !aborting())
 	/* loaded a package, search for the function again */
+	/* Note: it is allowed for loaded function to be defined in a variable 
+	 */
 	aufp->auf_func = deref_func_name(aufp->auf_name,
 					 STRLEN(aufp->auf_name),
-					 TRUE);
+					 DF_CHECK_VAR);
 
     if (aufp->auf_func == NULL)
     {
@@ -8786,12 +8833,51 @@ name_autoload_func(aufp)
     return aufp->auf_name;
 }
 
+static char_u	*autoload_func_type_name = "autoload";
+#define AUTOLOAD_FUNC_TYPE_LEN 8
+
+    static char_u *
+type_autoload_func(aufp)
+    aufunc_T	*aufp;
+{
+    if (aufp->auf_func == NULL)
+	return vim_strnsave(autoload_func_type_name, AUTOLOAD_FUNC_TYPE_LEN);
+    else
+    {
+	char_u	*loaded_type;
+	int	loaded_type_len;
+	char_u	*ret_type;
+
+	if ((loaded_type = FUNC_TYPE(aufp->auf_func)) == NULL)
+	    return NULL;
+
+	loaded_type_len = STRLEN(loaded_type);
+
+	/* 2: colon and NUL */
+	ret_type = (char_u*)alloc(loaded_type_len + 2 + AUTOLOAD_FUNC_TYPE_LEN);
+
+	if (ret_type == NULL)
+	    return NULL;
+
+	mch_memmove(ret_type, autoload_func_type_name,
+		    (size_t) AUTOLOAD_FUNC_TYPE_LEN);
+	ret_type[AUTOLOAD_FUNC_TYPE_LEN] = ':';
+	mch_memmove(ret_type + AUTOLOAD_FUNC_TYPE_LEN + 1, loaded_type,
+		    loaded_type_len);
+	ret_type[AUTOLOAD_FUNC_TYPE_LEN + loaded_type_len + 1] = NUL;
+
+	vim_free(loaded_type);
+	return ret_type;
+    }
+}
+
 static funcdef_T autoload_func_type = {
     (function_caller)		call_autoload_func,	/* fd_call */
     (function_representer)	repr_autoload_func,	/* fd_repr */
     (function_destructor)	dealloc_autoload_func,	/* fd_dealloc */
     (function_cmp)		compare_autoload_funcs,	/* fd_compare */
     (function_representer)	name_autoload_func,	/* fd_name */
+    (function_representer)	type_autoload_func,	/* fd_type */
 };
 
 /*
@@ -9557,7 +9643,7 @@ f_call(argvars, rettv)
 	name = get_tv_string(&argvars[0]);
 	if (name == NUL)
 	    return;		/* type error or empty name */
-	func = deref_func_name(name, STRLEN(name), TRUE);
+	func = deref_func_name(name, STRLEN(name), DF_NO_VAR);
     }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -11267,7 +11353,7 @@ f_function(argvars, rettv)
 
     s = get_tv_string(&argvars[0]);
 
-    func = deref_func_name(s, STRLEN(s), FALSE);
+    func = deref_func_name(s, STRLEN(s), DF_CREATE_AUTOLOAD);
 
     if (func != NULL)
     {
@@ -11275,9 +11361,26 @@ f_function(argvars, rettv)
 	rettv->vval.v_func = func;
     }
     else
-    {
 	EMSG2(_(e_unknown_function), s);
+}
+
+/*
+ * "functype()" function
+ */
+    static void
+f_functype(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    if (argvars[0].v_type != VAR_FUNC || argvars[0].vval.v_func == NULL)
+    {
+	EMSG(_(e_funcref));
+	return;
     }
+
+    if ((rettv->vval.v_string = FUNC_TYPE(argvars[0].vval.v_func)) == NULL)
+	return;
+    rettv->v_type = VAR_STRING;
 }
 
 /*
@@ -12405,6 +12508,9 @@ f_has(argvars, rettv)
 #ifndef CASE_INSENSITIVE_FILENAME
 	"fname_case",
 #endif
+#ifdef HAVE_ACL
+	"acl",
+#endif
 #ifdef FEAT_ARABIC
 	"arabic",
 #endif
@@ -12808,7 +12914,12 @@ f_has(argvars, rettv)
 	"xfontset",
 #endif
 #ifdef FEAT_XPM_W32
-	"xpm_w32",
+	"xpm",
+	"xpm_w32",	/* for backward compatibility */
+#else
+# if defined(HAVE_XPM)
+	"xpm",
+# endif
 #endif
 #ifdef USE_XSMP
 	"xsmp",
@@ -13315,9 +13426,18 @@ get_user_input(argvars, rettv, inputdialog)
 	}
 
 	if (defstr != NULL)
+	{
+# ifdef FEAT_EX_EXTRA
+	    int save_ex_normal_busy = ex_normal_busy;
+	    ex_normal_busy = 0;
+# endif
 	    rettv->vval.v_string =
 		getcmdline_prompt(inputsecret_flag ? NUL : '@', p, echo_attr,
 				  xp_type, xp_arg);
+# ifdef FEAT_EX_EXTRA
+	    ex_normal_busy = save_ex_normal_busy;
+# endif
+	}
 	if (inputdialog && rettv->vval.v_string == NULL
 		&& argvars[1].v_type != VAR_UNKNOWN
 		&& argvars[2].v_type != VAR_UNKNOWN)
@@ -14562,14 +14682,23 @@ f_mkdir(argvars, rettv)
 	return;
 
     dir = get_tv_string_buf(&argvars[0], buf);
-    if (argvars[1].v_type != VAR_UNKNOWN)
+    if (*dir == NUL)
+	rettv->vval.v_number = FAIL;
+    else
     {
-	if (argvars[2].v_type != VAR_UNKNOWN)
-	    prot = get_tv_number_chk(&argvars[2], NULL);
-	if (prot != -1 && STRCMP(get_tv_string(&argvars[1]), "p") == 0)
-	    mkdir_recurse(dir, prot);
+	if (*gettail(dir) == NUL)
+	    /* remove trailing slashes */
+	    *gettail_sep(dir) = NUL;
+
+	if (argvars[1].v_type != VAR_UNKNOWN)
+	{
+	    if (argvars[2].v_type != VAR_UNKNOWN)
+		prot = get_tv_number_chk(&argvars[2], NULL);
+	    if (prot != -1 && STRCMP(get_tv_string(&argvars[1]), "p") == 0)
+		mkdir_recurse(dir, prot);
+	}
+	rettv->vval.v_number = prot == -1 ? FAIL : vim_mkdir_emsg(dir, prot);
     }
-    rettv->vval.v_number = prot != -1 ? vim_mkdir_emsg(dir, prot) : 0;
 }
 #endif
 
@@ -17331,7 +17460,10 @@ f_sort(argvars, rettv)
 	{
 	    /* optional second argument: {func} */
 	    if (argvars[1].v_type == VAR_FUNC)
+	    {
 		item_compare_func = argvars[1].vval.v_func;
+		++item_compare_func->fv_refcount;
+	    }
 	    else
 	    {
 		int	    error = FALSE;
@@ -17350,7 +17482,7 @@ f_sort(argvars, rettv)
 			return;
 
 		    item_compare_func = deref_func_name(name, STRLEN(name),
-							TRUE);
+							DF_NO_VAR);
 		    if (item_compare_func == NULL)
 			return;
 		}
@@ -17398,8 +17530,7 @@ f_sort(argvars, rettv)
 	    }
 	}
 
-	if (item_compare_func != NULL)
-	    func_unref(item_compare_func);
+	func_unref(item_compare_func);
 
 	vim_free(ptrs);
     }
@@ -20947,7 +21078,7 @@ var_check_func_name(name, new_var)
     /* Don't allow hiding a function.  When "v" is not NULL we might be
      * assigning another function to the same var, the type is checked
      * below. */
-    if (new_var && function_exists(name))
+    if (new_var && !HASHITEM_EMPTY(hash_find(&func_hashtab, name)))
     {
 	EMSG2(_("E705: Variable name conflicts with existing function: %s"),
 								    name);
@@ -20973,6 +21104,50 @@ valid_varname(varname)
 	    EMSG2(_(e_illvar), varname);
 	    return FALSE;
 	}
+    return TRUE;
+}
+
+/*
+ * Check if a name is a valid name for an autoload function or variable.
+ * Return FALSE if not. Does not throw an error.
+ */
+    static int
+valid_autoload_name(varname)
+    char_u	*varname;
+{
+    char_u	*p;
+
+    /*
+     * Only two possible patterns are valid: g:script#varname (script#varname) 
+     * and script#function. Note that it is allowed to autoload function 
+     * reference from the variable hence g: is allowed.
+     *
+     * Presence of AUTOLOAD_CHAR is not checked.
+     */
+    if (varname[1] == ':')
+    {
+	if (varname[0] == 'g')
+	    p = varname + 2;
+	else
+	    return FALSE;
+    }
+    else
+	p = varname;
+
+    if (!eval_isnamec1(*p))
+	return FALSE;
+
+    while (*(++p) != NUL)
+    {
+	if (!eval_isnamec(*p))
+	    return FALSE;
+	/* There cannot be autoload functions with two consequent hashes.
+	 * There *can* be such variable, but I do not think it is worth caring 
+	 * about such variable names. */
+	if (*p == AUTOLOAD_CHAR && *(p-1) == AUTOLOAD_CHAR)
+	    return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -21545,6 +21720,13 @@ ex_function(eap)
 	    if (fudi.fd_func != NULL
 		    && fudi.fd_func->fv_type == &user_func_type)
 		fp = (ufunc_T *) fudi.fd_func->fv_data;
+	    else if (fudi.fd_func != NULL
+		    && fudi.fd_func->fv_type == &autoload_func_type
+		    && ((aufunc_T *) fudi.fd_func->fv_data)->auf_func != NULL
+		    && ((aufunc_T *) fudi.fd_func->fv_data)->auf_func->fv_type
+							     == &user_func_type)
+		fp = ((ufunc_T *)
+			((aufunc_T *)fudi.fd_func->fv_data)->auf_func->fv_data);
 	    else
 		fp = find_func(name);
 	    if (fp != NULL)
@@ -21981,6 +22163,7 @@ ex_function(eap)
     fp->uf_tml_count = NULL;
     fp->uf_tml_total = NULL;
     fp->uf_tml_self = NULL;
+    fp->uf_prof_next = NULL;
     fp->uf_profiling = FALSE;
     if (prof_def_func())
 	func_do_profile(fp);
@@ -22004,13 +22187,18 @@ ret_free:
 
 /*
  * Get the func_T reference which will be then called.
+ * Flags:
+ * GCF_QUIET    : do not throw exceptions
+ * GCF_AUTOLOAD : allow autoload function creation
+ * GCF_RUN_EVENT: run FuncUndefined event
+ * GCF_ANY_FUNC : GCF_AUTOLOAD and GCF_RUN_EVENT
  */
     static func_T *
-get_called_function(pp, skip, fdp, runevent)
+get_called_function(pp, skip, fdp, flags)
     char_u	**pp;
     int		skip;
     funcdict_T	*fdp;
-    int		runevent;
+    int		flags;
 {
     func_T	*func = NULL;
     char_u	*start;
@@ -22030,7 +22218,11 @@ get_called_function(pp, skip, fdp, runevent)
     {
 	*pp += 3;
 	len = get_id_len(pp) + 3;
-	return deref_func_name(start, len, TRUE);
+	/* It is impossible for a variable name to start with <SNR>, thus 
+	 * variables are not checked */
+	return deref_func_name(start, len,
+				(flags&GCF_AUTOLOAD?  DF_CREATE_AUTOLOAD : 0)|
+				(flags&GCF_RUN_EVENT? DF_RUN_EVENT       : 0));
     }
 
     /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
@@ -22043,7 +22235,7 @@ get_called_function(pp, skip, fdp, runevent)
 					      lead > 2 ? 0 : FNE_CHECK_START);
     if (end == start)
     {
-	if (!skip)
+	if (!skip && !(flags&GCF_QUIET))
 	    EMSG(_("E129: Function name required"));
 	goto theend;
     }
@@ -22056,7 +22248,7 @@ get_called_function(pp, skip, fdp, runevent)
 	 */
 	if (!aborting())
 	{
-	    if (end != NULL)
+	    if (end != NULL && !(flags&GCF_QUIET))
 		EMSG2(_(e_invarg2), start);
 	}
 	else
@@ -22081,8 +22273,10 @@ get_called_function(pp, skip, fdp, runevent)
 	}
 	else
 	{
-	    if (!skip && (fdp == NULL || lv.ll_dict == NULL
-			  || fdp->fd_newkey == NULL))
+	    if (!(flags&GCF_QUIET)
+		    && !skip
+		    && (fdp == NULL || lv.ll_dict == NULL
+			|| fdp->fd_newkey == NULL))
 		EMSG(_(e_funcref));
 	    else
 		*pp = end;
@@ -22101,12 +22295,16 @@ get_called_function(pp, skip, fdp, runevent)
     if (lv.ll_exp_name != NULL)
     {
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len, !skip && runevent);
+	func = deref_func_name(lv.ll_exp_name, len,
+		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
+		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
     }
     else
     {
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len, !skip && runevent);
+	func = deref_func_name(*pp, len,
+		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
+		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
     }
 
     *pp = end;
@@ -22225,7 +22423,10 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len, FALSE);
+	/* As we limit valid function values to user functions only it does not 
+	 * make sense to create autoload functions.
+	 */
+	func = deref_func_name(lv.ll_exp_name, len, DF_CHECK_VAR);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
@@ -22238,7 +22439,7 @@ trans_function_name(pp, skip, flags, fdp)
     {
 	func_T	*func;
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len, FALSE);
+	func = deref_func_name(*pp, len, DF_CHECK_VAR);
 	if (func == NULL || func->fv_type != &user_func_type)
 	    name = NULL;
 	else
@@ -22444,9 +22645,8 @@ function_exists(name)
     char_u	*p = name;
     funcdict_T	fudi;
 
-    func = get_called_function(&p, FALSE, &fudi, FALSE);
+    func = get_called_function(&p, FALSE, &fudi, GCF_QUIET);
     func_unref(func);
-    dict_unref(fudi.fd_dict);
 
     return (func != NULL && (*p == NUL || *p == '('));
 }
@@ -22492,6 +22692,55 @@ func_do_profile(fp)
 	return;	    /* out of memory */
 
     fp->uf_profiling = TRUE;
+
+    if (fp_profiled_first == NULL)
+    {
+	fp_profiled_first = fp;
+	fp_profiled_last = fp;
+    }
+    else
+    {
+	fp_profiled_last->uf_prof_next = fp;
+	fp_profiled_last = fp;
+    }
+
+    fp->uf_prof_next = NULL;
+
+    ++fp->uf_func->fv_refcount;
+}
+
+    static void
+func_clear_profile(fp)
+    ufunc_T	*fp;
+{
+    if (fp->uf_tml_count != NULL)
+    {
+	vim_free(fp->uf_tml_count);
+	fp->uf_tml_count = NULL;
+    }
+    if (fp->uf_tml_total != NULL)
+    {
+	vim_free(fp->uf_tml_total);
+	fp->uf_tml_total = NULL;
+    }
+    if (fp->uf_tml_self != NULL)
+    {
+	vim_free(fp->uf_tml_self);
+	fp->uf_tml_self = NULL;
+    }
+
+    fp->uf_tm_count = 0;
+    profile_zero(&fp->uf_tm_self);
+    profile_zero(&fp->uf_tm_total);
+    profile_zero(&fp->uf_tm_children);
+    profile_zero(&fp->uf_tml_children);
+    profile_zero(&fp->uf_tml_wait);
+    fp->uf_tml_idx = -1;
+    fp->uf_tml_execed = FALSE;
+
+    fp->uf_profiling = FALSE;
+
+    func_unref(fp->uf_func);
 }
 
 /*
@@ -22501,58 +22750,49 @@ func_do_profile(fp)
 func_dump_profile(fd)
     FILE    *fd;
 {
-    hashitem_T	*hi;
-    int		todo;
     ufunc_T	*fp;
     int		i;
     ufunc_T	**sorttab;
     int		st_len = 0;
 
-    todo = (int)func_hashtab.ht_used;
-    if (todo == 0)
+    if (fp_profiled_first == NULL)
 	return;     /* nothing to dump */
 
-    sorttab = (ufunc_T **)alloc((unsigned)(sizeof(ufunc_T) * todo));
-
-    for (hi = func_hashtab.ht_array; todo > 0; ++hi)
+    for (fp = fp_profiled_first; fp != NULL; fp = fp->uf_prof_next)
     {
-	if (!HASHITEM_EMPTY(hi))
+	++st_len;
+	if (fp->uf_name[0] == K_SPECIAL)
+	    fprintf(fd, "FUNCTION  <SNR>%s()\n", fp->uf_name + 3);
+	else
+	    fprintf(fd, "FUNCTION  %s()\n", fp->uf_name);
+	if (fp->uf_tm_count == 1)
+	    fprintf(fd, "Called 1 time\n");
+	else
+	    fprintf(fd, "Called %d times\n", fp->uf_tm_count);
+	fprintf(fd, "Total time: %s\n", profile_msg(&fp->uf_tm_total));
+	fprintf(fd, " Self time: %s\n", profile_msg(&fp->uf_tm_self));
+	fprintf(fd, "\n");
+	fprintf(fd, "count  total (s)   self (s)\n");
+
+	for (i = 0; i < fp->uf_lines.ga_len; ++i)
 	{
-	    --todo;
-	    fp = HI2UF(hi);
-	    if (fp->uf_profiling)
-	    {
-		if (sorttab != NULL)
-		    sorttab[st_len++] = fp;
-
-		if (fp->uf_name[0] == K_SPECIAL)
-		    fprintf(fd, "FUNCTION  <SNR>%s()\n", fp->uf_name + 3);
-		else
-		    fprintf(fd, "FUNCTION  %s()\n", fp->uf_name);
-		if (fp->uf_tm_count == 1)
-		    fprintf(fd, "Called 1 time\n");
-		else
-		    fprintf(fd, "Called %d times\n", fp->uf_tm_count);
-		fprintf(fd, "Total time: %s\n", profile_msg(&fp->uf_tm_total));
-		fprintf(fd, " Self time: %s\n", profile_msg(&fp->uf_tm_self));
-		fprintf(fd, "\n");
-		fprintf(fd, "count  total (s)   self (s)\n");
-
-		for (i = 0; i < fp->uf_lines.ga_len; ++i)
-		{
-		    if (FUNCLINE(fp, i) == NULL)
-			continue;
-		    prof_func_line(fd, fp->uf_tml_count[i],
-			     &fp->uf_tml_total[i], &fp->uf_tml_self[i], TRUE);
-		    fprintf(fd, "%s\n", FUNCLINE(fp, i));
-		}
-		fprintf(fd, "\n");
-	    }
+	    if (FUNCLINE(fp, i) == NULL)
+		continue;
+	    prof_func_line(fd, fp->uf_tml_count[i],
+		     &fp->uf_tml_total[i], &fp->uf_tml_self[i], TRUE);
+	    fprintf(fd, "%s\n", FUNCLINE(fp, i));
 	}
+	fprintf(fd, "\n");
     }
+
+    sorttab = (ufunc_T **)alloc((unsigned)(sizeof(ufunc_T *) * st_len));
 
     if (sorttab != NULL && st_len > 0)
     {
+	ufunc_T	**stcur = sorttab;
+	for (fp = fp_profiled_first; fp != NULL; fp = fp->uf_prof_next)
+	    *stcur++ = fp;
+
 	qsort((void *)sorttab, (size_t)st_len, sizeof(ufunc_T *),
 							      prof_total_cmp);
 	prof_sort_list(fd, sorttab, st_len, "TOTAL", FALSE);
@@ -22560,6 +22800,12 @@ func_dump_profile(fd)
 							      prof_self_cmp);
 	prof_sort_list(fd, sorttab, st_len, "SELF", TRUE);
     }
+
+    for (fp = fp_profiled_first; fp != NULL; fp = fp->uf_prof_next)
+	func_clear_profile(fp);
+
+    fp_profiled_first = NULL;
+    fp_profiled_last = NULL;
 
     vim_free(sorttab);
 }
@@ -23276,6 +23522,31 @@ repr_user_func(fp)
 	/* Allow checking for anonymous functions using
 	 * string(fref) =~# '^function(''\d' */
 	return vim_strsave((char_u *) "function('1')");
+    else if (fp->uf_name[0] == K_SPECIAL &&
+	     fp->uf_name[1] == KS_EXTRA  &&
+	     fp->uf_name[2] == KE_SNR)
+    {
+	char_u	*buffer;
+	char_u	*r;
+
+	/*  translated <SNR>: K_SPECIAL, KS_EXTRA, KE_SNR --------+  NUL *
+	 *                                        "<SNR>" ----+   |   |  *
+	 *                                                    |   |   |  */
+	if (!(buffer = (char_u *) alloc(STRLEN(fp->uf_name) + 5 - 3 + 1)))
+	    return NULL;
+	buffer[0] = '<';
+	buffer[1] = 'S';
+	buffer[2] = 'N';
+	buffer[3] = 'R';
+	buffer[4] = '>';
+	STRCPY((buffer + 5), (fp->uf_name + 3));
+
+	r = string_quote(buffer, "function");
+
+	vim_free(buffer);
+
+	return r;
+    }
     else
 	return string_quote(fp->uf_name, "function");
 }
@@ -23332,12 +23603,23 @@ name_user_func(fp)
     return fp->uf_name;
 }
 
+static char_u	*user_func_type_name = "user";
+#define USER_FUNC_TYPE_LEN 4
+
+    static char_u *
+type_user_func(fp)
+    ufunc_T	*fp UNUSED;
+{
+    return vim_strnsave(user_func_type_name, USER_FUNC_TYPE_LEN);
+}
+
 static funcdef_T user_func_type = {
     (function_caller)		call_user_func,		/* fd_call */
     (function_representer)	repr_user_func,		/* fd_repr */
     (function_destructor)	dealloc_user_func,	/* fd_dealloc */
     (function_cmp)		compare_user_funcs,	/* fd_compare */
     (function_representer)	name_user_func,		/* fd_name */
+    (function_representer)	type_user_func,		/* fd_type */
 };
 
 /*
@@ -24677,6 +24959,7 @@ do_string_sub(str, pat, sub, flags)
     garray_T	ga;
     char_u	*ret;
     char_u	*save_cpo;
+    int		zero_width;
 
     /* Make 'cpoptions' empty, so that the 'l' flag doesn't work here */
     save_cpo = p_cpo;
@@ -24715,19 +24998,16 @@ do_string_sub(str, pat, sub, flags)
 	    (void)vim_regsub(&regmatch, sub, (char_u *)ga.ga_data
 					  + ga.ga_len + i, TRUE, TRUE, FALSE);
 	    ga.ga_len += i + sublen - 1;
-	    /* avoid getting stuck on a match with an empty string */
-	    if (tail == regmatch.endp[0])
+	    zero_width = (tail == regmatch.endp[0]
+				    || regmatch.startp[0] == regmatch.endp[0]);
+	    tail = regmatch.endp[0];
+	    if (*tail == NUL)
+		break;
+	    if (zero_width)
 	    {
-		if (*tail == NUL)
-		    break;
+		/* avoid getting stuck on a match with an empty string */
 		*((char_u *)ga.ga_data + ga.ga_len) = *tail++;
 		++ga.ga_len;
-	    }
-	    else
-	    {
-		tail = regmatch.endp[0];
-		if (*tail == NUL)
-		    break;
 	    }
 	    if (!do_all)
 		break;

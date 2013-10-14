@@ -381,8 +381,12 @@ CClink = $(CC)
 # LUA
 # Uncomment one of these when you want to include the Lua interface.
 # First one is for static linking, second one for dynamic loading.
+# Use --with-luajit if you want to use LuaJIT instead of Lua.
+# Set PATH environment variable to find lua or luajit executable.
 #CONF_OPT_LUA = --enable-luainterp
 #CONF_OPT_LUA = --enable-luainterp=dynamic
+#CONF_OPT_LUA = --enable-luainterp --with-luajit
+#CONF_OPT_LUA = --enable-luainterp=dynamic --with-luajit
 # Lua installation dir (when not set uses $LUA_PREFIX or defaults to /usr)
 #CONF_OPT_LUA_PREFIX = --with-lua-prefix=/usr/local
 
@@ -945,7 +949,7 @@ MAN1DIR = /man1
 
 ### Vim version (adjusted by a script)
 VIMMAJOR = 7
-VIMMINOR = 4a
+VIMMINOR = 4
 
 ### Location of Vim files (should not need to be changed, and  {{{1
 ### some things might not work when they are changed!)
@@ -1401,7 +1405,7 @@ DEST_MAN_FR_U = $(DEST_MAN_TOP)/fr.UTF-8$(MAN1DIR)
 DEST_MAN_IT = $(DEST_MAN_TOP)/it$(MAN1DIR)
 DEST_MAN_IT_I = $(DEST_MAN_TOP)/it.ISO8859-1$(MAN1DIR)
 DEST_MAN_IT_U = $(DEST_MAN_TOP)/it.UTF-8$(MAN1DIR)
-DEST_MAN_JA_U = $(DEST_MAN_TOP)/ja.UTF-8$(MAN1DIR)
+DEST_MAN_JA_U = $(DEST_MAN_TOP)/ja$(MAN1DIR)
 DEST_MAN_PL = $(DEST_MAN_TOP)/pl$(MAN1DIR)
 DEST_MAN_PL_I = $(DEST_MAN_TOP)/pl.ISO8859-2$(MAN1DIR)
 DEST_MAN_PL_U = $(DEST_MAN_TOP)/pl.UTF-8$(MAN1DIR)
@@ -1878,7 +1882,8 @@ test1 test2 test3 test4 test5 test6 test7 test8 test9 \
 	test60 test61 test62 test63 test64 test65 test66 test67 test68 test69 \
 	test70 test71 test72 test73 test74 test75 test76 test77 test78 test79 \
 	test80 test81 test82 test83 test84 test85 test86 test87 test88 test89 \
-	test90 test91 test92 test93 test94 test95 test96 test97 test98 test99:
+	test90 test91 test92 test93 test94 test95 test96 test97 test98 test99 \
+	test100:
 	cd testdir; rm $@.out; $(MAKE) -f Makefile $@.out VIMPROG=../$(VIMTARGET)
 
 testclean:

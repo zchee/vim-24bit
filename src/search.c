@@ -1760,6 +1760,9 @@ findmatchlimit(oap, initc, flags, maxtravel)
 #endif
 
     pos = curwin->w_cursor;
+#ifdef FEAT_VIRTUALEDIT
+    pos.coladd = 0;
+#endif
     linep = ml_get(pos.lnum);
 
     cpo_match = (vim_strchr(p_cpo, CPO_MATCH) != NULL);
@@ -4509,7 +4512,7 @@ current_search(count, forward)
     int		result;		/* result of various function calls */
     char_u	old_p_ws = p_ws;
     int		flags = 0;
-    pos_T	save_VIsual;
+    pos_T	save_VIsual = VIsual;
     int		one_char;
 
     /* wrapping should not occur */
@@ -4522,7 +4525,6 @@ current_search(count, forward)
     if (VIsual_active)
     {
 	orig_pos = curwin->w_cursor;
-	save_VIsual = VIsual;
 
 	pos = curwin->w_cursor;
 	start_pos = VIsual;
@@ -4678,8 +4680,8 @@ is_one_char(pattern)
 		&& regmatch.startpos[0].lnum == regmatch.endpos[0].lnum
 		&& regmatch.startpos[0].col == regmatch.endpos[0].col);
 
-	if (!result && incl(&pos) == 0 && pos.col == regmatch.endpos[0].col)
-	    result  = TRUE;
+	if (!result && inc(&pos) >= 0 && pos.col == regmatch.endpos[0].col)
+	    result = TRUE;
     }
 
     called_emsg |= save_called_emsg;

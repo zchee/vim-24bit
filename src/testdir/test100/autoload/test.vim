@@ -1,0 +1,2 @@
+function test#function()
+endfunction

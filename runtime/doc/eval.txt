@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 7.4a.  Last change: 2013 Jun 11
+*eval.txt*	For Vim version 7.4.  Last change: 2013 Aug 24
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -123,6 +123,7 @@ around the arguments, to invoke the function it refers to.  Example: >
 	:echo Fn()
 <							*E704* *E705* *E707*
 A Funcref variable must start with a capital, "s:", "w:", "t:" or "b:".  You
+can use "g:" but the following name must still start with a capital.  You
 cannot have both a Funcref variable and a function with the same name.
 
 A special case is defining a function and directly assigning its Funcref to a
@@ -1771,7 +1772,8 @@ foldlevel( {lnum})		Number	fold level at {lnum}
 foldtext( )			String	line displayed for closed fold
 foldtextresult( {lnum})		String	text for closed fold at {lnum}
 foreground( )			Number	bring the Vim window to the foreground
-function( {name})		Funcref reference to function {name}
+function( {name})		Funcref	reference to function {name}
+functype( {func})		String	type of function reference {func}
 garbagecollect( [{atexit}])	none	free memory, breaking cyclic references
 get( {list}, {idx} [, {def}])	any	get item {idx} from {list} or {def}
 get( {dict}, {key} [, {def}])	any	get item {key} from {dict} or {def}
@@ -3101,6 +3103,31 @@ foreground()	Move the Vim window to the foreground.	Useful when sent from
 function({name})					*function()* *E700*
 		Return a |Funcref| variable that refers to function {name}.
 		{name} can be a user defined function or an internal function.
+
+
+functype({func})					*functype()*
+		Given a |Funcref| return string describing its type. Possible 
+		values:
+		Value		Description ~
+		internal	Reference to one of the built-in |functions|.
+				Example: `function('tr')`.
+		user		Reference to one of the |user-functions|.
+				Example: `function('NetrwStatusLine')`.
+		autoload	Reference to one of the |autoload-functions| 
+				that was not yet loaded.
+				Example: `function('zip#Browse')`.
+		autoload:{type}	Same as above, but for functions that were 
+				already loaded. For `function('zip#Browse')` 
+				it will return "autoload:user". {type} may be 
+				anything that |functype()| can return 
+				(including e.g. "autoload:autoload:internal").
+		python:{type}	Reference to some python function. {type} is 
+				the python type name.
+				Example: `pyeval('id')` has function type 
+				"python:builtin_function_or_method".
+		python3:{type}	Same as above, but for python 3 functions.
+				Example: `py3eval('id')` has function type 
+				"python3:builtin_function_or_method".
 
 
 garbagecollect([{atexit}])				*garbagecollect()*
@@ -5884,6 +5911,9 @@ system({expr} [, {input}])				*system()* *E677*
 <		To make the result more system-independent, the shell output
 		is filtered to replace <CR> with <NL> for Macintosh, and
 		<CR><NL> with <NL> for DOS-like systems.
+		To avoid the string being truncated at a NUL, all NUL
+		characters are replaced with SOH (0x01).
+
 		The command executed is constructed using several options:
 	'shell' 'shellcmdflag' 'shellxquote' {expr} 'shellredir' {tmp} 'shellxquote'
 		({tmp} is an automatically generated file name).
@@ -6334,6 +6364,7 @@ There are three types of features:
 <   Note that it's possible for patch 147 to be omitted even though 148 is
     included.
 
+acl			Compiled with |ACL| support.
 all_builtin_terms	Compiled with all builtin terminals enabled.
 amiga			Amiga version of Vim.
 arabic			Compiled with Arabic support |Arabic|.
@@ -6500,7 +6531,9 @@ windows			Compiled with support for more than one window.
 writebackup		Compiled with 'writebackup' default on.
 xfontset		Compiled with X fontset support |xfontset|.
 xim			Compiled with X input method support |xim|.
-xpm_w32			Compiled with pixmap support for Win32.
+xpm			Compiled with pixmap support.
+xpm_w32			Compiled with pixmap support for Win32. (Only for
+			backward compatibility. Use "xpm" instead.)
 xsmp			Compiled with X session management support.
 xsmp_interact		Compiled with interactive X session management support.
 xterm_clipboard		Compiled with support for xterm clipboard.

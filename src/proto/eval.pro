@@ -29,7 +29,7 @@ void *call_func_retstr __ARGS((char_u *func, int argc, char_u **argv, int safe))
 void *call_func_retlist __ARGS((char_u *func, int argc, char_u **argv, int safe));
 void *save_funccal __ARGS((void));
 void restore_funccal __ARGS((void *vfc));
-func_T *deref_func_name __ARGS((char_u *name, const int len, int runevent));
+func_T *deref_func_name __ARGS((char_u *name, const int len, int flags));
 void prof_child_enter __ARGS((proftime_T *tm));
 void prof_child_exit __ARGS((proftime_T *tm));
 int eval_foldexpr __ARGS((char_u *arg, int *cp));
