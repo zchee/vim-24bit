@@ -634,6 +634,7 @@ Expression syntax summary, from least to most significant:
 	@r			contents of register 'r'
 	function(expr1, ...)	function call
 	func{ti}on(expr1, ...)	function call with curly braces
+	\arg1,arg2:expr1	lambda
 
 
 ".." indicates that the operations in this level can be concatenated.
@@ -1117,6 +1118,32 @@ function call		*expr-function* *E116* *E118* *E119* *E120*
 -------------
 function(expr1, ...)	function call
 See below |functions|.
+
+
+lambda							*expr-lambda*
+------
+\arg1, ...: expr1	lambda function
+
+Lambda functions are the lightweight variant of |user-functions|. Differences 
+between them are:
+
+1. Body of the lambda function is an |expr1| and not a sequence of |Ex| 
+   commands.
+2. Lambda function does not have its own scope dictionary. It does have scope 
+   dictionary for |a:var| though. |l:| scope dictionary is inherited from the 
+   place where lambda was defined (thus it is either |g:| scope dictionary or 
+   |l:| dictionary of the function that defined the lambda).
+   You see, it is poor man closure.
+3. If |a:var| is not found in lambda own scope dictionary it is searched in 
+   |a:| scope dictionary of the function where lambda was defined (if any). 
+   This does not apply to |a:000|, |a:0|, |a:1|, ... variables.
+4. There are no dictionary lambdas.
+5. Lambda is not globally recorded anywhere like |anonymous-function|.
+
+NOTE: lambda function records the whole scope dictionary in its body and also 
+      |a:| dictionary. That means that extensive generation of lambdas and 
+      exporting them outside of generator function may lead to a huge memory 
+      overhead.
 
 
 ==============================================================================
