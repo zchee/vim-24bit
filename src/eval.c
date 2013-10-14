@@ -258,8 +258,11 @@ typedef struct funccall_S funccall_T;
 struct funccall_S
 {
     ufunc_T	*func;		/* function being called */
+    int		profiling;	/* TRUE if function is being profiled */
+    char_u	*name;		/* Function name */
     int		linenr;		/* next line to be executed */
     int		returned;	/* ":return" used */
+    int		islambda;	/* Whether func above is actually (lambda_T*) */
     struct			/* fixed variables for arguments */
     {
 	dictitem_T	var;		/* variable (without room for name) */
@@ -280,6 +283,21 @@ struct funccall_S
 #endif
     funccall_T	*caller;	/* calling function or NULL */
 };
+
+typedef struct
+{
+    int		lf_varargs;	/* Determines whether lambda accepts more then 
+				   one argument */
+    garray_T	lf_args;	/* Arguments */
+    funccall_T	*lf_fc;		/* Function that created lambda */
+    dict_T	*lf_vars;	/* Copy of the scope dictionary:
+				   lambda is closure */
+    dict_T	*lf_avars;	/* Like above, but for a: variables */
+    scid_T	lf_script_ID;	/* ID of script where function was defined */
+    func_T	*lf_func;	/* Reference to a func_T structure holding 
+				   reference to lambda_T */
+    char_u	lf_expr[1];	/* Expression that will be evaluated */
+} lambda_T;
 
 /*
  * Info used by a ":for" loop.
@@ -864,6 +882,7 @@ static void getwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
 static int searchpair_cmn __ARGS((typval_T *argvars, pos_T *match_pos));
 static int search_cmn __ARGS((typval_T *argvars, pos_T *match_pos, int *flagsp));
 static void setwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
+static int compare_func_pointers __ARGS((void *fp1, void *fp2));
 
 
 #ifdef EBCDIC
@@ -873,6 +892,7 @@ static void sortFunctions __ARGS(());
 
 
 static funcdef_T user_func_type;
+static funcdef_T lambda_func_type;
 static funcdef_T internal_func_type;
 static funcdef_T autoload_func_type;
 
@@ -981,7 +1001,7 @@ eval_clear()
 func_name(cookie)
     void *cookie;
 {
-    return ((funccall_T *)cookie)->func->uf_name;
+    return ((funccall_T *)cookie)->name;
 }
 
 /*
@@ -1795,7 +1815,7 @@ prof_child_enter(tm)
 {
     funccall_T *fc = current_funccal;
 
-    if (fc != NULL && fc->func->uf_profiling)
+    if (fc != NULL && fc->profiling)
 	profile_start(&fc->prof_child);
     script_prof_save(tm);
 }
@@ -1810,7 +1830,7 @@ prof_child_exit(tm)
 {
     funccall_T *fc = current_funccal;
 
-    if (fc != NULL && fc->func->uf_profiling)
+    if (fc != NULL && fc->profiling)
     {
 	profile_end(&fc->prof_child);
 	profile_sub_wait(tm, &fc->prof_child); /* don't count waiting time */
@@ -5059,7 +5079,7 @@ get_function_args(argp, endchar, newargs, varargs, skip)
 		mustend = TRUE;
 	}
 	p = skipwhite(p);
-	if (mustend && *p != ')')
+	if (mustend && *p != endchar)
 	{
 	    if (!skip)
 		EMSG2(_(e_invarg2), *argp);
@@ -5266,22 +5286,74 @@ eval7(arg, rettv, evaluate, want_string)
      * Lambdas: \a, b: expr1
      */
     case '\\':	{
+		    lambda_T	*lfp;
 		    garray_T	newargs;
 		    char_u	*body_start;
 		    int		body_len;
 		    int		varargs;
 
 		    *arg = skipwhite(*arg + 1);
-		    ret = get_function_args(arg, ':', &newargs, varargs,
+		    ret = get_function_args(arg, ':', &newargs, &varargs,
 					    !evaluate);
 		    if (ret == FAIL)
 			break;
 
+		    *arg = skipwhite(*arg);
 		    body_start = *arg;
 		    ret = eval1(arg, rettv, FALSE);
 		    if (ret == FAIL)
+		    {
+			ga_clear_strings(&newargs);
 			break;
+		    }
 		    body_len = *arg - body_start;
+
+		    if (evaluate)
+		    {
+			lfp = (lambda_T *) alloc_clear(sizeof(lambda_T)
+				+ body_len + 1);
+			if (lfp == NULL)
+			{
+			    ret = FAIL;
+			    ga_clear_strings(&newargs);
+			    break;
+			}
+
+			lfp->lf_func = func_alloc();
+			if (lfp->lf_func == NULL)
+			{
+			    ret = FAIL;
+			    ga_clear_strings(&newargs);
+			    vim_free(lfp);
+			    break;
+			}
+
+			lfp->lf_func->fv_data = (void *) lfp;
+			lfp->lf_func->fv_type = &lambda_func_type;
+
+			lfp->lf_fc = current_funccal;
+			lfp->lf_args = newargs;
+			lfp->lf_varargs = varargs;
+			mch_memmove(lfp->lf_expr, body_start, body_len);
+			lfp->lf_expr[body_len] = NUL;
+
+			if (current_funccal == NULL)
+			{
+			    lfp->lf_vars = &globvardict;
+			    lfp->lf_avars = NULL;
+			}
+			else
+			{
+			    lfp->lf_vars = &current_funccal->l_vars;
+			    lfp->lf_avars = &current_funccal->l_avars;
+			    ++lfp->lf_avars->dv_refcount;
+			}
+			++lfp->lf_vars->dv_refcount;
+
+			rettv->v_type = VAR_FUNC;
+			rettv->vval.v_func = lfp->lf_func;
+			++lfp->lf_func->fv_refcount;
+		    }
 
 		    break;
 		}
@@ -8723,14 +8795,6 @@ dealloc_internal_func(intfp)
     return;
 }
 
-    static int
-compare_internal_funcs(intfp1, intfp2)
-    struct fst	*intfp1;
-    struct fst	*intfp2;
-{
-    return intfp1 == intfp2;
-}
-
     static char_u *
 name_internal_func(intfp)
     struct fst	*intfp;
@@ -8752,7 +8816,7 @@ static funcdef_T internal_func_type = {
     (function_caller)		call_internal_func,	/* fd_call */
     (function_representer)	repr_internal_func,	/* fd_repr */
     (function_destructor)	dealloc_internal_func,	/* fd_dealloc */
-    (function_cmp)		compare_internal_funcs,	/* fd_compare */
+    (function_cmp)		compare_func_pointers,	/* fd_compare */
     (function_representer)	name_internal_func,	/* fd_name */
     (function_representer)	type_internal_func,	/* fd_type */
 };
@@ -20627,6 +20691,17 @@ find_var_in_ht(ht, htname, varname, writing)
 		return NULL;
 	    hi = hash_find(ht, varname);
 	}
+	/* For lambdas try searching in recorded a: scope
+	 */
+	else if (current_funccal != NULL
+		&& current_funccal->islambda
+		&& ht == &current_funccal->l_avars.dv_hashtab
+		&& ((lambda_T *) current_funccal->func)->lf_avars != NULL)
+	{
+	    hi = hash_find(
+		  &(((lambda_T *) current_funccal->func)->lf_avars->dv_hashtab),
+		  varname);
+	}
 	if (HASHITEM_EMPTY(hi))
 	    return NULL;
     }
@@ -20680,7 +20755,9 @@ find_var_ht(name, varname)
 	return &vimvarht;
     if (*name == 'a' && current_funccal != NULL) /* function argument */
 	return &current_funccal->l_avars.dv_hashtab;
-    if (*name == 'l' && current_funccal != NULL) /* local function variable */
+    if (*name == 'l' && current_funccal != NULL /* local function variable */
+	    && (!current_funccal->islambda
+		|| current_funccal->l_vars_var.di_tv.v_type == VAR_DICT))
 	return &current_funccal->l_vars.dv_hashtab;
     if (*name == 's'				/* script variable */
 	    && current_SID > 0 && current_SID <= ga_scripts.ga_len)
@@ -23125,81 +23202,32 @@ func_alloc()
     return (func_T *) alloc_clear(sizeof(func_T));
 }
 
-/*
- * Call a user function.
- */
     static int
-call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, selfdict)
-    ufunc_T	*fp;		/* pointer to function */
-    typval_T	*rettv;		/* return value */
-    int		argcount;	/* nr of args */
-    typval_T	*argvars;	/* arguments */
-    linenr_T	firstline;	/* first line of range */
-    linenr_T	lastline;	/* last line of range */
-    int		*doesrange;	/* is set to True if function handles range */
-    dict_T	*selfdict;	/* Dictionary for "self" */
+compare_func_pointers(fp1, fp2)
+    void	*fp1;
+    void	*fp2;
 {
-    char_u	*save_sourcing_name;
-    linenr_T	save_sourcing_lnum;
-    scid_T	save_current_SID;
+    return fp1 == fp2;
+}
+
+    static void
+init_funccal_vars(fc, argcount, argvars, firstline, lastline, selfdict, args,
+	initl)
     funccall_T	*fc;
-    int		save_did_emsg;
-    static int	depth = 0;
+    int		argcount;
+    typval_T	*argvars;
+    linenr_T	firstline;
+    linenr_T	lastline;
+    dict_T	*selfdict;
+    garray_T	*args;
+    int		initl; /* TRUE if l: variables should be initialized */
+{
     dictitem_T	*v;
+    char_u	*name;
+    char_u	numbuf[NUMBUFLEN];
     int		fixvar_idx = 0;	/* index in fixvar[] */
     int		i;
     int		ai;
-    char_u	numbuf[NUMBUFLEN];
-    char_u	*name;
-#ifdef FEAT_PROFILE
-    proftime_T	wait_start;
-    proftime_T	call_start;
-#endif
-
-    /* If depth of calling is getting too high, don't execute the function */
-    if (depth >= p_mfd)
-    {
-	EMSG(_("E132: Function call depth is higher than 'maxfuncdepth'"));
-	rettv->v_type = VAR_NUMBER;
-	rettv->vval.v_number = -1;
-	return ERROR_OTHER;
-    }
-    ++depth;
-
-    line_breakcheck();		/* check for CTRL-C hit */
-
-    if (argcount < fp->uf_args.ga_len)
-	return ERROR_TOOFEW;
-    else if (!fp->uf_varargs && argcount > fp->uf_args.ga_len)
-	return ERROR_TOOMANY;
-    else if ((fp->uf_flags & FC_DICT) && selfdict == NULL)
-	return ERROR_DICT;
-
-    if (fp->uf_flags & FC_RANGE)
-	*doesrange = TRUE;
-
-    /* Do not allow destroying function while it is in use */
-    ++fp->uf_func->fv_refcount;
-    /*
-     * Save and restore search patterns, script variables and
-     * redo buffer.
-     */
-    save_search_patterns();
-    saveRedobuff();
-
-    fc = (funccall_T *)alloc(sizeof(funccall_T));
-    fc->caller = current_funccal;
-    current_funccal = fc;
-    fc->func = fp;
-    fc->rettv = rettv;
-    rettv->vval.v_number = 0;
-    fc->linenr = 0;
-    fc->returned = FALSE;
-    fc->level = ex_nesting_level;
-    /* Check if this function has a breakpoint. */
-    fc->breakpoint = dbg_find_breakpoint(FALSE, fp->uf_name, (linenr_T)0);
-    fc->dbg_tick = debug_tick;
-
     /*
      * Note about using fc->fixvar[]: This is an array of FIXVAR_CNT variables
      * with names up to VAR_SHORT_LEN long.  This avoids having to alloc/free
@@ -23208,20 +23236,23 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
     /*
      * Init l: variables.
      */
-    init_var_dict(&fc->l_vars, &fc->l_vars_var, VAR_DEF_SCOPE);
-    if (selfdict != NULL)
+    if (initl)
     {
-	/* Set l:self to "selfdict".  Use "name" to avoid a warning from
-	 * some compiler that checks the destination size. */
-	v = &fc->fixvar[fixvar_idx++].var;
-	name = v->di_key;
-	STRCPY(name, "self");
-	v->di_flags = DI_FLAGS_RO + DI_FLAGS_FIX;
-	hash_add(&fc->l_vars.dv_hashtab, DI2HIKEY(v));
-	v->di_tv.v_type = VAR_DICT;
-	v->di_tv.v_lock = 0;
-	v->di_tv.vval.v_dict = selfdict;
-	++selfdict->dv_refcount;
+	init_var_dict(&fc->l_vars, &fc->l_vars_var, VAR_DEF_SCOPE);
+	if (selfdict != NULL)
+	{
+	    /* Set l:self to "selfdict".  Use "name" to avoid a warning from
+	     * some compiler that checks the destination size. */
+	    v = &fc->fixvar[fixvar_idx++].var;
+	    name = v->di_key;
+	    STRCPY(name, "self");
+	    v->di_flags = DI_FLAGS_RO + DI_FLAGS_FIX;
+	    hash_add(&fc->l_vars.dv_hashtab, DI2HIKEY(v));
+	    v->di_tv.v_type = VAR_DICT;
+	    v->di_tv.v_lock = 0;
+	    v->di_tv.vval.v_dict = selfdict;
+	    ++selfdict->dv_refcount;
+	}
     }
 
     /*
@@ -23231,7 +23262,8 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
      */
     init_var_dict(&fc->l_avars, &fc->l_avars_var, VAR_SCOPE);
     add_nr_var(&fc->l_avars, &fc->fixvar[fixvar_idx++].var, "0",
-				(varnumber_T)(argcount - fp->uf_args.ga_len));
+				(varnumber_T)(argcount - args->ga_len));
+
     /* Use "name" to avoid a warning from some compiler that checks the
      * destination size. */
     v = &fc->fixvar[fixvar_idx++].var;
@@ -23255,12 +23287,13 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 						      (varnumber_T)firstline);
     add_nr_var(&fc->l_avars, &fc->fixvar[fixvar_idx++].var, "lastline",
 						       (varnumber_T)lastline);
+
     for (i = 0; i < argcount; ++i)
     {
-	ai = i - fp->uf_args.ga_len;
+	ai = i - args->ga_len;
 	if (ai < 0)
 	    /* named argument a:name */
-	    name = FUNCARG(fp, i);
+	    name = ((char_u **)args->ga_data)[i];
 	else
 	{
 	    /* "..." argument a:1, a:2, etc. */
@@ -23295,6 +23328,91 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 	    fc->l_listitems[ai].li_tv.v_lock = VAR_FIXED;
 	}
     }
+}
+
+#define CAN_FREE_FUNCCALL_REFS(fc) \
+    (fc->l_varlist.lv_refcount == DO_NOT_FREE_CNT \
+     && (fc->islambda || fc->l_vars.dv_refcount == DO_NOT_FREE_CNT) \
+     && fc->l_avars.dv_refcount == DO_NOT_FREE_CNT)
+
+/*
+ * Call a user function.
+ */
+    static int
+call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange,
+	selfdict)
+    ufunc_T	*fp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
+    int		argcount;	/* nr of args */
+    typval_T	*argvars;	/* arguments */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* is set to True if function handles range */
+    dict_T	*selfdict;	/* Dictionary for "self" */
+{
+    char_u	*save_sourcing_name;
+    linenr_T	save_sourcing_lnum;
+    scid_T	save_current_SID;
+    funccall_T	*fc;
+    int		save_did_emsg;
+    static int	depth = 0;
+    int		i;
+    int		ai;
+#ifdef FEAT_PROFILE
+    proftime_T	wait_start;
+    proftime_T	call_start;
+#endif
+
+    /* If depth of calling is getting too high, don't execute the function */
+    /* Note: lambdas are ignored when computing depth */
+    if (depth >= p_mfd)
+    {
+	EMSG(_("E132: Function call depth is higher than 'maxfuncdepth'"));
+	rettv->v_type = VAR_NUMBER;
+	rettv->vval.v_number = -1;
+	return ERROR_OTHER;
+    }
+    ++depth;
+
+    line_breakcheck();		/* check for CTRL-C hit */
+
+    if (argcount < fp->uf_args.ga_len)
+	return ERROR_TOOFEW;
+    else if (!fp->uf_varargs && argcount > fp->uf_args.ga_len)
+	return ERROR_TOOMANY;
+    else if ((fp->uf_flags & FC_DICT) && selfdict == NULL)
+	return ERROR_DICT;
+
+    if (fp->uf_flags & FC_RANGE)
+	*doesrange = TRUE;
+
+    /* Do not allow destroying function while it is in use */
+    ++fp->uf_func->fv_refcount;
+    /*
+     * Save and restore search patterns, script variables and
+     * redo buffer.
+     */
+    save_search_patterns();
+    saveRedobuff();
+
+    fc = (funccall_T *)alloc(sizeof(funccall_T));
+    fc->caller = current_funccal;
+    current_funccal = fc;
+    fc->islambda = FALSE;
+    fc->func = fp;
+    fc->profiling = fp->uf_profiling;
+    fc->name = fp->uf_name;
+    fc->rettv = rettv;
+    rettv->vval.v_number = 0;
+    fc->linenr = 0;
+    fc->returned = FALSE;
+    fc->level = ex_nesting_level;
+    /* Check if this function has a breakpoint. */
+    fc->breakpoint = dbg_find_breakpoint(FALSE, fp->uf_name, (linenr_T)0);
+    fc->dbg_tick = debug_tick;
+
+    init_funccal_vars(fc, argcount, argvars, firstline, lastline, selfdict,
+	    &fp->uf_args, TRUE);
 
     /* Don't redraw while executing the function. */
     ++RedrawingDisabled;
@@ -23361,7 +23479,7 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 	if (!fp->uf_profiling && has_profiling(FALSE, fp->uf_name, NULL))
 	    func_do_profile(fp);
 	if (fp->uf_profiling
-		    || (fc->caller != NULL && fc->caller->func->uf_profiling))
+		    || (fc->caller != NULL && fc->caller->profiling))
 	{
 	    ++fp->uf_tm_count;
 	    profile_start(&call_start);
@@ -23392,13 +23510,13 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 
 #ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES && (fp->uf_profiling
-		    || (fc->caller != NULL && fc->caller->func->uf_profiling)))
+		    || (fc->caller != NULL && fc->caller->profiling)))
     {
 	profile_end(&call_start);
 	profile_sub_wait(&wait_start, &call_start);
 	profile_add(&fp->uf_tm_total, &call_start);
 	profile_self(&fp->uf_tm_self, &call_start, &fp->uf_tm_children);
-	if (fc->caller != NULL && fc->caller->func->uf_profiling)
+	if (fc->caller != NULL && fc->caller->profiling)
 	{
 	    profile_add(&fc->caller->func->uf_tm_children, &call_start);
 	    profile_add(&fc->caller->func->uf_tml_children, &call_start);
@@ -23472,9 +23590,7 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 
     /* If the a:000 list and the l: and a: dicts are not referenced we can
      * free the funccall_T and what's in it. */
-    if (fc->l_varlist.lv_refcount == DO_NOT_FREE_CNT
-	    && fc->l_vars.dv_refcount == DO_NOT_FREE_CNT
-	    && fc->l_avars.dv_refcount == DO_NOT_FREE_CNT)
+    if (CAN_FREE_FUNCCALL_REFS(fc))
     {
 	free_funccal(fc, FALSE);
     }
@@ -23483,6 +23599,7 @@ call_user_func(fp, rettv, argcount, argvars, firstline, lastline, doesrange, sel
 	hashitem_T	*hi;
 	listitem_T	*li;
 	int		todo;
+	dictitem_T	*v;
 
 	/* "fc" is still in use.  This can happen when returning "a:000" or
 	 * assigning "l:" to a global variable.
@@ -23588,14 +23705,6 @@ dealloc_user_func(fp)
     vim_free(fp);
 }
 
-    static int
-compare_user_funcs(fp1, fp2)
-    ufunc_T	*fp1;
-    ufunc_T	*fp2;
-{
-    return fp1 == fp2;
-}
-
     static char_u *
 name_user_func(fp)
     ufunc_T	*fp;
@@ -23617,9 +23726,131 @@ static funcdef_T user_func_type = {
     (function_caller)		call_user_func,		/* fd_call */
     (function_representer)	repr_user_func,		/* fd_repr */
     (function_destructor)	dealloc_user_func,	/* fd_dealloc */
-    (function_cmp)		compare_user_funcs,	/* fd_compare */
+    (function_cmp)		compare_func_pointers,	/* fd_compare */
     (function_representer)	name_user_func,		/* fd_name */
     (function_representer)	type_user_func,		/* fd_type */
+};
+
+
+static char_u	*lambda_type_name = "lambda";
+#define LAMBDA_TYPE_LEN 6
+
+    static int
+call_lambda(lfp, rettv, argcount, argvars, firstline, lastline, doesrange,
+	selfdict)
+    lambda_T	*lfp;		/* pointer to function */
+    typval_T	*rettv;		/* return value */
+    int		argcount;	/* nr of args */
+    typval_T	*argvars;	/* arguments */
+    linenr_T	firstline;	/* first line of range */
+    linenr_T	lastline;	/* last line of range */
+    int		*doesrange;	/* is set to True if function handles range */
+    dict_T	*selfdict;	/* Dictionary for "self" */
+{
+    funccall_T	*fc;
+    int		ret = OK;
+    char_u	*p;
+
+    *doesrange = FALSE;
+
+    if (argcount < lfp->lf_args.ga_len)
+	return ERROR_TOOFEW;
+    else if (!lfp->lf_varargs && argcount > lfp->lf_args.ga_len)
+	return ERROR_TOOMANY;
+
+    fc = (funccall_T *) alloc(sizeof(funccall_T));
+    if (fc == NULL)
+	return ERROR_OTHER;
+    fc->caller = current_funccal;
+    current_funccal = fc;
+    fc->islambda = TRUE;
+    fc->func = (ufunc_T *) lfp;
+    fc->rettv = rettv;
+    rettv->vval.v_number = 0;
+    fc->linenr = 0;
+    fc->returned = FALSE;
+    fc->level = ex_nesting_level;
+    fc->breakpoint = 0;
+    fc->dbg_tick = 0;
+    fc->profiling = FALSE;
+    fc->name = lambda_type_name;
+    ++lfp->lf_func->fv_refcount;
+
+    init_funccal_vars(fc, argcount, argvars, 0, 0, selfdict,
+	    &lfp->lf_args, FALSE);
+
+    if (lfp->lf_fc)
+    {
+	fc->l_vars = lfp->lf_fc->l_vars;
+	fc->l_vars_var = lfp->lf_fc->l_vars_var;
+    }
+    else
+    {
+	fc->l_vars_var.di_tv.v_type = VAR_UNKNOWN;
+    }
+    ++lfp->lf_vars->dv_refcount;
+
+    p = lfp->lf_expr;
+    ret = eval1(&p, rettv, TRUE);
+    if (ret == FAIL || *p != NUL)
+    {
+	if (ret != FAIL)
+	    clear_tv(rettv);
+	if (!aborting())
+	    EMSG2(_(e_invexpr2), lfp->lf_expr);
+	ret = FAIL;
+    }
+
+    current_funccal = fc->caller;
+    if (CAN_FREE_FUNCCALL_REFS(fc))
+    {
+	free_funccal(fc, FALSE);
+    }
+    --lfp->lf_func->fv_refcount;
+    --lfp->lf_vars->dv_refcount;
+    return ret == FAIL ? ERROR_OTHER : ERROR_NONE;
+}
+
+    static char_u *
+repr_lambda(lfp)
+    lambda_T	*lfp;
+{
+    /* FIXME */
+    return NULL;
+}
+
+    static void
+dealloc_lambda(lfp)
+    lambda_T	*lfp;
+{
+    dict_unref(lfp->lf_vars);
+    dict_unref(lfp->lf_avars);
+    if (lfp->lf_fc != NULL && CAN_FREE_FUNCCALL_REFS(lfp->lf_fc))
+	free_funccal(lfp->lf_fc, FALSE);
+    vim_free(lfp);
+}
+
+    static char_u *
+name_lambda(lfp)
+    lambda_T	*lfp;
+{
+    return lambda_type_name;
+}
+
+    static char_u *
+type_lambda(lfp)
+    lambda_T	*lfp UNUSED;
+{
+    return vim_strnsave(lambda_type_name, LAMBDA_TYPE_LEN);
+}
+
+static funcdef_T lambda_func_type = {
+    (function_caller)		call_lambda,		/* fd_call */
+    (function_representer)	repr_lambda,		/* fd_repr */
+    (function_destructor)	dealloc_lambda,		/* fd_dealloc */
+    (function_cmp)		compare_func_pointers,	/* fd_compare */
+    (function_representer)	name_lambda,		/* fd_name */
+    (function_representer)	type_lambda,		/* fd_type */
 };
 
 /*
@@ -23632,7 +23863,7 @@ can_free_funccal(fc, copyID)
     int		copyID;
 {
     return (fc->l_varlist.lv_copyID != copyID
-	    && fc->l_vars.dv_copyID != copyID
+	    && (fc->islambda || fc->l_vars.dv_copyID != copyID)
 	    && fc->l_avars.dv_copyID != copyID);
 }
 
@@ -23651,7 +23882,8 @@ free_funccal(fc, free_val)
     vars_clear_ext(&fc->l_avars.dv_hashtab, free_val);
 
     /* free all l: variables */
-    vars_clear(&fc->l_vars.dv_hashtab);
+    if (!fc->islambda)
+	vars_clear(&fc->l_vars.dv_hashtab);
 
     /* Free the a:000 variables if they were allocated. */
     if (free_val)
