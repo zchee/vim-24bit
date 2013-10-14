@@ -1622,10 +1622,14 @@ append_redir(buf, buflen, opt, fname)
     char_u	*end;
 
     end = buf + STRLEN(buf);
-    /* find "%s", skipping "%%" */
+    /* find "%s" */
     for (p = opt; (p = vim_strchr(p, '%')) != NULL; ++p)
-	if (p[1] == 's')
+    {
+	if (p[1] == 's') /* found %s */
 	    break;
+	if (p[1] == '%') /* skip %% */
+	    ++p;
+    }
     if (p != NULL)
     {
 	*end = ' '; /* not really needed? Not with sh, ksh or bash */
@@ -3448,9 +3452,15 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 		    curwin->w_buffer = buf;
 		    curbuf = buf;
 		    ++curbuf->b_nwindows;
-		    /* set 'fileformat' */
-		    if (*p_ffs && !oldbuf)
-			set_fileformat(default_fileformat(), OPT_LOCAL);
+
+		    /* Set 'fileformat', 'binary' and 'fenc' when forced. */
+		    if (!oldbuf && eap != NULL)
+		    {
+			set_file_options(TRUE, eap);
+#ifdef FEAT_MBYTE
+			set_forced_fenc(eap);
+#endif
+		    }
 		}
 
 		/* May get the window options from the last time this buffer
@@ -4730,11 +4740,17 @@ do_sub(eap)
 			    char_u	*resp;
 			    colnr_T	sc, ec;
 
-			    print_line_no_prefix(lnum, FALSE, FALSE);
+			    print_line_no_prefix(lnum, do_number, do_list);
 
 			    getvcol(curwin, &curwin->w_cursor, &sc, NULL, NULL);
 			    curwin->w_cursor.col = regmatch.endpos[0].col - 1;
 			    getvcol(curwin, &curwin->w_cursor, NULL, NULL, &ec);
+			    if (do_number || curwin->w_p_nu)
+			    {
+				int numw = number_width(curwin) + 1;
+				sc += numw;
+				ec += numw;
+			    }
 			    msg_start();
 			    for (i = 0; i < (long)sc; ++i)
 				msg_putchar(' ');
@@ -5914,14 +5930,14 @@ find_help_tags(arg, num_matches, matches, keep_lang)
     int		i;
     static char *(mtable[]) = {"*", "g*", "[*", "]*", ":*",
 			       "/*", "/\\*", "\"*", "**",
-			       "cpo-*", "/\\(\\)",
+			       "cpo-*", "/\\(\\)", "/\\%(\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
 			       "/\\?", "/\\z(\\)", "\\=", ":s\\=",
 			       "[count]", "[quotex]", "[range]",
 			       "[pattern]", "\\|", "\\%$"};
     static char *(rtable[]) = {"star", "gstar", "[star", "]star", ":star",
 			       "/star", "/\\\\star", "quotestar", "starstar",
-			       "cpo-star", "/\\\\(\\\\)",
+			       "cpo-star", "/\\\\(\\\\)", "/\\\\%(\\\\)",
 			       "?", ":?", "?<CR>", "g?", "g?g?", "g??", "z?",
 			       "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
 			       "\\[count]", "\\[quotex]", "\\[range]",
@@ -6009,8 +6025,8 @@ find_help_tags(arg, num_matches, matches, keep_lang)
 	    if (*s < ' ' || (*s == '^' && s[1] && (ASCII_ISALPHA(s[1])
 			   || vim_strchr((char_u *)"?@[\\]^", s[1]) != NULL)))
 	    {
-		if (d > IObuff && d[-1] != '_')
-		    *d++ = '_';		/* prepend a '_' */
+		if (d > IObuff && d[-1] != '_' && d[-1] != '\\')
+		    *d++ = '_';		/* prepend a '_' to make x_CTRL-x */
 		STRCPY(d, "CTRL-");
 		d += 5;
 		if (*s < ' ')

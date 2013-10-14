@@ -811,6 +811,7 @@ python3_end()
 	PyGILState_Ensure();
 
 	Py_Finalize();
+	pyquit = TRUE;
     }
 
 #ifdef DYNAMIC_PYTHON3

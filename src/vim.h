@@ -1868,6 +1868,13 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 #define VV_WINDOWID	55
 #define VV_LEN		56	/* number of v: vars */
 
+/* defines for deref_func_name flags */
+#define DF_CHECK_VAR		0x1
+#define DF_RUN_EVENT		0x2
+#define DF_CREATE_AUTOLOAD	0x4
+#define DF_ALL			DF_CHECK_VAR|DF_RUN_EVENT|DF_CREATE_AUTOLOAD
+#define DF_NO_VAR		DF_RUN_EVENT|DF_CREATE_AUTOLOAD
+
 #ifdef FEAT_CLIPBOARD
 
 /* VIM_ATOM_NAME is the older Vim-specific selection type for X11.  Still
@@ -2180,10 +2187,6 @@ typedef int VimClipboard;	/* This is required for the prototypes. */
   /* Borland has the structure stati64 but not _stati64 */
 #  define _stati64 stati64
 # endif
-
-# include <EXTERN.h>
-# include <perl.h>
-# include <XSUB.h>
 #endif
 
 /* values for vim_handle_signal() that are not a signal */

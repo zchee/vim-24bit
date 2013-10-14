@@ -1,0 +1,123 @@
+{{{1 Deleting function from inside its call
+Regular return
+
+{{{1 Using old definition of replaced function
+Old definition
+New definition
+
+{{{1 Using reference to deleted function
+Regular return
+
+{{{1 Anonymous function representation
+function('1')
+function('1')
+
+{{{1 Function names, including anonymous functions
+
+   function d.F() dict
+1      throw 2233
+   endfunction
+   function Fu()
+1      throw 222
+   endfunction
+   function Fu()
+1      throw 222
+   endfunction
+   function g:Fu()
+1      throw 444
+   endfunction
+2233
+222
+[]
+
+{{{1 Deleting anonymous functions
+
+Vim(delfunction):E130: Unknown function: g:F
+{{{ Running function. This fold must be empty
+
+}}}
+
+{{{1 Funcref comparison, string(function('s:Func'))
+Fref1: function('<SNR>1_Func')
+Fref2: function('<SNR>1_Func')
+Fref3: function('<SNR>1_Func')
+Fref1<>Fref2: 11
+Fref2<>Fref3: 11
+Fref1<>Fref3: 11
+Fref1==Fref2: 11
+Fref1!=Fref2: 00
+Fref(): 333
+eval(string(Fref))(): 333
+eval(string(Fref).'()'): 333
+Put from nnoremap: 3
+
+   function <SNR>1_Func()
+1      return 3
+   endfunction
+{{{ Running delfunction s:Func. This fold must be empty
+
+}}}
+
+{{{1 Self-referencing variables
+{'def': 2}
+Called updatedeplen: 'abc', 1, {}
+{'def': 2, 'abc': 1}
+
+{{{1 exists('*...')
+funcexists(tr):1
+funcexists(s:funcexists):1
+funcexists(d.F):1
+exists('*d.n'):0
+exists('*d.s'):0
+exists('*d.F'):1
+exists('*d.l'):0
+exists('*d.d'):0
+{{{ Running puts. This fold must be empty
+
+}}}
+
+{{{1 sort(, Fref)
+[56, 35, 44, 23, 1, 60]
+[18, 56, 35, 44, 23, 1, 60]
+function('<SNR>1_cmp')
+{{{ Running sort. This fold must be empty
+
+}}}
+
+{{{1 function('filename#funcname'), :func AuFref
+Difference between :scriptnames lengths: 0
+Vim(function):E123: Undefined function: <SNR>1_F
+s:F(): 0
+
+   function test#function()
+   endfunction
+
+{{{1 Autoloading unexisting function
+Vim(call):E700: Unknown function: test2#unknown
+
+{{{1 Illegal function names
+Vim(let):E700: Unknown function: <>#<>
+Vim(let):E700: Unknown function: g:1file#function
+Vim(let):E700: Unknown function: #file#function
+function('g:file#varname')
+
+{{{1 Double loading of autoload scripts
+
+Loading test3.vim
+
+{{{1 functype() function
+function('tr'): internal
+function('T'): user
+Running let F=function('test#function')
+F: function('test#function'): autoload
+Running call F()
+F: function('test#function'): autoload:user
+Running delfunction test#function
+Running let F=function('Test100#function')
+F: function('Test100#function'): autoload
+Running let Test100#function=function('Test100#function2')
+Vim(call):E700: Unknown function: Test100#function2
+F: function('Test100#function'): autoload:autoload
+Running let Test100#function2=function('test#function')
+Running call F()
+F: function('Test100#function'): autoload:autoload:autoload:user

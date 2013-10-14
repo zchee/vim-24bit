@@ -852,6 +852,7 @@ python_end()
 	Python_RestoreThread();	    /* enter python */
 # endif
 	Py_Finalize();
+	pyquit = TRUE;
     }
     end_dynamic_python();
 #else
@@ -863,6 +864,7 @@ python_end()
 	Python_RestoreThread();	    /* enter python */
 # endif
 	Py_Finalize();
+	pyquit = TRUE;
     }
 #endif
 
