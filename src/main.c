@@ -1048,7 +1048,7 @@ main_loop(cmdwin, noexmode)
     /* Setup to catch a terminating error from the X server.  Just ignore
      * it, restore the state and continue.  This might not always work
      * properly, but at least we don't exit unexpectedly when the X server
-     * exists while Vim is running in a console. */
+     * exits while Vim is running in a console. */
     if (!cmdwin && !noexmode && SETJMP(x_jump_env))
     {
 	State = NORMAL;
