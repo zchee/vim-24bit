@@ -524,6 +524,21 @@ vim.foreach_rtp(int, 2):TypeError:('foreach_rtp() takes exactly one argument (2 
 import xxx_no_such_module_xxx:ImportError:('No module named xxx_no_such_module_xxx',)
 import failing_import:ImportError:('No module named failing_import',)
 import failing:NotImplementedError:()
+> Options
+>> OptionsItem
+vim.options["abcQ"]:KeyError:('abcQ',)
+vim.options[""]:ValueError:('empty keys are not allowed',)
+>>> Testing StringToChars using vim.options[%s]
+vim.options[1]:TypeError:('expected str() or unicode() instance, but got int',)
+vim.options[u"\0"]:TypeError:('expected string without null bytes',)
+vim.options["\0"]:TypeError:('expected string without null bytes',)
+<<< Finished
+>> OptionsContains
+>>> Testing StringToChars using %s in vim.options
+1 in vim.options:TypeError:('expected str() or unicode() instance, but got int',)
+u"\0" in vim.options:TypeError:('expected string without null bytes',)
+"\0" in vim.options:TypeError:('expected string without null bytes',)
+<<< Finished
 > Dictionary
 >> DictionaryConstructor
 vim.Dictionary("abcI"):ValueError:('expected sequence element of size 2, but got sequence of size 1',)
