@@ -513,6 +513,21 @@ vim.foreach_rtp(int, 2):(<class 'TypeError'>, TypeError('foreach_rtp() takes exa
 import xxx_no_such_module_xxx:(<class 'ImportError'>, ImportError('No module named xxx_no_such_module_xxx',))
 import failing_import:(<class 'ImportError'>, ImportError('No module named failing_import',))
 import failing:(<class 'NotImplementedError'>, NotImplementedError())
+> Options
+>> OptionsItem
+vim.options["abcQ"]:(<class 'KeyError'>, KeyError('abcQ',))
+vim.options[""]:(<class 'ValueError'>, ValueError('empty keys are not allowed',))
+>>> Testing StringToChars using vim.options[%s]
+vim.options[1]:(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+vim.options[b"\0"]:(<class 'TypeError'>, TypeError('expected bytes with no null',))
+vim.options["\0"]:(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
+>> OptionsContains
+>>> Testing StringToChars using %s in vim.options
+1 in vim.options:(<class 'TypeError'>, TypeError('expected bytes() or str() instance, but got int',))
+b"\0" in vim.options:(<class 'TypeError'>, TypeError('expected bytes with no null',))
+"\0" in vim.options:(<class 'TypeError'>, TypeError('expected bytes with no null',))
+<<< Finished
 > Dictionary
 >> DictionaryConstructor
 vim.Dictionary("abcI"):(<class 'ValueError'>, ValueError('expected sequence element of size 2, but got sequence of size 1',))

@@ -1031,6 +1031,13 @@ ee('import failing_import')
 ee('import failing')
 vim.options['rtp'] = old_rtp
 del old_rtp
+cb.append("> Options")
+cb.append(">> OptionsItem")
+ee('vim.options["abcQ"]')
+ee('vim.options[""]')
+stringtochars_test('vim.options[%s]')
+cb.append(">> OptionsContains")
+stringtochars_test('%s in vim.options')
 cb.append("> Dictionary")
 cb.append(">> DictionaryConstructor")
 ee('vim.Dictionary("abcI")')
