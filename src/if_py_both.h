@@ -2830,6 +2830,33 @@ OptionsItem(OptionsObject *self, PyObject *keyObject)
     }
 }
 
+    static int
+OptionsContains(OptionsObject *self, PyObject *keyObject)
+{
+    char_u	*key;
+    PyObject	*todecref;
+
+    if (!(key = StringToChars(keyObject, &todecref)))
+	return -1;
+
+    if (*key == NUL)
+    {
+	Py_XDECREF(todecref);
+	return 0;
+    }
+
+    if (get_option_value_strict(key, NULL, NULL, self->opt_type, NULL))
+    {
+	Py_XDECREF(todecref);
+	return 1;
+    }
+    else
+    {
+	Py_XDECREF(todecref);
+	return 0;
+    }
+}
+
 typedef struct
 {
     void	*lastoption;
@@ -3022,6 +3049,19 @@ OptionsAssItem(OptionsObject *self, PyObject *keyObject, PyObject *valObject)
 
     return ret;
 }
+
+static PySequenceMethods OptionsAsSeq = {
+    0,					/* sq_length */
+    0,					/* sq_concat */
+    0,					/* sq_repeat */
+    0,					/* sq_item */
+    0,					/* sq_slice */
+    0,					/* sq_ass_item */
+    0,					/* sq_ass_slice */
+    (objobjproc) OptionsContains,	/* sq_contains */
+    0,					/* sq_inplace_concat */
+    0,					/* sq_inplace_repeat */
+};
 
 static PyMappingMethods OptionsAsMapping = {
     (lenfunc)       NULL,
@@ -5913,6 +5953,7 @@ init_structs(void)
     vim_memset(&OptionsType, 0, sizeof(OptionsType));
     OptionsType.tp_name = "vim.options";
     OptionsType.tp_basicsize = sizeof(OptionsObject);
+    OptionsType.tp_as_sequence = &OptionsAsSeq;
     OptionsType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC;
     OptionsType.tp_doc = "object for manipulating options";
     OptionsType.tp_iter = (getiterfunc)OptionsIter;
