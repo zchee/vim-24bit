@@ -2708,10 +2708,10 @@ typedef int (*checkfun)(void *);
 typedef struct
 {
     PyObject_HEAD
-    int opt_type;
-    void *from;
-    checkfun Check;
-    PyObject *fromObj;
+    int		opt_type;
+    void	*from;
+    checkfun	Check;
+    PyObject	*fromObj;
 } OptionsObject;
 
     static int
@@ -2828,6 +2828,42 @@ OptionsItem(OptionsObject *self, PyObject *keyObject)
 	PyErr_SET_VIM(N_("internal error: unknown option type"));
 	return NULL;
     }
+}
+
+typedef struct
+{
+    void	*lastoption;
+    int		opt_type;
+} optiterinfo_T;
+
+    static PyObject *
+OptionsIterNext(optiterinfo_T **oii)
+{
+    char_u	*name;
+
+    if ((name = option_iter_next(&((*oii)->lastoption), (*oii)->opt_type)))
+	return PyString_FromString(name);
+
+    return NULL;
+}
+
+    static PyObject *
+OptionsIter(OptionsObject *self)
+{
+    optiterinfo_T	*oii;
+
+    if (!(oii = PyMem_New(optiterinfo_T, 1)))
+    {
+	PyErr_NoMemory();
+	return NULL;
+    }
+
+    oii->opt_type = self->opt_type;
+    oii->lastoption = NULL;
+
+    return IterNew(oii,
+	    (destructorfun) PyMem_Free, (nextfun) OptionsIterNext,
+	    NULL, NULL);
 }
 
     static int
@@ -5879,6 +5915,7 @@ init_structs(void)
     OptionsType.tp_basicsize = sizeof(OptionsObject);
     OptionsType.tp_flags = Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC;
     OptionsType.tp_doc = "object for manipulating options";
+    OptionsType.tp_iter = (getiterfunc)OptionsIter;
     OptionsType.tp_as_mapping = &OptionsAsMapping;
     OptionsType.tp_dealloc = (destructor)OptionsDestructor;
     OptionsType.tp_traverse = (traverseproc)OptionsTraverse;
