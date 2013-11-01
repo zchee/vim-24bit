@@ -485,6 +485,7 @@ EOF
 :   endif
 :   put ='>>> '.oname
 :   $put ='  g/w/b:'.pyeval('oname in gset').'/'.pyeval('oname in wset').'/'.pyeval('oname in bset')
+:   $put ='  g/w/b (in):'.pyeval('oname in gopts1').'/'.pyeval('oname in wopts1').'/'.pyeval('oname in bopts1')
 :   for v in ['gopts1', 'wopts1', 'bopts1']
 :       try
 :           put ='  p/'.v.': '.Ev('repr('.v.'['''.oname.'''])')
