@@ -3330,7 +3330,12 @@ jumpto_tag(lbuf, forceit, keep_help)
 #ifdef FEAT_SEARCH_EXTRA
 	/* restore no_hlsearch when keeping the old search pattern */
 	if (search_options)
+	{
 	    no_hlsearch = save_no_hlsearch;
+# ifdef FEAT_EVAL
+	    set_vim_var_nr(VV_HLSEARCH, !no_hlsearch);
+# endif
+	}
 #endif
 
 	/* Return OK if jumped to another file (at least we found the file!). */
