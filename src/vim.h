@@ -1576,6 +1576,31 @@ typedef UINT32_TYPEDEF UINT32_T;
 #define MSG_PUTS_LONG(s)	    msg_puts_long_attr((char_u *)(s), 0)
 #define MSG_PUTS_LONG_ATTR(s, a)    msg_puts_long_attr((char_u *)(s), (a))
 
+#ifdef FEAT_GUI
+# ifdef FEAT_TERMTRUECOLOR
+#  define GUI_FUNCTION(f)	    (gui.in_use ? gui_##f : termtrue_##f)
+#  define USE_24BIT		    (gui.in_use || p_guicolors)
+# else
+#  define GUI_FUNCTION(f)	    gui_##f
+#  define USE_24BIT		    gui.in_use
+# endif
+#else
+# ifdef FEAT_TERMTRUECOLOR
+#  define GUI_FUNCTION(f)	    termtrue_##f
+#  define USE_24BIT		    p_guicolors
+# endif
+#endif
+#ifdef FEAT_TERMTRUECOLOR
+# define IS_CTERM		    (t_colors > 1 || p_guicolors)
+#else
+# define IS_CTERM		    (t_colors > 1)
+#endif
+#ifdef GUI_FUNCTION
+# define GUI_MCH_GET_RGB	    GUI_FUNCTION(mch_get_rgb)
+# define GUI_MCH_GET_COLOR	    GUI_FUNCTION(mch_get_color)
+# define GUI_GET_COLOR		    GUI_FUNCTION(get_color)
+#endif
+
 /* Prefer using emsg3(), because perror() may send the output to the wrong
  * destination and mess up the screen. */
 #ifdef HAVE_STRERROR
@@ -1864,9 +1889,10 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 #define VV_MOUSE_COL	51
 #define VV_OP		52
 #define VV_SEARCHFORWARD 53
-#define VV_OLDFILES	54
-#define VV_WINDOWID	55
-#define VV_LEN		56	/* number of v: vars */
+#define VV_HLSEARCH	54
+#define VV_OLDFILES	55
+#define VV_WINDOWID	56
+#define VV_LEN		57	/* number of v: vars */
 
 #ifdef FEAT_CLIPBOARD
 
