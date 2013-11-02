@@ -8833,7 +8833,8 @@ get_option_value(name, numval, stringval, opt_flags)
  * opt_type). Uses
  *
  * Returned flags:
- *       0 hidden or unknown option
+ *       0 hidden or unknown option, also option that does not have requested 
+ *         type (see SREQ_* in vim.h)
  *  see SOPT_* in vim.h for other flags
  *
  * Possible opt_type values: see SREQ_* in vim.h
