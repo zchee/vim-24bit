@@ -939,6 +939,12 @@ wait_return(redraw)
 #ifdef USE_ON_FLY_SCROLL
 	dont_scroll = TRUE;		/* disallow scrolling here */
 #endif
+	/* Avoid the sequence that the user types ":" at the hit-return prompt
+	 * to start an Ex command, but the file-changed dialog gets in the
+	 * way. */
+	if (need_check_timestamps)
+	    check_timestamps(FALSE);
+
 	hit_return_msg();
 
 	do
@@ -976,24 +982,37 @@ wait_return(redraw)
 	     */
 	    if (p_more && !p_cp)
 	    {
-		if (c == 'b' || c == 'k' || c == 'u' || c == 'g' || c == K_UP)
+		if (c == 'b' || c == 'k' || c == 'u' || c == 'g'
+						|| c == K_UP || c == K_PAGEUP)
 		{
-		    /* scroll back to show older messages */
-		    do_more_prompt(c);
+		    if (msg_scrolled > Rows)
+			/* scroll back to show older messages */
+			do_more_prompt(c);
+		    else
+		    {
+			msg_didout = FALSE;
+			c = K_IGNORE;
+			msg_col =
+#ifdef FEAT_RIGHTLEFT
+			    cmdmsg_rl ? Columns - 1 :
+#endif
+			    0;
+		    }
 		    if (quit_more)
 		    {
 			c = CAR;		/* just pretend CR was hit */
 			quit_more = FALSE;
 			got_int = FALSE;
 		    }
-		    else
+		    else if (c != K_IGNORE)
 		    {
 			c = K_IGNORE;
 			hit_return_msg();
 		    }
 		}
 		else if (msg_scrolled > Rows - 2
-			 && (c == 'j' || c == K_DOWN || c == 'd' || c == 'f'))
+			 && (c == 'j' || c == 'd' || c == 'f'
+					   || c == K_DOWN || c == K_PAGEDOWN))
 		    c = K_IGNORE;
 	    }
 	} while ((had_got_int && c == Ctrl_C)
@@ -1558,7 +1577,7 @@ str2special(sp, from)
 	{
 	    c = TO_SPECIAL(str[1], str[2]);
 	    str += 2;
-	    if (c == K_ZERO)	/* display <Nul> as ^@ */
+	    if (c == KS_ZERO)	/* display <Nul> as ^@ or <Nul> */
 		c = NUL;
 	}
 	if (IS_SPECIAL(c) || modifiers)	/* special key */
@@ -3048,7 +3067,7 @@ msg_clr_cmdline()
 msg_end()
 {
     /*
-     * if the string is larger than the window,
+     * If the string is larger than the window,
      * or the ruler option is set and we run into it,
      * we have to redraw the window.
      * Do not do this if we are abandoning the file or editing the command line.

@@ -2658,7 +2658,7 @@ slang_clear(lp)
     ga_clear(gap);
 
     for (i = 0; i < lp->sl_prefixcnt; ++i)
-	vim_free(lp->sl_prefprog[i]);
+	vim_regfree(lp->sl_prefprog[i]);
     lp->sl_prefixcnt = 0;
     vim_free(lp->sl_prefprog);
     lp->sl_prefprog = NULL;
@@ -2669,7 +2669,7 @@ slang_clear(lp)
     vim_free(lp->sl_midword);
     lp->sl_midword = NULL;
 
-    vim_free(lp->sl_compprog);
+    vim_regfree(lp->sl_compprog);
     vim_free(lp->sl_comprules);
     vim_free(lp->sl_compstartflags);
     vim_free(lp->sl_compallflags);
@@ -4228,7 +4228,7 @@ did_set_spelllang(wp)
     ga_init2(&ga, sizeof(langp_T), 2);
     clear_midword(wp);
 
-    /* Make a copy of 'spellang', the SpellFileMissing autocommands may change
+    /* Make a copy of 'spelllang', the SpellFileMissing autocommands may change
      * it under our fingers. */
     spl_copy = vim_strsave(wp->w_s->b_p_spl);
     if (spl_copy == NULL)
@@ -5802,7 +5802,7 @@ spell_read_aff(spin, fname)
 					{
 					    sprintf((char *)buf, "^%s",
 							  aff_entry->ae_cond);
-					    vim_free(aff_entry->ae_prog);
+					    vim_regfree(aff_entry->ae_prog);
 					    aff_entry->ae_prog = vim_regcomp(
 						    buf, RE_MAGIC + RE_STRING);
 					}
@@ -6507,7 +6507,7 @@ spell_free_aff(aff)
 		--todo;
 		ah = HI2AH(hi);
 		for (ae = ah->ah_first; ae != NULL; ae = ae->ae_next)
-		    vim_free(ae->ae_prog);
+		    vim_regfree(ae->ae_prog);
 	    }
 	}
 	if (ht == &aff->af_suff)
@@ -7645,7 +7645,7 @@ tree_add_word(spin, word, root, flags, region, affixID)
 
 	/* Compress both trees.  Either they both have many nodes, which makes
 	 * compression useful, or one of them is small, which means
-	 * compression goes fast.  But when filling the souldfold word tree
+	 * compression goes fast.  But when filling the soundfold word tree
 	 * there is no keep-case tree. */
 	wordtree_compress(spin, spin->si_foldroot);
 	if (affixID >= 0)
@@ -8671,7 +8671,7 @@ sug_filltree(spin, slang)
     unsigned	words_done = 0;
     int		wordcount[MAXWLEN];
 
-    /* We use si_foldroot for the souldfolded trie. */
+    /* We use si_foldroot for the soundfolded trie. */
     spin->si_foldroot = wordtree_alloc(spin);
     if (spin->si_foldroot == NULL)
 	return FAIL;
@@ -9054,6 +9054,9 @@ open_spellbuf()
     {
 	buf->b_spell = TRUE;
 	buf->b_p_swf = TRUE;	/* may create a swap file */
+#ifdef FEAT_CRYPT
+	buf->b_p_key = empty_option;
+#endif
 	ml_open(buf);
 	ml_open_file(buf);	/* create swap file now */
     }
@@ -9476,7 +9479,8 @@ spell_add_word(word, len, bad, idx, undo)
 			if (undo)
 			{
 			    home_replace(NULL, fname, NameBuff, MAXPATHL, TRUE);
-			    smsg((char_u *)_("Word removed from %s"), NameBuff);
+			    smsg((char_u *)_("Word '%.*s' removed from %s"),
+							 len, word, NameBuff);
 			}
 		    }
 		    fseek(fd, fpos_next, SEEK_SET);
@@ -9522,7 +9526,7 @@ spell_add_word(word, len, bad, idx, undo)
 	    fclose(fd);
 
 	    home_replace(NULL, fname, NameBuff, MAXPATHL, TRUE);
-	    smsg((char_u *)_("Word added to %s"), NameBuff);
+	    smsg((char_u *)_("Word '%.*s' added to %s"), len, word, NameBuff);
 	}
     }
 
@@ -10132,7 +10136,7 @@ spell_check_sps()
 }
 
 /*
- * "z?": Find badly spelled word under or after the cursor.
+ * "z=": Find badly spelled word under or after the cursor.
  * Give suggestions for the properly spelled word.
  * In Visual mode use the highlighted word as the bad word.
  * When "count" is non-zero use that suggestion.
@@ -13019,7 +13023,7 @@ score_comp_sal(su)
 
 /*
  * Combine the list of suggestions in su->su_ga and su->su_sga.
- * They are intwined.
+ * They are entwined.
  */
     static void
 score_combine(su)
@@ -13457,7 +13461,7 @@ badword:
 
 		/* Add a small penalty for changing the first letter from
 		 * lower to upper case.  Helps for "tath" -> "Kath", which is
-		 * less common thatn "tath" -> "path".  Don't do it when the
+		 * less common than "tath" -> "path".  Don't do it when the
 		 * letter is the same, that has already been counted. */
 		gc = PTR2CHAR(p);
 		if (SPELL_ISUPPER(gc))
@@ -15565,11 +15569,21 @@ ex_spellinfo(eap)
 ex_spelldump(eap)
     exarg_T *eap;
 {
+    char_u  *spl;
+    long    dummy;
+
     if (no_spell_checking(curwin))
 	return;
+    get_option_value((char_u*)"spl", &dummy, &spl, OPT_LOCAL);
 
-    /* Create a new empty buffer by splitting the window. */
+    /* Create a new empty buffer in a new window. */
     do_cmdline_cmd((char_u *)"new");
+
+    /* enable spelling locally in the new window */
+    set_option_value((char_u*)"spell", TRUE, (char_u*)"", OPT_LOCAL);
+    set_option_value((char_u*)"spl",  dummy,         spl, OPT_LOCAL);
+    vim_free(spl);
+
     if (!bufempty() || !buf_valid(curbuf))
 	return;
 

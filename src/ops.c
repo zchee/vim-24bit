@@ -267,6 +267,10 @@ op_shift(oap, curs_top, amount)
     }
 
     changed_lines(oap->start.lnum, 0, oap->end.lnum + 1, 0L);
+#ifdef FEAT_FOLDING
+    /* The cursor line is not in a closed fold */
+    foldOpenCursor();
+#endif
 
 #ifdef FEAT_VISUAL
     if (oap->block_mode)
@@ -398,7 +402,7 @@ shift_block(oap, amount)
 #ifdef FEAT_RIGHTLEFT
     int			old_p_ri = p_ri;
 
-    p_ri = 0;			/* don't want revins in ident */
+    p_ri = 0;			/* don't want revins in indent */
 #endif
 
     State = INSERT;		/* don't want REPLACE for State */
@@ -1016,6 +1020,19 @@ put_register(name, reg)
     /* Send text written to clipboard register to the clipboard. */
     may_set_selection();
 # endif
+}
+
+    void
+free_register(reg)
+    void	*reg;
+{
+    struct yankreg tmp;
+
+    tmp = *y_current;
+    *y_current = *(struct yankreg *)reg;
+    free_yank_all();
+    vim_free(reg);
+    *y_current = tmp;
 }
 #endif
 
@@ -2194,7 +2211,8 @@ op_replace(oap, c)
 		{
 		    /* This is slow, but it handles replacing a single-byte
 		     * with a multi-byte and the other way around. */
-		    oap->end.col += (*mb_char2len)(c) - (*mb_char2len)(n);
+		    if (curwin->w_cursor.lnum == oap->end.lnum)
+			oap->end.col += (*mb_char2len)(c) - (*mb_char2len)(n);
 		    n = State;
 		    State = REPLACE;
 		    ins_char(c);
@@ -2411,8 +2429,13 @@ swapchars(op_type, pos, length)
     {
 # ifdef FEAT_MBYTE
 	if (has_mbyte)
+	{
+	    int len = (*mb_ptr2len)(ml_get_pos(pos));
+
 	    /* we're counting bytes, not characters */
-	    todo -= (*mb_ptr2len)(ml_get_pos(pos)) - 1;
+	    if (len > 0)
+		todo -= len - 1;
+	}
 # endif
 	did_change |= swapchar(op_type, pos);
 	if (inc(pos) == -1)    /* at end of file */
@@ -2873,7 +2896,7 @@ free_yank_all()
  * register and then concatenate the old and the new one (so we keep the old
  * one in case of out-of-memory).
  *
- * return FAIL for failure, OK otherwise
+ * Return FAIL for failure, OK otherwise.
  */
     int
 op_yank(oap, deleting, mess)
@@ -3483,7 +3506,9 @@ do_put(regname, dir, count, flags)
 #endif
 	if (dir == FORWARD)
 	    ++lnum;
-	if (u_save(lnum - 1, lnum) == FAIL)
+	/* In an empty buffer the empty line is going to be replaced, include
+	 * it in the saved lines. */
+	if ((bufempty() ? u_save(0, 2) : u_save(lnum - 1, lnum)) == FAIL)
 	    goto end;
 #ifdef FEAT_FOLDING
 	if (dir == FORWARD)
@@ -3751,25 +3776,39 @@ do_put(regname, dir, count, flags)
 	 */
 	if (y_type == MCHAR && y_size == 1)
 	{
-	    totlen = count * yanklen;
-	    if (totlen)
-	    {
-		oldp = ml_get(lnum);
-		newp = alloc_check((unsigned)(STRLEN(oldp) + totlen + 1));
-		if (newp == NULL)
-		    goto end;		/* alloc() will give error message */
-		mch_memmove(newp, oldp, (size_t)col);
-		ptr = newp + col;
-		for (i = 0; i < count; ++i)
+	    do {
+		totlen = count * yanklen;
+		if (totlen > 0)
 		{
-		    mch_memmove(ptr, y_array[0], (size_t)yanklen);
-		    ptr += yanklen;
+		    oldp = ml_get(lnum);
+		    newp = alloc_check((unsigned)(STRLEN(oldp) + totlen + 1));
+		    if (newp == NULL)
+			goto end;	/* alloc() gave an error message */
+		    mch_memmove(newp, oldp, (size_t)col);
+		    ptr = newp + col;
+		    for (i = 0; i < count; ++i)
+		    {
+			mch_memmove(ptr, y_array[0], (size_t)yanklen);
+			ptr += yanklen;
+		    }
+		    STRMOVE(ptr, oldp + col);
+		    ml_replace(lnum, newp, FALSE);
+		    /* Place cursor on last putted char. */
+		    if (lnum == curwin->w_cursor.lnum)
+			curwin->w_cursor.col += (colnr_T)(totlen - 1);
 		}
-		STRMOVE(ptr, oldp + col);
-		ml_replace(lnum, newp, FALSE);
-		/* Put cursor on last putted char. */
-		curwin->w_cursor.col += (colnr_T)(totlen - 1);
-	    }
+#ifdef FEAT_VISUAL
+		if (VIsual_active)
+		    lnum++;
+#endif
+	    } while (
+#ifdef FEAT_VISUAL
+		    VIsual_active && lnum <= curbuf->b_visual.vi_end.lnum
+#else
+		    FALSE /* stop after 1 paste */
+#endif
+		    );
+
 	    curbuf->b_op_end = curwin->w_cursor;
 	    /* For "CTRL-O p" in Insert mode, put cursor after last char */
 	    if (totlen && (restart_edit != 0 || (flags & PUT_CURSEND)))
@@ -3929,6 +3968,10 @@ end:
 	vim_free(insert_string);
     if (regname == '=')
 	vim_free(y_array);
+
+#ifdef FEAT_VISUAL
+    VIsual_active = FALSE;
+#endif
 
     /* If the cursor is past the end of the line put it at the end. */
     adjust_cursor_eol();
@@ -4946,7 +4989,7 @@ format_lines(line_count, avoid_fex)
 
 	    /*
 	     * When still in same paragraph, join the lines together.  But
-	     * first delete the comment leader from the second line.
+	     * first delete the leader from the second line.
 	     */
 	    if (!is_end_par)
 	    {
@@ -4956,11 +4999,25 @@ format_lines(line_count, avoid_fex)
 		if (line_count < 0 && u_save_cursor() == FAIL)
 		    break;
 #ifdef FEAT_COMMENTS
-		(void)del_bytes((long)next_leader_len, FALSE, FALSE);
 		if (next_leader_len > 0)
+		{
+		    (void)del_bytes((long)next_leader_len, FALSE, FALSE);
 		    mark_col_adjust(curwin->w_cursor.lnum, (colnr_T)0, 0L,
 						      (long)-next_leader_len);
+		} else
 #endif
+		    if (second_indent > 0)  /* the "leader" for FO_Q_SECOND */
+		{
+		    char_u *p = ml_get_curline();
+		    int indent = skipwhite(p) - p;
+
+		    if (indent > 0)
+		    {
+			(void)del_bytes(indent, FALSE, FALSE);
+			mark_col_adjust(curwin->w_cursor.lnum,
+					       (colnr_T)0, 0L, (long)-indent);
+		      }
+		}
 		curwin->w_cursor.lnum--;
 		if (do_join(2, TRUE, FALSE, FALSE) == FAIL)
 		{
@@ -5828,6 +5885,8 @@ x11_export_final_selection()
 					       && len < 1024*1024 && len > 0)
     {
 #ifdef FEAT_MBYTE
+	int ok = TRUE;
+
 	/* The CUT_BUFFER0 is supposed to always contain latin1.  Convert from
 	 * 'enc' when it is a multi-byte encoding.  When 'enc' is an 8-bit
 	 * encoding conversion usually doesn't work, so keep the text as-is.
@@ -5842,6 +5901,7 @@ x11_export_final_selection()
 		int	intlen = len;
 		char_u	*conv_str;
 
+		vc.vc_fail = TRUE;
 		conv_str = string_convert(&vc, str, &intlen);
 		len = intlen;
 		if (conv_str != NULL)
@@ -5849,12 +5909,26 @@ x11_export_final_selection()
 		    vim_free(str);
 		    str = conv_str;
 		}
+		else
+		{
+		    ok = FALSE;
+		}
 		convert_setup(&vc, NULL, NULL);
 	    }
+	    else
+	    {
+		ok = FALSE;
+	    }
 	}
+
+	/* Do not store the string if conversion failed.  Better to use any
+	 * other selection than garbled text. */
+	if (ok)
 #endif
-	XStoreBuffer(dpy, (char *)str, (int)len, 0);
-	XFlush(dpy);
+	{
+	    XStoreBuffer(dpy, (char *)str, (int)len, 0);
+	    XFlush(dpy);
+	}
     }
 
     vim_free(str);
