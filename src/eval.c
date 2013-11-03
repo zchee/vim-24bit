@@ -8104,7 +8104,7 @@ static struct fst
     {"strridx",		2, 3, f_strridx},
     {"strtrans",	1, 1, f_strtrans},
     {"strwidth",	1, 1, f_strwidth},
-    {"submatch",	1, 1, f_submatch},
+    {"submatch",	1, 2, f_submatch},
     {"substitute",	4, 4, f_substitute},
     {"synID",		3, 3, f_synID},
     {"synIDattr",	2, 3, f_synIDattr},
@@ -17762,9 +17762,61 @@ f_submatch(argvars, rettv)
     typval_T	*argvars;
     typval_T	*rettv;
 {
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string =
-		    reg_submatch((int)get_tv_number_chk(&argvars[0], NULL));
+    int		error = FALSE;
+    char_u	**match;
+    char_u	**s;
+    listitem_T	*li;
+    int		no;
+
+    no = (int)get_tv_number_chk(&argvars[0], &error);
+    if (error)
+	return;
+    error = FALSE;
+
+    if (argvars[1].v_type == VAR_UNKNOWN ||
+	    (get_tv_number_chk(&argvars[1], &error) == 0))
+    {
+	if (error)
+	    return;
+
+	rettv->v_type = VAR_STRING;
+	rettv->vval.v_string = reg_submatch(no);
+    }
+    else
+    {
+	if (error)
+	    return;
+
+	rettv->vval.v_list = list_alloc();
+	if (rettv->vval.v_list == NULL)
+	    return;
+
+	match = reg_submatch_list(no);
+	if (match == NULL)
+	{
+	    rettv->v_type = VAR_LIST;
+	    return;
+	}
+
+	for (s = match ; *s != NULL ; s++)
+	{
+	    li = listitem_alloc();
+	    if (li == NULL)
+	    {
+		list_free(rettv->vval.v_list, TRUE);
+		rettv->vval.v_list = NULL;
+		vim_free(match);
+		return;
+	    }
+
+	    li->li_tv.v_type = VAR_STRING;
+	    li->li_tv.vval.v_string = *s;
+	    list_append(rettv->vval.v_list, li);
+	}
+
+	vim_free(match);
+	rettv->v_type = VAR_LIST;
+    }
 }
 
 /*
