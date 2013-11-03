@@ -7898,6 +7898,82 @@ reg_submatch(no)
 
     return retval;
 }
+
+/*
+ * Used for the submatch() function with the optional non-zero argument: get the 
+ * list of strings from the n'th submatch in allocated memory with NULs 
+ * represented in NLs.
+ * Returns NULL when not in a ":s" command and for a non-existing submatch.
+ * Otherwise returns a NULL-terminated array of strings, both array and 
+ * contained strings reside in an allocated memory.
+ */
+    char_u **
+reg_submatch_list(no)
+    int		no;
+{
+    char_u	**retval;
+    char_u	*s;
+    linenr_T	slnum;
+    linenr_T	elnum;
+    colnr_T	scol;
+    colnr_T	ecol;
+    int		i;
+    int		len;
+
+    if (!can_f_submatch || no < 0)
+	return NULL;
+
+    if (submatch_match == NULL)
+    {
+	slnum = submatch_mmatch->startpos[no].lnum;
+	elnum = submatch_mmatch->endpos[no].lnum;
+	if (slnum < 0 || elnum < 0)
+	    return NULL;
+
+	scol = submatch_mmatch->startpos[no].col;
+	ecol = submatch_mmatch->endpos[no].col;
+
+	retval = (char_u **) lalloc(sizeof(char_u **) * (elnum - slnum + 2),
+				    TRUE);
+	if (retval == NULL)
+	    return NULL;
+	retval[elnum - slnum + 1] = NULL;
+
+	s = reg_getline_submatch(slnum) + scol;
+	if (slnum == elnum)
+	    retval[0] = vim_strnsave(s, ecol - scol);
+	else
+	{
+	    retval[0] = vim_strsave(s);
+
+	    s = reg_getline_submatch(elnum);
+	    retval[elnum - slnum] = vim_strnsave(s, ecol);
+
+	    for (i = 1 ; i < elnum - slnum ; i++)
+		retval[i] = vim_strsave(reg_getline_submatch(slnum + i));
+	}
+    }
+    else
+    {
+	s = submatch_match->startp[no];
+	if (s == NULL)
+	    retval = NULL;
+	else
+	{
+	    retval = (char_u **)lalloc(sizeof(char_u **) * 2, TRUE);
+	    if (retval == NULL)
+		return NULL;
+	    retval[0] = vim_strnsave(s, (int) (submatch_match->endp[no] - s));
+	    if (retval[0] == NULL)
+	    {
+		vim_free(retval);
+		return NULL;
+	    }
+	    retval[1] = NULL;
+	}
+    }
+    return retval;
+}
 #endif
 
 static regengine_T bt_regengine =
