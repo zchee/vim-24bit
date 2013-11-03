@@ -6201,15 +6201,40 @@ get_reg_type(regname, reglen)
 }
 
 /*
+ * Wrap char_u * line inside an allocated char_u ** in case flags contains 
+ * GREG_EXPR_SRC and leave it as-is otherwise.
+ */
+    static char_u *
+getreg_wrap_one_line(s, flags)
+    char_u	*s;
+    int		flags;
+{
+    char_u	**retval;
+    if (flags & GREG_LIST)
+    {
+	retval = (char_u **)alloc(sizeof(char_u *) * 2);
+	retval[0] = s;
+	retval[1] = NULL;
+    }
+    else
+	retval = (char_u **) s;
+    return (char_u *) retval;
+}
+
+/*
  * Return the contents of a register as a single allocated string.
  * Used for "@r" in expressions and for getreg().
  * Returns NULL for error.
+ * Flags:
+ *	GREG_NO_EXPR	Do not allow expression register
+ *	GREG_EXPR_SRC	For the expression register: return expression itself,
+ *			not the result of its evaluation.
+ *	GREG_LIST	Return a list of lines in place of a single string.
  */
     char_u *
-get_reg_contents(regname, allowexpr, expr_src)
+get_reg_contents(regname, flags)
     int		regname;
-    int		allowexpr;	/* allow "=" register */
-    int		expr_src;	/* get expression for "=" register */
+    int		flags;
 {
     long	i;
     char_u	*retval;
@@ -6219,13 +6244,11 @@ get_reg_contents(regname, allowexpr, expr_src)
     /* Don't allow using an expression register inside an expression */
     if (regname == '=')
     {
-	if (allowexpr)
-	{
-	    if (expr_src)
-		return get_expr_line_src();
-	    return get_expr_line();
-	}
-	return NULL;
+	if (flags & GREG_NO_EXPR)
+	    return NULL;
+	if (flags & GREG_EXPR_SRC)
+	    return getreg_wrap_one_line(get_expr_line_src(), flags);
+	return getreg_wrap_one_line(get_expr_line(), flags);
     }
 
     if (regname == '@')	    /* "@@" is used for unnamed register */
@@ -6243,14 +6266,31 @@ get_reg_contents(regname, allowexpr, expr_src)
     {
 	if (retval == NULL)
 	    return NULL;
-	if (!allocated)
-	    retval = vim_strsave(retval);
+	if (allocated)
+	    retval = getreg_wrap_one_line(retval, flags);
+	else
+	    retval = getreg_wrap_one_line(vim_strsave(retval), flags);
 	return retval;
     }
 
     get_yank_register(regname, FALSE);
     if (y_current->y_array == NULL)
 	return NULL;
+
+    if (flags & GREG_LIST)
+    {
+	char_u	**retval_arr;
+
+	retval_arr = (char_u **) alloc(sizeof(char_u*) * (y_current->y_size+1));
+	if (retval_arr == NULL)
+	    return NULL;
+
+	for (i = 0; i < y_current->y_size; ++i)
+	    retval_arr[i] = vim_strsave(y_current->y_array[i]);
+	retval_arr[y_current->y_size] = NULL;
+
+	return (char_u *) retval_arr;
+    }
 
     /*
      * Compute length of resulting string.

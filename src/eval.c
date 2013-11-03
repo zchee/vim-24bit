@@ -2297,6 +2297,51 @@ list_arg_vars(eap, arg, first)
 }
 
 /*
+ * Convert char_u ** strings array to a list.
+ * Array must be in allocated memory itself, and so must be all contained 
+ * strings.
+ * Array is freed afterwards.
+ */
+    static int
+char_arr_to_tv(strings, rettv)
+    char_u	**strings;
+    typval_T	*rettv;
+{
+    char_u	**s;
+    listitem_T	*li;
+
+    rettv->vval.v_list = list_alloc();
+    if (rettv->vval.v_list == NULL)
+	return FAIL;
+
+    if (strings == NULL)
+    {
+	rettv->v_type = VAR_LIST;
+	return OK;
+    }
+
+    for (s = strings ; *s != NULL ; ++s)
+    {
+	li = listitem_alloc();
+	if (li == NULL)
+	{
+	    list_free(rettv->vval.v_list, TRUE);
+	    rettv->vval.v_list = NULL;
+	    vim_free(strings);
+	    return FAIL;
+	}
+
+	li->li_tv.v_type = VAR_STRING;
+	li->li_tv.vval.v_string = *s;
+	list_append(rettv->vval.v_list, li);
+    }
+
+    vim_free(strings);
+    rettv->v_type = VAR_LIST;
+    return OK;
+}
+
+/*
  * Set one item of ":let var = expr" or ":let [v1, v2] = list" to its value.
  * Returns a pointer to the char just after the var name.
  * Returns NULL if there is an error.
@@ -2448,7 +2493,7 @@ ex_let_one(arg, tv, copy, endchars, op)
 	    p = get_tv_string_chk(tv);
 	    if (p != NULL && op != NULL && *op == '.')
 	    {
-		s = get_reg_contents(*arg == '@' ? '"' : *arg, TRUE, TRUE);
+		s = get_reg_contents(*arg == '@' ? '"' : *arg, GREG_EXPR_SRC);
 		if (s != NULL)
 		{
 		    p = ptofree = concat_str(s, p);
@@ -5106,7 +5151,8 @@ eval7(arg, rettv, evaluate, want_string)
 		if (evaluate)
 		{
 		    rettv->v_type = VAR_STRING;
-		    rettv->vval.v_string = get_reg_contents(**arg, TRUE, TRUE);
+		    rettv->vval.v_string = get_reg_contents(**arg,
+							    GREG_EXPR_SRC);
 		}
 		if (**arg != NUL)
 		    ++*arg;
@@ -7945,7 +7991,7 @@ static struct fst
     {"getpid",		0, 0, f_getpid},
     {"getpos",		1, 1, f_getpos},
     {"getqflist",	0, 0, f_getqflist},
-    {"getreg",		0, 2, f_getreg},
+    {"getreg",		0, 3, f_getreg},
     {"getregtype",	0, 1, f_getregtype},
     {"gettabvar",	2, 3, f_gettabvar},
     {"gettabwinvar",	3, 4, f_gettabwinvar},
@@ -11761,6 +11807,7 @@ f_getreg(argvars, rettv)
     char_u	*strregname;
     int		regname;
     int		arg2 = FALSE;
+    int		return_list = FALSE;
     int		error = FALSE;
 
     if (argvars[0].v_type != VAR_UNKNOWN)
@@ -11768,17 +11815,35 @@ f_getreg(argvars, rettv)
 	strregname = get_tv_string_chk(&argvars[0]);
 	error = strregname == NULL;
 	if (argvars[1].v_type != VAR_UNKNOWN)
+	{
 	    arg2 = get_tv_number_chk(&argvars[1], &error);
+	    if (!error && argvars[2].v_type != VAR_UNKNOWN)
+		return_list = get_tv_number_chk(&argvars[2], &error);
+	}
     }
     else
 	strregname = vimvars[VV_REG].vv_str;
+
+    if (error)
+	return;
+
     regname = (strregname == NULL ? '"' : *strregname);
     if (regname == 0)
 	regname = '"';
 
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = error ? NULL :
-				    get_reg_contents(regname, TRUE, arg2);
+    if (return_list)
+    {
+	char_u	**strings;
+	strings = (char_u **) get_reg_contents(regname,
+		(arg2 ? GREG_EXPR_SRC : 0) | GREG_LIST);
+	char_arr_to_tv(strings, rettv);
+    }
+    else
+    {
+	rettv->v_type = VAR_STRING;
+	rettv->vval.v_string = get_reg_contents(regname,
+		arg2 ? GREG_EXPR_SRC : 0);
+    }
 }
 
 /*
@@ -17787,10 +17852,6 @@ f_submatch(argvars, rettv)
 	if (error)
 	    return;
 
-	rettv->vval.v_list = list_alloc();
-	if (rettv->vval.v_list == NULL)
-	    return;
-
 	match = reg_submatch_list(no);
 	if (match == NULL)
 	{
@@ -17798,24 +17859,7 @@ f_submatch(argvars, rettv)
 	    return;
 	}
 
-	for (s = match ; *s != NULL ; s++)
-	{
-	    li = listitem_alloc();
-	    if (li == NULL)
-	    {
-		list_free(rettv->vval.v_list, TRUE);
-		rettv->vval.v_list = NULL;
-		vim_free(match);
-		return;
-	    }
-
-	    li->li_tv.v_type = VAR_STRING;
-	    li->li_tv.vval.v_string = *s;
-	    list_append(rettv->vval.v_list, li);
-	}
-
-	vim_free(match);
-	rettv->v_type = VAR_LIST;
+	char_arr_to_tv(match, rettv);
     }
 }
 
