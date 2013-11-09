@@ -644,6 +644,7 @@ static void f_pyeval __ARGS((typval_T *argvars, typval_T *rettv));
 #endif
 static void f_range __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_readfile __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_readshell __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_reltime __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_reltimestr __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_remote_expr __ARGS((typval_T *argvars, typval_T *rettv));
@@ -831,6 +832,7 @@ static int searchpair_cmn __ARGS((typval_T *argvars, pos_T *match_pos));
 static int search_cmn __ARGS((typval_T *argvars, pos_T *match_pos, int *flagsp));
 static void setwinvar __ARGS((typval_T *argvars, typval_T *rettv, int off));
 static int write_list __ARGS((FILE *fd, list_T *list, int binary));
+static void get_cmd_output_as_rettv __ARGS((typval_T *argvars, typval_T *rettv, int retlist));
 
 
 #ifdef EBCDIC
@@ -8082,6 +8084,7 @@ static struct fst
 #endif
     {"range",		1, 3, f_range},
     {"readfile",	1, 3, f_readfile},
+    {"readshell",	1, 2, f_readshell},
     {"reltime",		0, 2, f_reltime},
     {"reltimestr",	1, 1, f_reltimestr},
     {"remote_expr",	2, 3, f_remote_expr},
@@ -15009,6 +15012,17 @@ f_readfile(argvars, rettv)
     fclose(fd);
 }
 
+/*
+ * "readshell()" function
+ */
+    static void
+f_readshell(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    get_cmd_output_as_rettv(argvars, rettv, TRUE);
+}
+
 #if defined(FEAT_RELTIME)
 static int list2proftime __ARGS((typval_T *arg, proftime_T *tm));
 
@@ -18160,13 +18174,11 @@ f_synstack(argvars, rettv)
 #endif
 }
 
-/*
- * "system()" function
- */
     static void
-f_system(argvars, rettv)
+get_cmd_output_as_rettv(argvars, rettv, retlist)
     typval_T	*argvars;
     typval_T	*rettv;
+    int		retlist;
 {
     char_u	*res = NULL;
     char_u	*p;
@@ -18174,9 +18186,10 @@ f_system(argvars, rettv)
     char_u	buf[NUMBUFLEN];
     int		err = FALSE;
     FILE	*fd;
+    list_T	*list = NULL;
 
     if (check_restricted() || check_secure())
-	goto done;
+	goto errret;
 
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
@@ -18187,14 +18200,14 @@ f_system(argvars, rettv)
 	if ((infile = vim_tempname('i')) == NULL)
 	{
 	    EMSG(_(e_notmp));
-	    goto done;
+	    goto errret;
 	}
 
 	fd = mch_fopen((char *)infile, WRITEBIN);
 	if (fd == NULL)
 	{
 	    EMSG2(_(e_notopen), infile);
-	    goto done;
+	    goto errret;
 	}
 	if (argvars[1].v_type == VAR_LIST)
 	{
@@ -18207,7 +18220,7 @@ f_system(argvars, rettv)
 	    if (p == NULL)
 	    {
 		fclose(fd);
-		goto done;		/* type error; errmsg already given */
+		goto errret;		/* type error; errmsg already given */
 	    }
 	    if (fwrite(p, STRLEN(p), 1, fd) != 1)
 		err = TRUE;
@@ -18217,52 +18230,133 @@ f_system(argvars, rettv)
 	if (err)
 	{
 	    EMSG(_("E677: Error writing temp file"));
-	    goto done;
+	    goto errret;
 	}
     }
 
-    res = get_cmd_output(get_tv_string(&argvars[0]), infile,
-						 SHELL_SILENT | SHELL_COOKED);
+    if (retlist)
+    {
+	int		len;
+	listitem_T	*li;
+	char_u		*s = NULL;
+	char_u		*start;
+	char_u		*end;
+	char_u		*p;
+	int		i;
+
+	res = get_cmd_output(get_tv_string(&argvars[0]), infile,
+						    SHELL_SILENT | SHELL_COOKED,
+						    &len);
+
+	if (res == NULL)
+	    goto errret;
+
+	list = list_alloc();
+	if (list == NULL)
+	    goto errret;
+
+	for (i = 0 ; i <= len ; ++i)
+	{
+	    start = res + i;
+	    for (end = start; i < len && *end != NL; ++end)
+		++i;
+
+	    s = vim_strnsave(start, (int) (end - start));
+	    if (s == NULL)
+		goto errret;
+
+	    for (p = s, end = s + (end - start); p < end; ++p)
+		if (*p == NUL)
+		    *p = NL;
+
+	    li = listitem_alloc();
+	    if (li == NULL)
+	    {
+		vim_free(s);
+		goto errret;
+	    }
+
+	    li->li_tv.v_type = VAR_STRING;
+	    li->li_tv.vval.v_string = s;
+
+	    list_append(list, li);
+	}
+
+	vim_free(res);
+
+	rettv->v_type = VAR_LIST;
+	rettv->vval.v_list = list;
+    }
+    else
+    {
+	res = get_cmd_output(get_tv_string(&argvars[0]), infile,
+						    SHELL_SILENT | SHELL_COOKED,
+						    NULL);
 
 #ifdef USE_CR
-    /* translate <CR> into <NL> */
-    if (res != NULL)
-    {
-	char_u	*s;
-
-	for (s = res; *s; ++s)
+	/* translate <CR> into <NL> */
+	if (res != NULL)
 	{
-	    if (*s == CAR)
-		*s = NL;
+	    char_u	*s;
+
+	    for (s = res; *s; ++s)
+	    {
+		if (*s == CAR)
+		    *s = NL;
+	    }
 	}
-    }
 #else
 # ifdef USE_CRNL
-    /* translate <CR><NL> into <NL> */
-    if (res != NULL)
-    {
-	char_u	*s, *d;
-
-	d = res;
-	for (s = res; *s; ++s)
+	/* translate <CR><NL> into <NL> */
+	if (res != NULL)
 	{
-	    if (s[0] == CAR && s[1] == NL)
-		++s;
-	    *d++ = *s;
+	    char_u	*s, *d;
+
+	    d = res;
+	    for (s = res; *s; ++s)
+	    {
+		if (s[0] == CAR && s[1] == NL)
+		    ++s;
+		*d++ = *s;
+	    }
+	    *d = NUL;
 	}
-	*d = NUL;
-    }
 # endif
 #endif
+	rettv->v_type = VAR_STRING;
+	rettv->vval.v_string = res;
+    }
 
-done:
     if (infile != NULL)
     {
 	mch_remove(infile);
 	vim_free(infile);
     }
+    return;
+
+errret:
+    if (infile != NULL)
+    {
+	mch_remove(infile);
+	vim_free(infile);
+    }
+    if (res != NULL)
+	vim_free(res);
+    if (list != NULL)
+	list_free(list, TRUE);
     rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = res;
+    rettv->vval.v_string = NULL;
+}
+
+/*
+ * "system()" function
+ */
+    static void
+f_system(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    get_cmd_output_as_rettv(argvars, rettv, FALSE);
 }
 
 /*

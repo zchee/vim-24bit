@@ -1893,6 +1893,7 @@ range( {expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
 readfile( {fname} [, {binary} [, {max}]])
 				List	get list of lines from file {fname}
+readshell( {expr} [, {input}])	List	output of shell command/filter {expr}
 reltime( [{start} [, {end}]])	List	get time value
 reltimestr( {time})		String	turn time value into a String
 remote_expr( {server}, {string} [, {idvar}])
@@ -4742,6 +4743,15 @@ readfile({fname} [, {binary} [, {max}]])
 		the result is an empty list.
 		Also see |writefile()|.
 
+readshell({expr} [, {input}])				*readshell()*
+		Same as |system()|, but returns a |List| with lines (parts of 
+		output separated by NL) with NULs transformed into NLs. Output 
+		is the same as |readfile()| will output with {binary} argument 
+		set to "b".
+
+		Returns an empty string on error, so be careful not to run 
+		into |E706|.
+
 reltime([{start} [, {end}]])				*reltime()*
 		Return an item that represents a time value.  The format of
 		the item depends on the system.  It can be passed to
@@ -5931,7 +5941,8 @@ system({expr} [, {input}])				*system()* *E677*
 		is filtered to replace <CR> with <NL> for Macintosh, and
 		<CR><NL> with <NL> for DOS-like systems.
 		To avoid the string being truncated at a NUL, all NUL
-		characters are replaced with SOH (0x01).
+		characters are replaced with SOH (0x01). See |readshell()| if 
+		you want to distinguish NULs and SOHs.
 
 		The command executed is constructed using several options:
 	'shell' 'shellcmdflag' 'shellxquote' {expr} 'shellredir' {tmp} 'shellxquote'
