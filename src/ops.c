@@ -6417,7 +6417,7 @@ write_reg_contents_lst(name, strings, maxlen, must_append, yank_type, block_len)
     {
 	char_u	*s;
 	if (strings[0] == NULL)
-	    s = "";
+	    s = (char_u *) "";
 	else if (strings[1] != NULL)
 	{
 	    EMSG(_("E881: search pattern and expression register may not "
