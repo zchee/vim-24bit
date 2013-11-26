@@ -1272,6 +1272,15 @@ static struct vimoption
 			    {(char_u *)NULL, (char_u *)0L}
 #endif
 			    SCRIPTID_INIT},
+    {"guicolors",   "gcol",  P_BOOL|P_VI_DEF|P_VIM|P_RCLR,
+#ifdef FEAT_TERMTRUECOLOR
+			    (char_u *)&p_guicolors, PV_NONE,
+			    {(char_u *)FALSE, (char_u *)FALSE}
+#else
+			    (char_u*)NULL, PV_NONE,
+			    {(char_u *)FALSE, (char_u *)FALSE}
+#endif
+			    SCRIPTID_INIT},
     {"guicursor",    "gcr",  P_STRING|P_VI_DEF|P_COMMA|P_NODUP,
 #ifdef CURSOR_SHAPE
 			    (char_u *)&p_guicursor, PV_NONE,
@@ -8156,6 +8165,17 @@ set_bool_option(opt_idx, varp, value, opt_flags)
 	}
     }
 
+#endif
+
+#ifdef FEAT_TERMTRUECOLOR
+    /* 'guicolors' */
+    else if ((int *)varp == &p_guicolors)
+    {
+# ifdef FEAT_GUI
+	if (!gui.in_use && !gui.starting)
+# endif
+	    highlight_gui_started();
+    }
 #endif
 
     /*
