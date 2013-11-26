@@ -7448,9 +7448,6 @@ next_search_hl(win, shl, lnum, mincol)
 		/* don't free regprog in the match list, it's a copy */
 		vim_regfree(shl->rm.regprog);
 		no_hlsearch = TRUE;
-#ifdef FEAT_EVAL
-		set_vim_var_nr(VV_HLSEARCH, !no_hlsearch);
-#endif
 	    }
 	    shl->rm.regprog = NULL;
 	    shl->lnum = 0;
