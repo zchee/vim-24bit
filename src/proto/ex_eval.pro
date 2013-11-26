@@ -29,4 +29,6 @@ int cleanup_conditionals __ARGS((struct condstack *cstack, int searched_cond, in
 void rewind_conditionals __ARGS((struct condstack *cstack, int idx, int cond_type, int *cond_level));
 void ex_endfunction __ARGS((exarg_T *eap));
 int has_loop_cmd __ARGS((char_u *p));
+char_u *get_exception_string __ARGS((void *value, int type, char_u *cmdname, int *should_free));
+void free_global_msglist __ARGS((void));
 /* vim: set ft=c : */
