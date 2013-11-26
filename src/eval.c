@@ -12511,6 +12511,9 @@ f_has(argvars, rettv)
 #ifdef FEAT_TERMRESPONSE
 	"termresponse",
 #endif
+#ifdef FEAT_TERMTRUECOLOR
+	"termtruecolor",
+#endif
 #ifdef FEAT_TEXTOBJ
 	"textobjects",
 #endif
