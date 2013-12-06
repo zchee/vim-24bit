@@ -880,8 +880,10 @@ These modifiers can be given, in this order:
 	:gs?pat?sub?
 		Substitute all occurrences of "pat" with "sub".  Otherwise
 		this works like ":s".
-	:S	Escape special characters (see |shellescape()|). Must be the 
-		last one.
+	:S	Escape special characters for use with shell (see 
+		|shellescape()|). Must be the last one. Examples: >
+		    :!dir <cfile>:S
+		    :call system('chmod +w -- ' . expand('%:S'))
 
 Examples, when the file name is "src/version.c", current dir
 "/home/mool/vim": >
