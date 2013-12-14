@@ -289,7 +289,7 @@ save_re_pat(idx, pat, magic)
 	/* If 'hlsearch' set and search pat changed: need redraw. */
 	if (p_hls)
 	    redraw_all_later(SOME_VALID);
-	no_hlsearch = FALSE;
+	SET_NO_HLSEARCH(FALSE);
 #endif
     }
 }
@@ -333,7 +333,7 @@ restore_search_patterns()
 	spats[1] = saved_spats[1];
 	last_idx = saved_last_idx;
 # ifdef FEAT_SEARCH_EXTRA
-	no_hlsearch = saved_no_hlsearch;
+	SET_NO_HLSEARCH(saved_no_hlsearch);
 # endif
     }
 }
@@ -1148,7 +1148,7 @@ do_search(oap, dirc, pat, count, options, tm)
     if (no_hlsearch && !(options & SEARCH_KEEP))
     {
 	redraw_all_later(SOME_VALID);
-	no_hlsearch = FALSE;
+	SET_NO_HLSEARCH(FALSE);
     }
 #endif
 
@@ -4544,7 +4544,10 @@ current_search(count, forward)
     /* Is the pattern is zero-width? */
     one_char = is_one_char(spats[last_idx].pat);
     if (one_char == -1)
-	return FAIL;  /* invalid pattern */
+    {
+	p_ws = old_p_ws;
+	return FAIL;  /* pattern not found */
+    }
 
     /*
      * The trick is to first search backwards and then search forward again,
@@ -4592,7 +4595,7 @@ current_search(count, forward)
 				ml_get(curwin->w_buffer->b_ml.ml_line_count));
 	    }
 	}
-
+	p_ws = old_p_ws;
     }
 
     start_pos = pos;
@@ -4607,7 +4610,6 @@ current_search(count, forward)
     if (!VIsual_active)
 	VIsual = start_pos;
 
-    p_ws = old_p_ws;
     curwin->w_cursor = pos;
     VIsual_active = TRUE;
     VIsual_mode = 'v';
@@ -5562,7 +5564,9 @@ read_viminfo_search_pattern(virp, force)
 		spats[idx].off.off = off;
 #ifdef FEAT_SEARCH_EXTRA
 		if (setlast)
-		    no_hlsearch = !hlsearch_on;
+		{
+		    SET_NO_HLSEARCH(!hlsearch_on);
+		}
 #endif
 	    }
 	}

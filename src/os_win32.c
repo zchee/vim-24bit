@@ -2509,7 +2509,7 @@ fname_casew(
     WCHAR		*porig, *porigPrev;
     int			flen;
     WIN32_FIND_DATAW	fb;
-    HANDLE		hFind;
+    HANDLE		hFind = INVALID_HANDLE_VALUE;
     int			c;
     int			slen;
 
@@ -2528,8 +2528,8 @@ fname_casew(
 	/* copy leading drive letter */
 	*ptrue++ = *porig++;
 	*ptrue++ = *porig++;
-	*ptrue = NUL;	    /* in case nothing follows */
     }
+    *ptrue = NUL;	    /* in case nothing follows */
 
     while (*porig != NUL)
     {
@@ -2673,8 +2673,8 @@ fname_case(
 	/* copy leading drive letter */
 	*ptrue++ = *porig++;
 	*ptrue++ = *porig++;
-	*ptrue = NUL;	    /* in case nothing follows */
     }
+    *ptrue = NUL;	    /* in case nothing follows */
 
     while (*porig != NUL)
     {
@@ -2841,18 +2841,20 @@ mch_dirname(
 }
 
 /*
- * get file permissions for `name'
- * -1 : error
- * else mode_t
+ * Get file permissions for "name".
+ * Return mode_t or -1 for error.
  */
     long
 mch_getperm(char_u *name)
 {
     struct stat st;
-    int n;
+    int		n;
 
+    if (name[0] == '\\' && name[1] == '\\')
+	/* UNC path */
+	return (long)win32_getattrs(name);
     n = mch_stat(name, &st);
-    return n == 0 ? (int)st.st_mode : -1;
+    return n == 0 ? (long)st.st_mode : -1L;
 }
 
 
@@ -3094,8 +3096,7 @@ win32_fileinfo(char_u *fname, BY_HANDLE_FILE_INFORMATION *info)
  * -1 : error
  * else FILE_ATTRIBUTE_* defined in winnt.h
  */
-    static
-    int
+    static int
 win32_getattrs(char_u *name)
 {
     int		attr;
@@ -6271,6 +6272,7 @@ get_cmd_argsW(char ***argvp)
 		    while (i > 0)
 			free(argv[--i]);
 		    free(argv);
+		    argv = NULL;
 		    argc = 0;
 		}
 	    }
