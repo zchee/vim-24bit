@@ -78,7 +78,7 @@ static struct builtin_term *find_builtin_term __ARGS((char_u *name));
 static void parse_builtin_tcap __ARGS((char_u *s));
 static void term_color __ARGS((char_u *s, int n));
 #ifdef FEAT_TERMTRUECOLOR
-static void term_rgb_color __ARGS((char *s, long_u rgb));
+static void term_rgb_color __ARGS((char_u *s, long_u rgb));
 #endif
 static void gather_termleader __ARGS((void));
 #ifdef FEAT_TERMRESPONSE
@@ -379,9 +379,9 @@ static struct builtin_term builtin_termcaps[] =
 #  else
     {(int)KS_CRI,	"\033[%dC"},
 #  endif
-#if defined(BEOS_DR8)
+#  if defined(BEOS_DR8)
     {(int)KS_DB,	""},		/* hack! see screen.c */
-#endif
+#  endif
 
     {K_UP,		"\033[A"},
     {K_DOWN,		"\033[B"},
@@ -885,8 +885,10 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
 # endif
 
-# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__) || defined(FEAT_TERMTRUECOLOR)
     {(int)KS_NAME,	"xterm"},
+# endif
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
     {(int)KS_CE,	IF_EB("\033[K", ESC_STR "[K")},
     {(int)KS_AL,	IF_EB("\033[L", ESC_STR "[L")},
 #  ifdef TERMINFO
@@ -1032,6 +1034,10 @@ static struct builtin_term builtin_termcaps[] =
     {TERMCAP2KEY('F', 'P'), IF_EB("\033[56;*~", ESC_STR "[56;*~")}, /* F35 */
     {TERMCAP2KEY('F', 'Q'), IF_EB("\033[57;*~", ESC_STR "[57;*~")}, /* F36 */
     {TERMCAP2KEY('F', 'R'), IF_EB("\033[58;*~", ESC_STR "[58;*~")}, /* F37 */
+# endif
+# ifdef FEAT_TERMTRUECOLOR
+    {(int)KS_8F,	IF_EB("\033[38;2;%lu;%lu;%lum", ESC_STR "[38;2;%lu;%lu;%lum")},
+    {(int)KS_8B,	IF_EB("\033[48;2;%lu;%lu;%lum", ESC_STR "[48;2;%lu;%lu;%lum")},
 # endif
 
 # if defined(UNIX) || defined(ALL_BUILTIN_TCAPS)
@@ -1782,6 +1788,7 @@ set_termname(term)
 				{KS_CWP, "WP"}, {KS_CWS, "WS"},
 				{KS_CSI, "SI"}, {KS_CEI, "EI"},
 				{KS_U7, "u7"},
+				{KS_8F, "8f"}, {KS_8B, "8b"},
 				{(enum SpecialKey)0, NULL}
 			    };
 
@@ -2933,14 +2940,14 @@ term_color(s, n)
 term_fg_rgb_color(rgb)
     long_u	rgb;
 {
-    term_rgb_color("\033[38;2;", rgb);
+    term_rgb_color(T_8F, rgb);
 }
 
     void
 term_bg_rgb_color(rgb)
     long_u	rgb;
 {
-    term_rgb_color("\033[48;2;", rgb);
+    term_rgb_color(T_8B, rgb);
 }
 
 #define RED(rgb)   ((rgb>>16)&0xFF)
@@ -2948,11 +2955,11 @@ term_bg_rgb_color(rgb)
 #define BLUE(rgb)  ((rgb    )&0xFF)
     static void
 term_rgb_color(s, rgb)
-    char	*s;
+    char_u	*s;
     long_u	rgb;
 {
     char	buf[7+3*3+2+1+1];
-    sprintf(buf, "%s%lu;%lu;%lum", s, RED(rgb), GREEN(rgb), BLUE(rgb));
+    sprintf(buf, (char *)s, RED(rgb), GREEN(rgb), BLUE(rgb));
     OUT_STR(buf);
 }
 #endif
