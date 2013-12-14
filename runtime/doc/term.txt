@@ -296,6 +296,8 @@ Added by Vim (there are no standard codes for these):
 		|xterm-8bit| |v:termresponse| |'ttymouse'| |xterm-codes|
 	t_u7	request cursor position (for xterm)		*t_u7* *'t_u7'*
 		see |'ambiwidth'|
+	t_8f	set foreground color (R, G, B)			*t_8f* *'t_8f'*
+	t_8b	set background color (R, G, B)			*t_8b* *'t_8b'*
 
 KEY CODES
 Note: Use the <> form if possible
