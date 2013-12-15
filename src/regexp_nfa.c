@@ -239,7 +239,9 @@ static int nfa_classcodes[] = {
     NFA_UPPER, NFA_NUPPER
 };
 
+static char_u e_nul_found[] = N_("E865: (NFA) Regexp end encountered prematurely");
 static char_u e_misplaced[] = N_("E866: (NFA regexp) Misplaced %c");
+static char_u e_ill_char_class[] = N_("E877: (NFA regexp) Invalid character class: %ld");
 
 /* NFA regexp \ze operator encountered. */
 static int nfa_has_zend;
@@ -1137,7 +1139,7 @@ nfa_regatom()
     switch (c)
     {
 	case NUL:
-	    EMSG_RET_FAIL(_("E865: (NFA) Regexp end encountered prematurely"));
+	    EMSG_RET_FAIL(_(e_nul_found));
 
 	case Magic('^'):
 	    EMIT(NFA_BOL);
@@ -1160,6 +1162,9 @@ nfa_regatom()
 
 	case Magic('_'):
 	    c = no_Magic(getchr());
+	    if (c == NUL)
+		EMSG_RET_FAIL(_(e_nul_found));
+
 	    if (c == '^')	/* "\_^" is start-of-line */
 	    {
 		EMIT(NFA_BOL);
@@ -1216,6 +1221,12 @@ nfa_regatom()
 	    p = vim_strchr(classchars, no_Magic(c));
 	    if (p == NULL)
 	    {
+		if (extra == NFA_ADD_NL)
+		{
+		    EMSGN(_(e_ill_char_class), c);
+		    rc_did_emsg = TRUE;
+		    return FAIL;
+		}
 		EMSGN("INTERNAL: Unknown character class char: %ld", c);
 		return FAIL;
 	    }
@@ -4278,7 +4289,7 @@ addstate(l, state, subs_arg, pim, off)
 	     * endless loop for "\(\)*" */
 
 	default:
-	    if (state->lastlist[nfa_ll_index] == l->id)
+	    if (state->lastlist[nfa_ll_index] == l->id && state->c != NFA_SKIP)
 	    {
 		/* This state is already in the list, don't add it again,
 		 * unless it is an MOPEN that is used for a backreference or
@@ -4733,7 +4744,7 @@ check_char_class(class, c)
 
 	default:
 	    /* should not be here :P */
-	    EMSGN("E877: (NFA regexp) Invalid character class: %ld", class);
+	    EMSGN(_(e_ill_char_class), class);
 	    return FAIL;
     }
     return FAIL;
@@ -6458,6 +6469,7 @@ nfa_regmatch(prog, start, submatch, m)
 	    if (add_state != NULL)
 	    {
 		nfa_pim_T *pim;
+		nfa_pim_T pim_copy;
 
 		if (t->pim.result == NFA_PIM_UNUSED)
 		    pim = NULL;
@@ -6529,6 +6541,15 @@ nfa_regmatch(prog, start, submatch, m)
 		    /* Postponed invisible match was handled, don't add it to
 		     * following states. */
 		    pim = NULL;
+		}
+
+		/* If "pim" points into l->t it will become invalid when
+		 * adding the state causes the list to be reallocated.  Make a
+		 * local copy to avoid that. */
+		if (pim == &t->pim)
+		{
+		    copy_pim(&pim_copy, pim);
+		    pim = &pim_copy;
 		}
 
 		if (add_here)
