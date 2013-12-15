@@ -575,8 +575,34 @@ VimTryEnd(void)
     /* Keyboard interrupt should be preferred over anything else */
     if (got_int)
     {
-	did_throw = got_int = FALSE;
+	if (current_exception != NULL)
+	    discard_current_exception();
+	else
+	    need_rethrow = did_throw = FALSE;
+	got_int = FALSE;
 	PyErr_SetNone(PyExc_KeyboardInterrupt);
+	return -1;
+    }
+    else if (msg_list != NULL && *msg_list != NULL)
+    {
+	int	should_free;
+	char_u	*msg;
+
+	msg = get_exception_string(*msg_list, ET_ERROR, NULL, &should_free);
+
+	if (msg == NULL)
+	{
+	    PyErr_NoMemory();
+	    return -1;
+	}
+
+	PyErr_SetVim((char *) msg);
+
+	free_global_msglist();
+
+	if (should_free)
+	    vim_free(msg);
+
 	return -1;
     }
     else if (!did_throw)
@@ -584,7 +610,10 @@ VimTryEnd(void)
     /* Python exception is preferred over vim one; unlikely to occur though */
     else if (PyErr_Occurred())
     {
-	did_throw = FALSE;
+	if (current_exception != NULL)
+	    discard_current_exception();
+	else
+	    need_rethrow = did_throw = FALSE;
 	return -1;
     }
     /* Finally transform VimL exception to python one */
@@ -1640,6 +1669,9 @@ DictionaryContains(DictionaryObject *self, PyObject *keyObject)
 {
     PyObject	*rObj = _DictionaryItem(self, keyObject, DICT_FLAG_RETURN_BOOL);
     int		ret;
+
+    if (rObj == NULL)
+	return -1;
 
     ret = (rObj == Py_True);
 
@@ -3005,11 +3037,14 @@ OptionsAssItem(OptionsObject *self, PyObject *keyObject, PyObject *valObject)
     else
     {
 	char_u		*val;
-	PyObject	*todecref;
+	PyObject	*todecref2;
 
-	if ((val = StringToChars(valObject, &todecref)))
+	if ((val = StringToChars(valObject, &todecref2)))
+	{
 	    ret = set_option_value_for(key, 0, val, opt_flags,
 				    self->opt_type, self->from);
+	    Py_XDECREF(todecref2);
+	}
 	else
 	    ret = -1;
     }
