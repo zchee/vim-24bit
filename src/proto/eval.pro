@@ -83,7 +83,7 @@ int func_call __ARGS((func_T *name, typval_T *args, dict_T *selfdict, typval_T *
 func_T *func_alloc __ARGS((void));
 void func_free __ARGS((func_T *func));
 void func_unref __ARGS((func_T *func));
-void mzscheme_call_vim __ARGS((char_u *name, typval_T *args, typval_T *rettv));
+void mzscheme_call_vim __ARGS((func_T *func, typval_T *args, typval_T *rettv));
 float_T vim_round __ARGS((float_T f));
 long do_searchpair __ARGS((char_u *spat, char_u *mpat, char_u *epat, int dir, char_u *skip, int flags, pos_T *match_pos, linenr_T lnum_stop, long time_limit));
 void set_vim_var_nr __ARGS((int idx, long val));

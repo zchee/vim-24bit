@@ -2906,25 +2906,23 @@ vim_to_mzscheme_impl(typval_T *vim_value, int depth, Scheme_Hash_Table *visited)
 	}
 	MZ_GC_UNREG();
     }
-#if 0
-    /* FIXME Support new-style funcrefs */
     else if (vim_value->v_type == VAR_FUNC)
     {
 	Scheme_Object *funcname = NULL;
+	func_T	*func = vim_value->vval.v_func;
 
 	MZ_GC_DECL_REG(1);
 	MZ_GC_VAR_IN_REG(0, funcname);
 	MZ_GC_REG();
 
-	funcname = scheme_make_byte_string((char *)vim_value->vval.v_string);
+	funcname = scheme_make_byte_string((char *)FUNC_NAME(func));
 	MZ_GC_CHECK();
-	result = scheme_make_closed_prim_w_arity(vim_funcref, funcname,
+	result = scheme_make_closed_prim_w_arity(vim_funcref, func,
 		(const char *)BYTE_STRING_VALUE(funcname), 0, -1);
 	MZ_GC_CHECK();
 
 	MZ_GC_UNREG();
     }
-#endif
     else
     {
 	result = scheme_void;
@@ -3169,7 +3167,7 @@ mzscheme_to_vim_impl(Scheme_Object *obj, typval_T *tv, int depth,
 
 /* Scheme prim procedure wrapping Vim funcref */
     static Scheme_Object *
-vim_funcref(void *name, int argc, Scheme_Object **argv)
+vim_funcref(void *func, int argc, Scheme_Object **argv)
 {
     int i;
     typval_T args;
@@ -3210,7 +3208,7 @@ vim_funcref(void *name, int argc, Scheme_Object **argv)
 	    typval_T ret;
 	    ret.v_type = VAR_UNKNOWN;
 
-	    mzscheme_call_vim(BYTE_STRING_VALUE((Scheme_Object *)name), &args, &ret);
+	    mzscheme_call_vim((func_T *) func, &args, &ret);
 	    MZ_GC_CHECK();
 	    result = vim_to_mzscheme(&ret);
 	    clear_tv(&ret);
