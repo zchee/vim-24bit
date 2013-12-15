@@ -14714,15 +14714,15 @@ f_mzeval(argvars, rettv)
 }
 
     void
-mzscheme_call_vim(name, args, rettv)
-    char_u	*name;
+mzscheme_call_vim(func, args, rettv)
+    func_T	*func;
     typval_T	*args;
     typval_T	*rettv;
 {
     typval_T argvars[3];
 
-    argvars[0].v_type = VAR_STRING;
-    argvars[0].vval.v_string = name;
+    argvars[0].v_type = VAR_FUNC;
+    argvars[0].vval.v_func = func;
     copy_tv(args, &argvars[1]);
     argvars[2].v_type = VAR_UNKNOWN;
     f_call(argvars, rettv);
