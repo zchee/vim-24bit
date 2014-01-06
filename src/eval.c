@@ -126,9 +126,6 @@ static dictitem_T	globvars_var;		/* variable used for g: */
  */
 static hashtab_T	compat_hashtab;
 
-/* When using exists() don't auto-load a script. */
-static int		no_autoload = FALSE;
-
 /*
  * When recursively copying lists and dicts we need to remember which ones we
  * have done to avoid endless recursiveness.  This unique ID is used for that.
@@ -163,6 +160,10 @@ static int echo_attr = 0;   /* attributes used for ":echo" */
 #define GCF_RUN_EVENT	2	/* run FuncUndefined event */
 #define GCF_QUIET	4	/* no error messages */
 #define GCF_ANY_FUNC	GCF_AUTOLOAD|GCF_RUN_EVENT
+
+/* Values for get_var_tv() flags argument: */
+#define GVT_VERBOSE	1	/* may give error messages */
+#define GVT_NO_AUTOLOAD	2	/* disable script autoloading */
 
 /*
  * Structure to hold info for a user function.
@@ -802,7 +803,7 @@ static char_u *find_name_end __ARGS((char_u *arg, char_u **expr_start, char_u **
 static char_u * make_expanded_name __ARGS((char_u *in_start, char_u *expr_start, char_u *expr_end, char_u *in_end));
 static int eval_isnamec __ARGS((int c));
 static int eval_isnamec1 __ARGS((int c));
-static int get_var_tv __ARGS((char_u *name, int len, typval_T *rettv, int verbose));
+static int get_var_tv __ARGS((char_u *name, int len, typval_T *rettv, int flags));
 static int handle_subscript __ARGS((char_u **arg, typval_T *rettv, int evaluate, int verbose));
 static typval_T *alloc_tv __ARGS((void));
 static typval_T *alloc_string_tv __ARGS((char_u *string));
@@ -813,8 +814,8 @@ static linenr_T get_tv_lnum_buf __ARGS((typval_T *argvars, buf_T *buf));
 static char_u *get_tv_string __ARGS((typval_T *varp));
 static char_u *get_tv_string_buf __ARGS((typval_T *varp, char_u *buf));
 static char_u *get_tv_string_buf_chk __ARGS((typval_T *varp, char_u *buf));
-static dictitem_T *find_var __ARGS((char_u *name, hashtab_T **htp));
-static dictitem_T *find_var_in_ht __ARGS((hashtab_T *ht, int htname, char_u *varname, int writing));
+static dictitem_T *find_var __ARGS((char_u *name, hashtab_T **htp, int no_autoload));
+static dictitem_T *find_var_in_ht __ARGS((hashtab_T *ht, int htname, char_u *varname, int no_autoload));
 static hashtab_T *find_var_ht __ARGS((char_u *name, char_u **varname));
 static void vars_clear_ext __ARGS((hashtab_T *ht, int free_val));
 static void delete_var __ARGS((hashtab_T *ht, hashitem_T *hi));
@@ -2290,7 +2291,7 @@ list_arg_vars(eap, arg, first)
 	    {
 		if (tofree != NULL)
 		    name = tofree;
-		if (get_var_tv(name, len, &tv, TRUE) == FAIL)
+		if (get_var_tv(name, len, &tv, GVT_VERBOSE) == FAIL)
 		    error = TRUE;
 		else
 		{
@@ -2642,7 +2643,7 @@ get_lval(name, rettv, lp, unlet, skip, quiet, fne_flags)
 
     cc = *p;
     *p = NUL;
-    v = find_var(lp->ll_name, &ht);
+    v = find_var(lp->ll_name, &ht, FALSE);
     if (v == NULL && !quiet)
 	EMSG2(_(e_undefvar), lp->ll_name);
     *p = cc;
@@ -2954,8 +2955,8 @@ set_var_lval(lp, endp, rettv, copy, op)
 		typval_T tv;
 
 		/* handle +=, -= and .= */
-		if (get_var_tv(lp->ll_name, (int)STRLEN(lp->ll_name),
-							     &tv, TRUE) == OK)
+		if (get_var_tv(lp->ll_name, (int)STRLEN(lp->ll_name), &tv,
+							GVT_VERBOSE) == OK)
 		{
 		    if (tv_op(&tv, rettv, op) == OK)
 			set_var(lp->ll_name, &tv, FALSE);
@@ -3755,7 +3756,7 @@ do_lock_var(lp, name_end, deep, lock)
 	    ret = FAIL;
 	else
 	{
-	    di = find_var(lp->ll_name, NULL);
+	    di = find_var(lp->ll_name, NULL, TRUE);
 	    if (di == NULL)
 		ret = FAIL;
 	    else
@@ -5248,7 +5249,7 @@ eval7(arg, rettv, evaluate, want_string)
 		}
 	    }
 	    else if (evaluate)
-		ret = get_var_tv(s, len, rettv, TRUE);
+		ret = get_var_tv(s, len, rettv, GVT_VERBOSE);
 	    else
 		ret = OK;
 	}
@@ -8380,7 +8381,7 @@ deref_func_name(name, len, flags)
     if (flags & DF_CHECK_VAR)
     {
 	name[len] = NUL;
-	v = find_var(name, NULL);
+	v = find_var(name, NULL, FALSE);
 	name[len] = cc;
 
 	if (v != NULL && v->di_tv.v_type == VAR_FUNC)
@@ -10301,8 +10302,6 @@ f_exists(argvars, rettv)
     int		n = FALSE;
     int		len = 0;
 
-    no_autoload = TRUE;
-
     p = get_tv_string(&argvars[0]);
     if (*p == '$')			/* environment variable */
     {
@@ -10353,7 +10352,7 @@ f_exists(argvars, rettv)
 	{
 	    if (tofree != NULL)
 		name = tofree;
-	    n = (get_var_tv(name, len, &tv, FALSE) == OK);
+	    n = (get_var_tv(name, len, &tv, GVT_NO_AUTOLOAD) == OK);
 	    if (n)
 	    {
 		/* handle d.key, l[idx], f(expr) */
@@ -10369,8 +10368,6 @@ f_exists(argvars, rettv)
     }
 
     rettv->vval.v_number = n;
-
-    no_autoload = FALSE;
 }
 
 #ifdef FEAT_FLOAT
@@ -13621,7 +13618,7 @@ f_islocked(argvars, rettv)
 		    rettv->vval.v_number = 1;	    /* always locked */
 		else
 		{
-		    di = find_var(lv.ll_name, NULL);
+		    di = find_var(lv.ll_name, NULL, TRUE);
 		    if (di != NULL)
 		    {
 			/* Consider a variable locked when:
@@ -20051,13 +20048,16 @@ set_cmdarg(eap, oldarg)
 /*
  * Get the value of internal variable "name".
  * Return OK or FAIL.
+ * Flags:
+ *  GVT_VERBOSE:	may give error message
+ *  GVT_NO_AUTOLOAD:	disable script autoloading
  */
     static int
-get_var_tv(name, len, rettv, verbose)
+get_var_tv(name, len, rettv, flags)
     char_u	*name;
     int		len;		/* length of "name" */
     typval_T	*rettv;		/* NULL when only checking existence */
-    int		verbose;	/* may give error message */
+    int		flags;
 {
     int		ret = OK;
     typval_T	*tv = NULL;
@@ -20084,14 +20084,14 @@ get_var_tv(name, len, rettv, verbose)
      */
     else
     {
-	v = find_var(name, NULL);
+	v = find_var(name, NULL, flags & GVT_NO_AUTOLOAD);
 	if (v != NULL)
 	    tv = &v->di_tv;
     }
 
     if (tv == NULL)
     {
-	if (rettv != NULL && verbose)
+	if (rettv != NULL && (flags & GVT_VERBOSE))
 	    EMSG2(_(e_undefvar), name);
 	ret = FAIL;
     }
@@ -20488,9 +20488,10 @@ get_tv_string_buf_chk(varp, buf)
  * hashtab_T used.
  */
     static dictitem_T *
-find_var(name, htp)
+find_var(name, htp, no_autoload)
     char_u	*name;
     hashtab_T	**htp;
+    int		no_autoload;
 {
     char_u	*varname;
     hashtab_T	*ht;
@@ -20500,7 +20501,7 @@ find_var(name, htp)
 	*htp = ht;
     if (ht == NULL)
 	return NULL;
-    return find_var_in_ht(ht, *name, varname, htp != NULL);
+    return find_var_in_ht(ht, *name, varname, no_autoload || htp != NULL);
 }
 
 /*
@@ -20508,11 +20509,11 @@ find_var(name, htp)
  * Returns NULL if not found.
  */
     static dictitem_T *
-find_var_in_ht(ht, htname, varname, writing)
+find_var_in_ht(ht, htname, varname, no_autoload)
     hashtab_T	*ht;
     int		htname;
     char_u	*varname;
-    int		writing;
+    int		no_autoload;
 {
     hashitem_T	*hi;
 
@@ -20544,7 +20545,7 @@ find_var_in_ht(ht, htname, varname, writing)
 	 * worked find the variable again.  Don't auto-load a script if it was
 	 * loaded already, otherwise it would be loaded every time when
 	 * checking if a function name is a Funcref variable. */
-	if (ht == &globvarht && !writing)
+	if (ht == &globvarht && !no_autoload)
 	{
 	    /* Note: script_autoload() may make "hi" invalid. It must either
 	     * be obtained again or not used. */
@@ -20624,7 +20625,7 @@ get_var_value(name)
 {
     dictitem_T	*v;
 
-    v = find_var(name, NULL);
+    v = find_var(name, NULL, FALSE);
     if (v == NULL)
 	return NULL;
     return get_tv_string(&v->di_tv);
@@ -22017,7 +22018,7 @@ ex_function(eap)
      */
     if (fudi.fd_dict == NULL)
     {
-	v = find_var(name, &ht);
+	v = find_var(name, &ht, FALSE);
 	if (v != NULL && v->di_tv.v_type == VAR_FUNC)
 	{
 	    emsg_funcname(N_("E707: Function name conflicts with variable: %s"),
@@ -22194,10 +22195,14 @@ get_called_function(pp, skip, fdp, flags)
     lval_T	lv;
     int		len;
     int		lead;
+    int		df_flags;
 
     if (fdp != NULL)
 	vim_memset(fdp, 0, sizeof(funcdict_T));
     start = *pp;
+
+    df_flags = (flags&GCF_AUTOLOAD?  DF_CREATE_AUTOLOAD : 0)|
+	       (flags&GCF_RUN_EVENT? DF_RUN_EVENT       : 0);
 
     /* Check for hard coded <SNR>: already translated function ID (from a user
      * command). */
@@ -22208,9 +22213,7 @@ get_called_function(pp, skip, fdp, flags)
 	len = get_id_len(pp) + 3;
 	/* It is impossible for a variable name to start with <SNR>, thus 
 	 * variables are not checked */
-	return deref_func_name(start, len,
-				(flags&GCF_AUTOLOAD?  DF_CREATE_AUTOLOAD : 0)|
-				(flags&GCF_RUN_EVENT? DF_RUN_EVENT       : 0));
+	return deref_func_name(start, len, df_flags);
     }
 
     /* A name starting with "<SID>" or "<SNR>" is local to a script.  But
@@ -22279,20 +22282,17 @@ get_called_function(pp, skip, fdp, flags)
 	goto theend;
     }
 
+    df_flags |= DF_CHECK_VAR;
     /* Check if the name is a Funcref.  If so, use the value. */
     if (lv.ll_exp_name != NULL)
     {
 	len = (int)STRLEN(lv.ll_exp_name);
-	func = deref_func_name(lv.ll_exp_name, len,
-		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
-		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
+	func = deref_func_name(lv.ll_exp_name, len, df_flags);
     }
     else
     {
 	len = (int)(end - *pp);
-	func = deref_func_name(*pp, len,
-		DF_CHECK_VAR|DF_CREATE_AUTOLOAD
-		|(!skip && flags&GCF_RUN_EVENT ? DF_RUN_EVENT : 0));
+	func = deref_func_name(*pp, len, df_flags);
     }
 
     *pp = end;
@@ -22902,10 +22902,6 @@ script_autoload(name, reload)
     char_u	*scriptname, *tofree;
     int		ret = FALSE;
     int		i;
-
-    /* Return quickly when autoload disabled. */
-    if (no_autoload)
-	return FALSE;
 
     /* If there is no '#' after name[0] there is no package name. */
     p = vim_strchr(name, AUTOLOAD_CHAR);
