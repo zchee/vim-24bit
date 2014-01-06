@@ -5702,10 +5702,10 @@ name_python_func(pyfp)
 }
 
 #if PY_MAJOR_VERSION < 3
-static char_u	*python_func_type_name = "python";
+static char_u	*python_func_type_name = (char_u *) "python";
 # define PYTHON_FUNC_TYPE_LEN 6
 #else
-static char_u	*python_func_type_name = "python3";
+static char_u	*python_func_type_name = (char_u *) "python3";
 # define PYTHON_FUNC_TYPE_LEN 7
 #endif
 
