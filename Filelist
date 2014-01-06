@@ -95,6 +95,7 @@ SRC_ALL =	\
 		src/testdir/pythonx/topmodule/submodule/subsubmodule/subsubsubmodule.py \
 		src/testdir/python_after/*.py \
 		src/testdir/python_before/*.py \
+		src/testdir/sautest/autoload/*.vim \
 		src/proto.h \
 		src/proto/blowfish.pro \
 		src/proto/buffer.pro \
