@@ -193,6 +193,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PySequence_Size dll_PySequence_Size
 # define PySequence_GetItem dll_PySequence_GetItem
 # define PySequence_Fast dll_PySequence_Fast
+# define PyTuple_New dll_PyTuple_New
 # define PyTuple_Size dll_PyTuple_Size
 # define PyTuple_GetItem dll_PyTuple_GetItem
 # define PyTuple_Type (*dll_PyTuple_Type)
@@ -234,6 +235,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PyFloat_AsDouble dll_PyFloat_AsDouble
 # define PyFloat_FromDouble dll_PyFloat_FromDouble
 # define PyFloat_Type (*dll_PyFloat_Type)
+# define PyCallable_Check dll_PyCallable_Check
 # define PyNumber_Check dll_PyNumber_Check
 # define PyNumber_Long dll_PyNumber_Long
 # define PyImport_AddModule (*dll_PyImport_AddModule)
@@ -338,6 +340,7 @@ static int (*dll_PySequence_Check)(PyObject *);
 static PyInt(*dll_PySequence_Size)(PyObject *);
 static PyObject*(*dll_PySequence_GetItem)(PyObject *, PyInt);
 static PyObject*(*dll_PySequence_Fast)(PyObject *, const char *);
+static PyObject*(*dll_PyTuple_New)(PyInt);
 static PyInt(*dll_PyTuple_Size)(PyObject *);
 static PyObject*(*dll_PyTuple_GetItem)(PyObject *, PyInt);
 static PyTypeObject* dll_PyTuple_Type;
@@ -376,6 +379,7 @@ static PyObject *(*py_PyUnicode_AsEncodedString)(PyObject *, char *, char *);
 static double(*dll_PyFloat_AsDouble)(PyObject *);
 static PyObject*(*dll_PyFloat_FromDouble)(double);
 static PyTypeObject* dll_PyFloat_Type;
+static int(*dll_PyCallable_Check)(PyObject *);
 static int(*dll_PyNumber_Check)(PyObject *);
 static PyObject*(*dll_PyNumber_Long)(PyObject *);
 static int(*dll_PySys_SetObject)(char *, PyObject *);
@@ -518,8 +522,9 @@ static struct
     {"PySequence_Check", (PYTHON_PROC*)&dll_PySequence_Check},
     {"PySequence_GetItem", (PYTHON_PROC*)&dll_PySequence_GetItem},
     {"PySequence_Fast", (PYTHON_PROC*)&dll_PySequence_Fast},
-    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
+    {"PyTuple_New", (PYTHON_PROC*)&dll_PyTuple_New},
     {"PyTuple_Size", (PYTHON_PROC*)&dll_PyTuple_Size},
+    {"PyTuple_GetItem", (PYTHON_PROC*)&dll_PyTuple_GetItem},
     {"PyTuple_Type", (PYTHON_PROC*)&dll_PyTuple_Type},
     {"PyImport_ImportModule", (PYTHON_PROC*)&dll_PyImport_ImportModule},
     {"PyDict_GetItemString", (PYTHON_PROC*)&dll_PyDict_GetItemString},
@@ -556,6 +561,7 @@ static struct
     {"PyFloat_AsDouble", (PYTHON_PROC*)&dll_PyFloat_AsDouble},
     {"PyFloat_FromDouble", (PYTHON_PROC*)&dll_PyFloat_FromDouble},
     {"PyImport_AddModule", (PYTHON_PROC*)&dll_PyImport_AddModule},
+    {"PyCallable_Check", (PYTHON_PROC*)&dll_PyCallable_Check},
     {"PyNumber_Check", (PYTHON_PROC*)&dll_PyNumber_Check},
     {"PyNumber_Long", (PYTHON_PROC*)&dll_PyNumber_Long},
     {"PySys_SetObject", (PYTHON_PROC*)&dll_PySys_SetObject},
@@ -780,21 +786,6 @@ static PyObject *FunctionGetattr(PyObject *, char *);
     }
 #endif
 
-#if defined(HAVE_LOCALE_H) || defined(X_LOCALE)
-    static void *
-py_memsave(void *p, size_t len)
-{
-    void	*r;
-
-    if (!(r = PyMem_Malloc(len)))
-	return NULL;
-    mch_memmove(r, p, len);
-    return r;
-}
-
-# define PY_STRSAVE(s) ((char_u *) py_memsave(s, STRLEN(s) + 1))
-#endif
-
 /*
  * Include the code shared with if_python3.c
  */
@@ -861,6 +852,7 @@ python_end()
 	Python_RestoreThread();	    /* enter python */
 # endif
 	Py_Finalize();
+	pyquit = TRUE;
     }
     end_dynamic_python();
 #else
@@ -872,6 +864,7 @@ python_end()
 	Python_RestoreThread();	    /* enter python */
 # endif
 	Py_Finalize();
+	pyquit = TRUE;
     }
 #endif
 
@@ -1504,7 +1497,34 @@ FunctionGetattr(PyObject *self, char *name)
     FunctionObject	*this = (FunctionObject *)(self);
 
     if (strcmp(name, "name") == 0)
-	return PyString_FromString((char *)(this->name));
+    {
+	char_u	*name;
+	VimTryStart();
+	if (!(name = FUNC_NAME(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	return PyString_FromString((char *)name);
+    }
+    else if (strcmp(name, "repr") == 0)
+    {
+	char_u		*tofree;
+	PyObject	*r;
+	VimTryStart();
+	if (!(tofree = FUNC_REPR(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	r = PyString_FromString((char *)tofree);
+	vim_free(tofree);
+	return r;
+    }
     else if (strcmp(name, "__members__") == 0)
 	return ObjectDir(NULL, FunctionAttrs);
     else
@@ -1522,7 +1542,7 @@ do_pyeval (char_u *str, typval_T *rettv)
     {
 	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
 	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
-	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
+	case VAR_FUNC: ++rettv->vval.v_func->fv_refcount; break;
 	case VAR_UNKNOWN:
 	    rettv->v_type = VAR_NUMBER;
 	    rettv->vval.v_number = 0;

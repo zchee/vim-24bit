@@ -6,8 +6,8 @@ Vim(put):E684:
 [0, function('strlen'), [1, 2, function('strlen'), {'a': 1}]]
 1
 ['-1', '0', '1', 'b', 'f']
-['asd', -1L, <vim.Function '1'>, <vim.dictionary object at >, <vim.list object at >]
-[('-1', <vim.dictionary object at >), ('0', -1L), ('1', 'asd'), ('b', <vim.list object at >), ('f', <vim.Function '1'>)]
+['asd', -1L, <vim.Function function('1')>, <vim.dictionary object at >, <vim.list object at >]
+[('-1', <vim.dictionary object at >), ('0', -1L), ('1', 'asd'), ('b', <vim.list object at >), ('f', <vim.Function function('1')>)]
 '-1' : {'a': 1}
 '0' : -1
 '1' : 'asd'
@@ -54,7 +54,7 @@ None
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}]
 [function('New'), function('DictNew'), 'NewStart', 1, 2, 3, 'NewEnd', 'DictNewStart', 1, 2, 3, 'DictNewEnd', {'a': 'b'}, 'New']
 l[1](1, 2, 3):error:('Vim:E725: Calling dict function without Dictionary: DictNew',)
-f(1, 2, 3):error:('Vim:E117: Unknown function: New',)
+f(1, 2, 3):NOT FAILED
 [0.0, 0.0]
 KeyError
 TypeError
@@ -409,7 +409,7 @@ tabpage:__dir__,__members__,number,valid,vars,window,windows
 range:__dir__,__members__,append,end,start
 dictionary:__dir__,__members__,get,has_key,items,keys,locked,pop,popitem,scope,update,values
 list:__dir__,__members__,extend,locked
-function:__dir__,__members__,softspace
+function:__dir__,__members__,name,repr
 output:__dir__,__members__,flush,softspace,write,writelines
 {}
 {'a': 1}
@@ -438,6 +438,11 @@ src
 testdir/test86.in
 testdir
 test86.in
+Type F2: <type 'vim.function'>
+abcO
+Retarg called with 'abcO'
+Retarg called with 'abcP'
+abcP
 > Output
 >> OutputSetattr
 del sys.stdout.softspace:AttributeError:("can't delete OutputObject attributes",)
@@ -554,6 +559,7 @@ d["a"] = {"abcF" : {u"": 1}}:ValueError:('empty keys are not allowed',)
 d["a"] = {"abcF" : FailingMapping()}:NotImplementedError:('keys',)
 d["a"] = {"abcF" : FailingMappingKey()}:NotImplementedError:('getitem:mappingkey',)
 d["a"] = {"abcF" : FailingNumber()}:TypeError:('long() argument must be a string or a number',)
+d["a"] = {"abcF" : FailingCallRepr()}:NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using d["a"] = Mapping({%s : 1})
 d["a"] = Mapping({1 : 1}):TypeError:('expected str() or unicode() instance, but got int',)
@@ -581,6 +587,7 @@ d["a"] = Mapping({"abcG" : {u"": 1}}):ValueError:('empty keys are not allowed',)
 d["a"] = Mapping({"abcG" : FailingMapping()}):NotImplementedError:('keys',)
 d["a"] = Mapping({"abcG" : FailingMappingKey()}):NotImplementedError:('getitem:mappingkey',)
 d["a"] = Mapping({"abcG" : FailingNumber()}):TypeError:('long() argument must be a string or a number',)
+d["a"] = Mapping({"abcG" : FailingCallRepr()}):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using d["a"] = %s
 d["a"] = FailingIter():TypeError:('unable to convert FailingIter to vim structure',)
@@ -593,6 +600,7 @@ d["a"] = {u"": 1}:ValueError:('empty keys are not allowed',)
 d["a"] = FailingMapping():NotImplementedError:('keys',)
 d["a"] = FailingMappingKey():NotImplementedError:('getitem:mappingkey',)
 d["a"] = FailingNumber():TypeError:('long() argument must be a string or a number',)
+d["a"] = FailingCallRepr():NotImplementedError:('callrepr:repr',)
 <<< Finished
 >> DictionaryUpdate
 >>> kwargs
@@ -629,6 +637,7 @@ d.update({"abcF" : {u"": 1}}):ValueError:('empty keys are not allowed',)
 d.update({"abcF" : FailingMapping()}):NotImplementedError:('keys',)
 d.update({"abcF" : FailingMappingKey()}):NotImplementedError:('getitem:mappingkey',)
 d.update({"abcF" : FailingNumber()}):TypeError:('long() argument must be a string or a number',)
+d.update({"abcF" : FailingCallRepr()}):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using d.update(Mapping({%s : 1}))
 d.update(Mapping({1 : 1})):TypeError:('expected str() or unicode() instance, but got int',)
@@ -656,6 +665,7 @@ d.update(Mapping({"abcG" : {u"": 1}})):ValueError:('empty keys are not allowed',
 d.update(Mapping({"abcG" : FailingMapping()})):NotImplementedError:('keys',)
 d.update(Mapping({"abcG" : FailingMappingKey()})):NotImplementedError:('getitem:mappingkey',)
 d.update(Mapping({"abcG" : FailingNumber()})):TypeError:('long() argument must be a string or a number',)
+d.update(Mapping({"abcG" : FailingCallRepr()})):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using d.update(%s)
 d.update(FailingIter()):NotImplementedError:('iter',)
@@ -668,6 +678,7 @@ d.update({u"": 1}):ValueError:('empty keys are not allowed',)
 d.update(FailingMapping()):NotImplementedError:('keys',)
 d.update(FailingMappingKey()):NotImplementedError:('getitem:mappingkey',)
 d.update(FailingNumber()):TypeError:("'FailingNumber' object is not iterable",)
+d.update(FailingCallRepr()):TypeError:("'FailingCallRepr' object is not iterable",)
 <<< Finished
 >>> Testing StringToChars using d.update(((%s, 0),))
 d.update(((1, 0),)):TypeError:('expected str() or unicode() instance, but got int',)
@@ -700,6 +711,7 @@ d.update((("a", {"abcF" : {u"": 1}}),)):ValueError:('empty keys are not allowed'
 d.update((("a", {"abcF" : FailingMapping()}),)):NotImplementedError:('keys',)
 d.update((("a", {"abcF" : FailingMappingKey()}),)):NotImplementedError:('getitem:mappingkey',)
 d.update((("a", {"abcF" : FailingNumber()}),)):TypeError:('long() argument must be a string or a number',)
+d.update((("a", {"abcF" : FailingCallRepr()}),)):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using d.update((("a", Mapping({%s : 1})),))
 d.update((("a", Mapping({1 : 1})),)):TypeError:('expected str() or unicode() instance, but got int',)
@@ -727,6 +739,7 @@ d.update((("a", Mapping({"abcG" : {u"": 1}})),)):ValueError:('empty keys are not
 d.update((("a", Mapping({"abcG" : FailingMapping()})),)):NotImplementedError:('keys',)
 d.update((("a", Mapping({"abcG" : FailingMappingKey()})),)):NotImplementedError:('getitem:mappingkey',)
 d.update((("a", Mapping({"abcG" : FailingNumber()})),)):TypeError:('long() argument must be a string or a number',)
+d.update((("a", Mapping({"abcG" : FailingCallRepr()})),)):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using d.update((("a", %s),))
 d.update((("a", FailingIter()),)):TypeError:('unable to convert FailingIter to vim structure',)
@@ -739,6 +752,7 @@ d.update((("a", {u"": 1}),)):ValueError:('empty keys are not allowed',)
 d.update((("a", FailingMapping()),)):NotImplementedError:('keys',)
 d.update((("a", FailingMappingKey()),)):NotImplementedError:('getitem:mappingkey',)
 d.update((("a", FailingNumber()),)):TypeError:('long() argument must be a string or a number',)
+d.update((("a", FailingCallRepr()),)):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >> DictionaryPopItem
 d.popitem(1, 2):TypeError:('popitem() takes no arguments (2 given)',)
@@ -778,6 +792,7 @@ vim.List([{"abcF" : {u"": 1}}]):ValueError:('empty keys are not allowed',)
 vim.List([{"abcF" : FailingMapping()}]):NotImplementedError:('keys',)
 vim.List([{"abcF" : FailingMappingKey()}]):NotImplementedError:('getitem:mappingkey',)
 vim.List([{"abcF" : FailingNumber()}]):TypeError:('long() argument must be a string or a number',)
+vim.List([{"abcF" : FailingCallRepr()}]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using vim.List([Mapping({%s : 1})])
 vim.List([Mapping({1 : 1})]):TypeError:('expected str() or unicode() instance, but got int',)
@@ -805,6 +820,7 @@ vim.List([Mapping({"abcG" : {u"": 1}})]):ValueError:('empty keys are not allowed
 vim.List([Mapping({"abcG" : FailingMapping()})]):NotImplementedError:('keys',)
 vim.List([Mapping({"abcG" : FailingMappingKey()})]):NotImplementedError:('getitem:mappingkey',)
 vim.List([Mapping({"abcG" : FailingNumber()})]):TypeError:('long() argument must be a string or a number',)
+vim.List([Mapping({"abcG" : FailingCallRepr()})]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using vim.List([%s])
 vim.List([FailingIter()]):TypeError:('unable to convert FailingIter to vim structure',)
@@ -817,6 +833,7 @@ vim.List([{u"": 1}]):ValueError:('empty keys are not allowed',)
 vim.List([FailingMapping()]):NotImplementedError:('keys',)
 vim.List([FailingMappingKey()]):NotImplementedError:('getitem:mappingkey',)
 vim.List([FailingNumber()]):TypeError:('long() argument must be a string or a number',)
+vim.List([FailingCallRepr()]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >> ListItem
 l[1000]:IndexError:('list index out of range',)
@@ -855,6 +872,7 @@ l[:] = [{"abcF" : {u"": 1}}]:ValueError:('empty keys are not allowed',)
 l[:] = [{"abcF" : FailingMapping()}]:NotImplementedError:('keys',)
 l[:] = [{"abcF" : FailingMappingKey()}]:NotImplementedError:('getitem:mappingkey',)
 l[:] = [{"abcF" : FailingNumber()}]:TypeError:('long() argument must be a string or a number',)
+l[:] = [{"abcF" : FailingCallRepr()}]:NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using l[:] = [Mapping({%s : 1})]
 l[:] = [Mapping({1 : 1})]:TypeError:('expected str() or unicode() instance, but got int',)
@@ -882,6 +900,7 @@ l[:] = [Mapping({"abcG" : {u"": 1}})]:ValueError:('empty keys are not allowed',)
 l[:] = [Mapping({"abcG" : FailingMapping()})]:NotImplementedError:('keys',)
 l[:] = [Mapping({"abcG" : FailingMappingKey()})]:NotImplementedError:('getitem:mappingkey',)
 l[:] = [Mapping({"abcG" : FailingNumber()})]:TypeError:('long() argument must be a string or a number',)
+l[:] = [Mapping({"abcG" : FailingCallRepr()})]:NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using l[:] = [%s]
 l[:] = [FailingIter()]:TypeError:('unable to convert FailingIter to vim structure',)
@@ -894,6 +913,7 @@ l[:] = [{u"": 1}]:ValueError:('empty keys are not allowed',)
 l[:] = [FailingMapping()]:NotImplementedError:('keys',)
 l[:] = [FailingMappingKey()]:NotImplementedError:('getitem:mappingkey',)
 l[:] = [FailingNumber()]:TypeError:('long() argument must be a string or a number',)
+l[:] = [FailingCallRepr()]:NotImplementedError:('callrepr:repr',)
 <<< Finished
 >> ListConcatInPlace
 >>> Testing *Iter* using l.extend(%s)
@@ -926,6 +946,7 @@ l.extend([{"abcF" : {u"": 1}}]):ValueError:('empty keys are not allowed',)
 l.extend([{"abcF" : FailingMapping()}]):NotImplementedError:('keys',)
 l.extend([{"abcF" : FailingMappingKey()}]):NotImplementedError:('getitem:mappingkey',)
 l.extend([{"abcF" : FailingNumber()}]):TypeError:('long() argument must be a string or a number',)
+l.extend([{"abcF" : FailingCallRepr()}]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using l.extend([Mapping({%s : 1})])
 l.extend([Mapping({1 : 1})]):TypeError:('expected str() or unicode() instance, but got int',)
@@ -953,6 +974,7 @@ l.extend([Mapping({"abcG" : {u"": 1}})]):ValueError:('empty keys are not allowed
 l.extend([Mapping({"abcG" : FailingMapping()})]):NotImplementedError:('keys',)
 l.extend([Mapping({"abcG" : FailingMappingKey()})]):NotImplementedError:('getitem:mappingkey',)
 l.extend([Mapping({"abcG" : FailingNumber()})]):TypeError:('long() argument must be a string or a number',)
+l.extend([Mapping({"abcG" : FailingCallRepr()})]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using l.extend([%s])
 l.extend([FailingIter()]):TypeError:('unable to convert FailingIter to vim structure',)
@@ -965,6 +987,7 @@ l.extend([{u"": 1}]):ValueError:('empty keys are not allowed',)
 l.extend([FailingMapping()]):NotImplementedError:('keys',)
 l.extend([FailingMappingKey()]):NotImplementedError:('getitem:mappingkey',)
 l.extend([FailingNumber()]):TypeError:('long() argument must be a string or a number',)
+l.extend([FailingCallRepr()]):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >> ListSetattr
 del l.locked:AttributeError:('cannot delete vim.List attributes',)
@@ -972,8 +995,8 @@ l.locked = FailingTrue():NotImplementedError:('bool',)
 l.xxx = True:AttributeError:('cannot set attribute xxx',)
 > Function
 >> FunctionConstructor
-vim.Function("123"):ValueError:('unnamed function 123 does not exist',)
-vim.Function("xxx_non_existent_function_xxx"):ValueError:('function xxx_non_existent_function_xxx does not exist',)
+vim.Function("123"):error:('failed to get function',)
+vim.Function("xxx_non_existent_function_xxx"):error:('failed to get function',)
 vim.Function("xxx#non#existent#function#xxx"):NOT FAILED
 >> FunctionCall
 >>> Testing StringToChars using f({%s : 1})
@@ -1002,6 +1025,7 @@ f({"abcF" : {u"": 1}}):ValueError:('empty keys are not allowed',)
 f({"abcF" : FailingMapping()}):NotImplementedError:('keys',)
 f({"abcF" : FailingMappingKey()}):NotImplementedError:('getitem:mappingkey',)
 f({"abcF" : FailingNumber()}):TypeError:('long() argument must be a string or a number',)
+f({"abcF" : FailingCallRepr()}):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using f(Mapping({%s : 1}))
 f(Mapping({1 : 1})):TypeError:('expected str() or unicode() instance, but got int',)
@@ -1029,6 +1053,7 @@ f(Mapping({"abcG" : {u"": 1}})):ValueError:('empty keys are not allowed',)
 f(Mapping({"abcG" : FailingMapping()})):NotImplementedError:('keys',)
 f(Mapping({"abcG" : FailingMappingKey()})):NotImplementedError:('getitem:mappingkey',)
 f(Mapping({"abcG" : FailingNumber()})):TypeError:('long() argument must be a string or a number',)
+f(Mapping({"abcG" : FailingCallRepr()})):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using f(%s)
 f(FailingIter()):TypeError:('unable to convert FailingIter to vim structure',)
@@ -1041,6 +1066,7 @@ f({u"": 1}):ValueError:('empty keys are not allowed',)
 f(FailingMapping()):NotImplementedError:('keys',)
 f(FailingMappingKey()):NotImplementedError:('getitem:mappingkey',)
 f(FailingNumber()):TypeError:('long() argument must be a string or a number',)
+f(FailingCallRepr()):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using fd(self={%s : 1})
 fd(self={1 : 1}):TypeError:('expected str() or unicode() instance, but got int',)
@@ -1068,6 +1094,7 @@ fd(self={"abcF" : {u"": 1}}):ValueError:('empty keys are not allowed',)
 fd(self={"abcF" : FailingMapping()}):NotImplementedError:('keys',)
 fd(self={"abcF" : FailingMappingKey()}):NotImplementedError:('getitem:mappingkey',)
 fd(self={"abcF" : FailingNumber()}):TypeError:('long() argument must be a string or a number',)
+fd(self={"abcF" : FailingCallRepr()}):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing StringToChars using fd(self=Mapping({%s : 1}))
 fd(self=Mapping({1 : 1})):TypeError:('expected str() or unicode() instance, but got int',)
@@ -1095,6 +1122,7 @@ fd(self=Mapping({"abcG" : {u"": 1}})):ValueError:('empty keys are not allowed',)
 fd(self=Mapping({"abcG" : FailingMapping()})):NotImplementedError:('keys',)
 fd(self=Mapping({"abcG" : FailingMappingKey()})):NotImplementedError:('getitem:mappingkey',)
 fd(self=Mapping({"abcG" : FailingNumber()})):TypeError:('long() argument must be a string or a number',)
+fd(self=Mapping({"abcG" : FailingCallRepr()})):NotImplementedError:('callrepr:repr',)
 <<< Finished
 >>> Testing *Iter* using fd(self=%s)
 fd(self=FailingIter()):TypeError:('unable to convert FailingIter to vim dictionary',)
@@ -1107,6 +1135,7 @@ fd(self={u"": 1}):ValueError:('empty keys are not allowed',)
 fd(self=FailingMapping()):NotImplementedError:('keys',)
 fd(self=FailingMappingKey()):NotImplementedError:('getitem:mappingkey',)
 fd(self=FailingNumber()):TypeError:('unable to convert FailingNumber to vim dictionary',)
+fd(self=FailingCallRepr()):TypeError:('unable to convert FailingCallRepr to vim dictionary',)
 <<< Finished
 >>> Testing ConvertFromPyMapping using fd(self=%s)
 fd(self=[]):TypeError:('unable to convert list to vim dictionary',)
@@ -1184,6 +1213,80 @@ vim.current.buffer = True:TypeError:('expected vim.Buffer object, but got bool',
 vim.current.window = True:TypeError:('expected vim.Window object, but got bool',)
 vim.current.tabpage = True:TypeError:('expected vim.TabPage object, but got bool',)
 vim.current.xxx = True:AttributeError:('xxx',)
+> run_func
+vim.vars["F1"]():TypeError:('__call__() takes exactly 2 arguments (1 given)',)
+vim.vars["F1"]("abcQ"):NotImplementedError:('call',)
+>>> Testing StringToChars using F2({%s : 1})
+F2({1 : 1}):TypeError:('expected str() or unicode() instance, but got int',)
+F2({u"\0" : 1}):TypeError:('expected string without null bytes',)
+F2({"\0" : 1}):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing StringToChars using F2({"abcF" : {%s : 1}})
+F2({"abcF" : {1 : 1}}):TypeError:('expected str() or unicode() instance, but got int',)
+F2({"abcF" : {u"\0" : 1}}):TypeError:('expected string without null bytes',)
+F2({"abcF" : {"\0" : 1}}):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing StringToChars using F2({"abcF" : Mapping({%s : 1})})
+F2({"abcF" : Mapping({1 : 1})}):TypeError:('expected str() or unicode() instance, but got int',)
+F2({"abcF" : Mapping({u"\0" : 1})}):TypeError:('expected string without null bytes',)
+F2({"abcF" : Mapping({"\0" : 1})}):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing *Iter* using F2({"abcF" : %s})
+F2({"abcF" : FailingIter()}):TypeError:('unable to convert FailingIter to vim structure',)
+F2({"abcF" : FailingIterNext()}):NotImplementedError:('next',)
+<<< Finished
+>>> Testing ConvertFromPyObject using F2({"abcF" : %s})
+F2({"abcF" : None}):TypeError:('unable to convert NoneType to vim structure',)
+F2({"abcF" : {"": 1}}):ValueError:('empty keys are not allowed',)
+F2({"abcF" : {u"": 1}}):ValueError:('empty keys are not allowed',)
+F2({"abcF" : FailingMapping()}):NotImplementedError:('keys',)
+F2({"abcF" : FailingMappingKey()}):NotImplementedError:('getitem:mappingkey',)
+F2({"abcF" : FailingNumber()}):TypeError:('long() argument must be a string or a number',)
+F2({"abcF" : FailingCallRepr()}):NotImplementedError:('callrepr:repr',)
+<<< Finished
+>>> Testing StringToChars using F2(Mapping({%s : 1}))
+F2(Mapping({1 : 1})):TypeError:('expected str() or unicode() instance, but got int',)
+F2(Mapping({u"\0" : 1})):TypeError:('expected string without null bytes',)
+F2(Mapping({"\0" : 1})):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing StringToChars using F2(Mapping({"abcG" : {%s : 1}}))
+F2(Mapping({"abcG" : {1 : 1}})):TypeError:('expected str() or unicode() instance, but got int',)
+F2(Mapping({"abcG" : {u"\0" : 1}})):TypeError:('expected string without null bytes',)
+F2(Mapping({"abcG" : {"\0" : 1}})):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing StringToChars using F2(Mapping({"abcG" : Mapping({%s : 1})}))
+F2(Mapping({"abcG" : Mapping({1 : 1})})):TypeError:('expected str() or unicode() instance, but got int',)
+F2(Mapping({"abcG" : Mapping({u"\0" : 1})})):TypeError:('expected string without null bytes',)
+F2(Mapping({"abcG" : Mapping({"\0" : 1})})):TypeError:('expected string without null bytes',)
+<<< Finished
+>>> Testing *Iter* using F2(Mapping({"abcG" : %s}))
+F2(Mapping({"abcG" : FailingIter()})):TypeError:('unable to convert FailingIter to vim structure',)
+F2(Mapping({"abcG" : FailingIterNext()})):NotImplementedError:('next',)
+<<< Finished
+>>> Testing ConvertFromPyObject using F2(Mapping({"abcG" : %s}))
+F2(Mapping({"abcG" : None})):TypeError:('unable to convert NoneType to vim structure',)
+F2(Mapping({"abcG" : {"": 1}})):ValueError:('empty keys are not allowed',)
+F2(Mapping({"abcG" : {u"": 1}})):ValueError:('empty keys are not allowed',)
+F2(Mapping({"abcG" : FailingMapping()})):NotImplementedError:('keys',)
+F2(Mapping({"abcG" : FailingMappingKey()})):NotImplementedError:('getitem:mappingkey',)
+F2(Mapping({"abcG" : FailingNumber()})):TypeError:('long() argument must be a string or a number',)
+F2(Mapping({"abcG" : FailingCallRepr()})):NotImplementedError:('callrepr:repr',)
+<<< Finished
+>>> Testing *Iter* using F2(%s)
+F2(FailingIter()):TypeError:('unable to convert FailingIter to vim structure',)
+F2(FailingIterNext()):NotImplementedError:('next',)
+<<< Finished
+>>> Testing ConvertFromPyObject using F2(%s)
+F2(None):TypeError:('unable to convert NoneType to vim structure',)
+F2({"": 1}):ValueError:('empty keys are not allowed',)
+F2({u"": 1}):ValueError:('empty keys are not allowed',)
+F2(FailingMapping()):NotImplementedError:('keys',)
+F2(FailingMappingKey()):NotImplementedError:('getitem:mappingkey',)
+F2(FailingNumber()):TypeError:('long() argument must be a string or a number',)
+F2(FailingCallRepr()):NotImplementedError:('callrepr:repr',)
+<<< Finished
+F2(1, 2, 3):TypeError:('retarg() takes exactly 1 argument (3 given)',)
+vim.vars["F3"] = FailingCallRepr():NotImplementedError:('callrepr:repr',)
 ['/testdir']
 '/testdir'
 2,xx

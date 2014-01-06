@@ -6,6 +6,7 @@ This would require recompiling Python with:
 See http://svn.python.org/view/python/trunk/Misc/README.valgrind?view=markup
 
 STARTTEST
+:" Last abc: Q
 :so small.vim
 :set encoding=latin1
 :set noswapfile
@@ -894,6 +895,21 @@ cb.append(vim.eval('@%'))
 del fnamemodify
 EOF
 :"
+:" Test funcrefs
+py << EOF
+def retarg(arg):
+    cb.append('Retarg called with ' + repr(arg))
+    return arg
+
+vim.vars['F2'] = retarg  # This will wrap retarg into vim Funcref]
+F2 = vim.vars['F2']      # But this will not unwrap Funcref
+cb.append('Type F2: ' + repr(type(F2)))
+vim.command('$put =g:F2(\'abcO\')')
+vim.vars.pop('F2')
+cb.append(F2('abcP'))
+del F2
+EOF
+:"
 :" Test errors
 :fun F() dict
 :endfun
@@ -956,6 +972,7 @@ def convertfrompyobject_test(expr, recurse=True):
         'FailingMapping()',     #
         'FailingMappingKey()',  #
         'FailingNumber()',      #
+        'FailingCallRepr()',    #
     ))
 
 def convertfrompymapping_test(expr):
@@ -1026,6 +1043,13 @@ class FailingCall(object):
 class FailingNumber(object):
     def __int__(self):
         raise NotImplementedError('int')
+
+class FailingCallRepr(object):
+    def __repr__(self):
+        raise NotImplementedError('callrepr:repr')
+
+    def __call__(self):
+        raise NotImplementedError('callrepr:call')
 
 cb.append("> Output")
 cb.append(">> OutputSetattr")
@@ -1196,6 +1220,18 @@ ee('vim.current.buffer = True')
 ee('vim.current.window = True')
 ee('vim.current.tabpage = True')
 ee('vim.current.xxx = True')
+cb.append('> run_func')
+vim.vars['F1'] = FailingCall()
+ee('vim.vars["F1"]()')
+ee('vim.vars["F1"]("abcQ")')
+vim.vars.pop('F1')
+vim.vars['F2'] = retarg  # This will wrap retarg into vim Funcref
+F2 = vim.vars['F2']      # But this will not unwrap Funcref
+convertfrompyobject_test('F2(%s)')
+ee('F2(1, 2, 3)')
+del F2
+vim.vars.pop('F2')
+ee('vim.vars["F3"] = FailingCallRepr()')
 del d
 del ned
 del dl
@@ -1220,6 +1256,7 @@ del FailingList
 del NoArgsCall
 del FailingCall
 del FailingNumber
+del FailingCallRepr
 EOF
 :delfunction F
 :"

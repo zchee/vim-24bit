@@ -152,6 +152,7 @@
 # define PySequence_Size py3_PySequence_Size
 # define PySequence_GetItem py3_PySequence_GetItem
 # define PySequence_Fast py3_PySequence_Fast
+# define PyTuple_New py3_PyTuple_New
 # define PyTuple_Size py3_PyTuple_Size
 # define PyTuple_GetItem py3_PyTuple_GetItem
 # define PySlice_GetIndicesEx py3_PySlice_GetIndicesEx
@@ -220,6 +221,7 @@
 # define PyType_Type (*py3_PyType_Type)
 # define PySlice_Type (*py3_PySlice_Type)
 # define PyFloat_Type (*py3_PyFloat_Type)
+# define PyCallable_Check (*py3_PyCallable_Check)
 # define PyNumber_Check (*py3_PyNumber_Check)
 # define PyNumber_Long (*py3_PyNumber_Long)
 # define PyBool_Type (*py3_PyBool_Type)
@@ -287,6 +289,7 @@ static int (*py3_PySequence_Check)(PyObject *);
 static Py_ssize_t (*py3_PySequence_Size)(PyObject *);
 static PyObject* (*py3_PySequence_GetItem)(PyObject *, Py_ssize_t);
 static PyObject* (*py3_PySequence_Fast)(PyObject *, const char *);
+static PyObject* (*py3_PyTuple_New)(Py_ssize_t);
 static Py_ssize_t (*py3_PyTuple_Size)(PyObject *);
 static PyObject* (*py3_PyTuple_GetItem)(PyObject *, Py_ssize_t);
 static int (*py3_PyMapping_Check)(PyObject *);
@@ -377,6 +380,7 @@ static PyTypeObject* py3_PyType_Type;
 static PyTypeObject* py3_PySlice_Type;
 static PyTypeObject* py3_PyFloat_Type;
 static PyTypeObject* py3_PyBool_Type;
+static int (*py3_PyCallable_Check)(PyObject *);
 static int (*py3_PyNumber_Check)(PyObject *);
 static PyObject* (*py3_PyNumber_Long)(PyObject *);
 static PyObject* (*py3_PyErr_NewException)(char *name, PyObject *base, PyObject *dict);
@@ -456,6 +460,7 @@ static struct
     {"PySequence_Size", (PYTHON_PROC*)&py3_PySequence_Size},
     {"PySequence_GetItem", (PYTHON_PROC*)&py3_PySequence_GetItem},
     {"PySequence_Fast", (PYTHON_PROC*)&py3_PySequence_Fast},
+    {"PyTuple_New", (PYTHON_PROC*)&py3_PyTuple_New},
     {"PyTuple_Size", (PYTHON_PROC*)&py3_PyTuple_Size},
     {"PyTuple_GetItem", (PYTHON_PROC*)&py3_PyTuple_GetItem},
     {"PySlice_GetIndicesEx", (PYTHON_PROC*)&py3_PySlice_GetIndicesEx},
@@ -537,6 +542,7 @@ static struct
     {"PySlice_Type", (PYTHON_PROC*)&py3_PySlice_Type},
     {"PyFloat_Type", (PYTHON_PROC*)&py3_PyFloat_Type},
     {"PyBool_Type", (PYTHON_PROC*)&py3_PyBool_Type},
+    {"PyCallable_Check", (PYTHON_PROC*)&py3_PyCallable_Check},
     {"PyNumber_Check", (PYTHON_PROC*)&py3_PyNumber_Check},
     {"PyNumber_Long", (PYTHON_PROC*)&py3_PyNumber_Long},
     {"PyErr_NewException", (PYTHON_PROC*)&py3_PyErr_NewException},
@@ -805,6 +811,7 @@ python3_end()
 	PyGILState_Ensure();
 
 	Py_Finalize();
+	pyquit = TRUE;
     }
 
 #ifdef DYNAMIC_PYTHON3
@@ -1577,7 +1584,34 @@ FunctionGetattro(PyObject *self, PyObject *nameobj)
     GET_ATTR_STRING(name, nameobj);
 
     if (strcmp(name, "name") == 0)
-	return PyUnicode_FromString((char *)(this->name));
+    {
+	char_u	*name;
+	VimTryStart();
+	if (!(name = FUNC_NAME(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	return PyString_FromString((char *)name);
+    }
+    else if (strcmp(name, "repr") == 0)
+    {
+	char_u		*tofree;
+	PyObject	*r;
+	VimTryStart();
+	if (!(tofree = FUNC_REPR(this->func)))
+	{
+	    if (VimTryEnd())
+		return NULL;
+	    PyErr_NoMemory();
+	    return NULL;
+	}
+	r = PyString_FromString((char *)tofree);
+	vim_free(tofree);
+	return r;
+    }
 
     return PyObject_GenericGetAttr(self, nameobj);
 }
@@ -1697,7 +1731,7 @@ do_py3eval (char_u *str, typval_T *rettv)
     {
 	case VAR_DICT: ++rettv->vval.v_dict->dv_refcount; break;
 	case VAR_LIST: ++rettv->vval.v_list->lv_refcount; break;
-	case VAR_FUNC: func_ref(rettv->vval.v_string);    break;
+	case VAR_FUNC: ++rettv->vval.v_func->fv_refcount; break;
 	case VAR_UNKNOWN:
 	    rettv->v_type = VAR_NUMBER;
 	    rettv->vval.v_number = 0;

@@ -4,3 +4,5 @@ scalar test OK
 dictionary with list OK
 circular test OK
 funcrefs OK
+User funcrefs (normal) OK
+User funcrefs (deleted) OK
