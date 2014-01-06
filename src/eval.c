@@ -8635,7 +8635,7 @@ name_internal_func(intfp)
     return (char_u *) intfp->f_name;
 }
 
-static char_u	*internal_func_type_name = "internal";
+static char_u	*internal_func_type_name = (char_u *) "internal";
 #define INTERNAL_FUNC_TYPE_LEN 8
 
     static char_u *
@@ -8730,7 +8730,7 @@ name_autoload_func(aufp)
     return aufp->auf_name;
 }
 
-static char_u	*autoload_func_type_name = "autoload";
+static char_u	*autoload_func_type_name = (char_u *) "autoload";
 #define AUTOLOAD_FUNC_TYPE_LEN 8
 
     static char_u *
@@ -23587,7 +23587,7 @@ name_user_func(fp)
     return fp->uf_name;
 }
 
-static char_u	*user_func_type_name = "user";
+static char_u	*user_func_type_name = (char_u *) "user";
 #define USER_FUNC_TYPE_LEN 4
 
     static char_u *
