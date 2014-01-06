@@ -54,8 +54,34 @@ STARTTEST
 :let fref_res = "FAILED: " . m
 :end
 :call append(line('$'), 'funcrefs '. fref_res)
+:" Deleted funcrefs
+:function Max(...)
+:    return max(a:000)
+:endfunction
+:mz (define vim:Max (vim-eval "function('Max')"))
+:mz (define m1 (vim:Max 1 100 8))
+:let m1 = mzeval('m1')
+:if m1 == 100
+:let fref_res = "OK"
+:else
+:let fref_res = "FAILED: " . m1
+:end
+:call append(line('$'), 'User funcrefs (normal) '. fref_res)
+:delfunction Max
+:function Max(...)
+:    return min(a:000)
+:endfunction
+:mz (define m2 (vim:Max 1 100 8))
+:let m2 = mzeval('m2')
+:if m2 == 100
+:let fref_res = "OK"
+:else
+:let fref_res = "FAILED: " . m2
+:end
+:call append(line('$'), 'User funcrefs (deleted) '. fref_res)
 :?^1?,$w! test.out
 :qa!
+:while getchar(1) | call getchar() | endwhile
 ENDTEST
 
 1 line 1

@@ -668,12 +668,6 @@ mind there are various things that may clobber the results:
 - The time of the lines added up is mostly less than the time of the whole
   function.  There is some overhead in between.
 
-- Functions that are deleted before Vim exits will not produce profiling
-  information.  You can check the |v:profiling| variable if needed: >
-	:if !v:profiling
-	:   delfunc MyFunc
-	:endif
-<
 - Profiling may give weird results on multi-processor systems, when sleep
   mode kicks in or the processor frequency is reduced to save power.
 

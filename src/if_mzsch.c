@@ -25,6 +25,8 @@
 
 #include "if_mzsch.h"
 
+typedef void (*fnl_proc)(void *p, void *data);
+
 /* Only do the following when the feature is enabled.  Needed for "make
  * depend". */
 #if defined(FEAT_MZSCHEME) || defined(PROTO)
@@ -242,6 +244,7 @@ static void (**dll_scheme_notify_multithread_ptr)(int on);
 
 static void *(*dll_GC_malloc)(size_t size_in_bytes);
 static void *(*dll_GC_malloc_atomic)(size_t size_in_bytes);
+static void *(*dll_scheme_register_finalizer(void *p, fnl_proc f, void *data, fnl_proc *oldf, void **olddata));
 static Scheme_Env *(*dll_scheme_basic_env)(void);
 static void (*dll_scheme_check_threads)(void);
 static void (*dll_scheme_register_static)(void *ptr, long size);
@@ -376,6 +379,7 @@ static Scheme_Object *(*dll_scheme_namespace_require)(Scheme_Object *req);
 /* and functions in a usual way */
 # define GC_malloc dll_GC_malloc
 # define GC_malloc_atomic dll_GC_malloc_atomic
+# define scheme_register_finalizer dll_scheme_register_finalizer
 
 # define scheme_add_global dll_scheme_add_global
 # define scheme_add_global_symbol dll_scheme_add_global_symbol
@@ -490,6 +494,7 @@ static Thunk_Info mzsch_imports[] = {
     {"scheme_byte_string_to_char_string", (void **)&dll_scheme_byte_string_to_char_string},
 # endif
     {"scheme_builtin_value", (void **)&dll_scheme_builtin_value},
+    {"scheme_register_finalizer", (void **)&dll_scheme_register_finalizer},
     {"scheme_check_threads", (void **)&dll_scheme_check_threads},
     {"scheme_close_input_port", (void **)&dll_scheme_close_input_port},
     {"scheme_count_lines", (void **)&dll_scheme_count_lines},
@@ -2774,6 +2779,13 @@ string_to_line(Scheme_Object *obj)
 }
 
 #ifdef FEAT_EVAL
+
+    static void
+func_unref_mz(void *p, void *data)
+{
+    func_unref((func_T *) data);
+}
+
 /*
  * Convert Vim value into MzScheme, adopted from if_python.c
  */
@@ -2909,15 +2921,19 @@ vim_to_mzscheme_impl(typval_T *vim_value, int depth, Scheme_Hash_Table *visited)
     else if (vim_value->v_type == VAR_FUNC)
     {
 	Scheme_Object *funcname = NULL;
+	func_T	*func = vim_value->vval.v_func;
 
 	MZ_GC_DECL_REG(1);
 	MZ_GC_VAR_IN_REG(0, funcname);
 	MZ_GC_REG();
 
-	funcname = scheme_make_byte_string((char *)vim_value->vval.v_string);
+	funcname = scheme_make_byte_string((char *)FUNC_NAME(func));
 	MZ_GC_CHECK();
-	result = scheme_make_closed_prim_w_arity(vim_funcref, funcname,
+	result = scheme_make_closed_prim_w_arity(vim_funcref, func,
 		(const char *)BYTE_STRING_VALUE(funcname), 0, -1);
+	++func->fv_refcount;
+	scheme_register_finalizer(result, func_unref_mz, (void *)func,
+		NULL, NULL);
 	MZ_GC_CHECK();
 
 	MZ_GC_UNREG();
@@ -3166,7 +3182,7 @@ mzscheme_to_vim_impl(Scheme_Object *obj, typval_T *tv, int depth,
 
 /* Scheme prim procedure wrapping Vim funcref */
     static Scheme_Object *
-vim_funcref(void *name, int argc, Scheme_Object **argv)
+vim_funcref(void *func, int argc, Scheme_Object **argv)
 {
     int i;
     typval_T args;
@@ -3207,7 +3223,7 @@ vim_funcref(void *name, int argc, Scheme_Object **argv)
 	    typval_T ret;
 	    ret.v_type = VAR_UNKNOWN;
 
-	    mzscheme_call_vim(BYTE_STRING_VALUE((Scheme_Object *)name), &args, &ret);
+	    mzscheme_call_vim((func_T *) func, &args, &ret);
 	    MZ_GC_CHECK();
 	    result = vim_to_mzscheme(&ret);
 	    clear_tv(&ret);
