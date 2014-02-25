@@ -21,7 +21,7 @@
 static int	resel_VIsual_mode = NUL;	/* 'v', 'V', or Ctrl-V */
 static linenr_T	resel_VIsual_line_count;	/* number of lines */
 static colnr_T	resel_VIsual_vcol;		/* nr of cols or end col */
-static int	VIsual_mode_orig = NUL;         /* type of Visual mode, that user entered */
+static int	VIsual_mode_orig = NUL;		/* saved Visual mode */
 
 static int	restart_VIsual_select = 0;
 #endif
@@ -655,8 +655,8 @@ normal_cmd(oap, toplevel)
 #ifdef FEAT_EVAL
     /* Set v:count here, when called from main() and not a stuffed
      * command, so that v:count can be used in an expression mapping
-     * when there is no count. */
-    if (toplevel && stuff_empty())
+     * when there is no count. Do set it for redo. */
+    if (toplevel && readbuf1_empty())
 	set_vcount_ca(&ca, &set_prevcount);
 #endif
 
@@ -736,8 +736,8 @@ getcount:
 #ifdef FEAT_EVAL
 	    /* Set v:count here, when called from main() and not a stuffed
 	     * command, so that v:count can be used in an expression mapping
-	     * right after the count. */
-	    if (toplevel && stuff_empty())
+	     * right after the count. Do set it for redo. */
+	    if (toplevel && readbuf1_empty())
 		set_vcount_ca(&ca, &set_prevcount);
 #endif
 	    if (ctrl_w)
@@ -819,8 +819,9 @@ getcount:
 #ifdef FEAT_EVAL
     /*
      * Only set v:count when called from main() and not a stuffed command.
+     * Do set it for redo.
      */
-    if (toplevel && stuff_empty())
+    if (toplevel && readbuf1_empty())
 	set_vcount(ca.count0, ca.count1, set_prevcount);
 #endif
 
@@ -5789,7 +5790,7 @@ nv_ident(cap)
     {
 	/* Escape the argument properly for a shell command */
 	ptr = vim_strnsave(ptr, n);
-	p = vim_strsave_shellescape(ptr, TRUE);
+	p = vim_strsave_shellescape(ptr, TRUE, TRUE);
 	vim_free(ptr);
 	if (p == NULL)
 	{
@@ -6201,8 +6202,17 @@ nv_left(cap)
 			    || cap->oap->op_type == OP_CHANGE)
 			&& !lineempty(curwin->w_cursor.lnum))
 		{
-		    if (*ml_get_cursor() != NUL)
-			++curwin->w_cursor.col;
+		    char_u *cp = ml_get_cursor();
+
+		    if (*cp != NUL)
+		    {
+#ifdef FEAT_MBYTE
+			if (has_mbyte)
+			    curwin->w_cursor.col += (*mb_ptr2len)(cp);
+			else
+#endif
+			    ++curwin->w_cursor.col;
+		    }
 		    cap->retval |= CA_NO_ADJ_OP_END;
 		}
 		continue;
@@ -9481,7 +9491,7 @@ nv_put(cap)
 # ifdef FEAT_CLIPBOARD
 	    adjust_clip_reg(&regname);
 # endif
-           if (regname == 0 || regname == '"'
+	   if (regname == 0 || regname == '"'
 				     || VIM_ISDIGIT(regname) || regname == '-'
 # ifdef FEAT_CLIPBOARD
 		    || (clip_unnamed && (regname == '*' || regname == '+'))

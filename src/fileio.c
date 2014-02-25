@@ -1185,7 +1185,7 @@ retry:
 	 * The amount is limited by the fact that read() only can read
 	 * upto max_unsigned characters (and other things).
 	 */
-#if SIZEOF_INT <= 2
+#if VIM_SIZEOF_INT <= 2
 	if (linerest >= 0x7ff0)
 	{
 	    ++split;
@@ -1197,7 +1197,7 @@ retry:
 	{
 	    if (!skip_read)
 	    {
-#if SIZEOF_INT > 2
+#if VIM_SIZEOF_INT > 2
 # if defined(SSIZE_MAX) && (SSIZE_MAX < 0x10000L)
 		size = SSIZE_MAX;		    /* use max I/O size, 52K */
 # else
@@ -2973,7 +2973,7 @@ check_for_cryptkey(cryptkey, ptr, sizep, filesizep, newfile, fname, did_ask)
 	    else
 	    {
 		bf_key_init(cryptkey, ptr + CRYPT_MAGIC_LEN, salt_len);
-		bf_ofb_init(ptr + CRYPT_MAGIC_LEN + salt_len, seed_len);
+		bf_cfb_init(ptr + CRYPT_MAGIC_LEN + salt_len, seed_len);
 	    }
 
 	    /* Remove magic number from the text */
@@ -3025,7 +3025,7 @@ prepare_crypt_read(fp)
 	if (fread(buffer, salt_len + seed_len, 1, fp) != 1)
 	    return FAIL;
 	bf_key_init(curbuf->b_p_key, buffer, salt_len);
-	bf_ofb_init(buffer + salt_len, seed_len);
+	bf_cfb_init(buffer + salt_len, seed_len);
     }
     return OK;
 }
@@ -3064,7 +3064,7 @@ prepare_crypt_write(buf, lenp)
 	    seed = salt + salt_len;
 	    sha2_seed(salt, salt_len, seed, seed_len);
 	    bf_key_init(buf->b_p_key, salt, salt_len);
-	    bf_ofb_init(seed, seed_len);
+	    bf_cfb_init(seed, seed_len);
 	}
     }
     *lenp = CRYPT_MAGIC_LEN + salt_len + seed_len;
@@ -5294,7 +5294,7 @@ msg_add_lines(insert_space, lnum, nchars)
     if (shortmess(SHM_LINES))
 	sprintf((char *)p,
 #ifdef LONG_LONG_OFF_T
-		"%ldL, %lldC", lnum, nchars
+		"%ldL, %lldC", lnum, (long long)nchars
 #else
 		/* Explicit typecast avoids warning on Mac OS X 10.6 */
 		"%ldL, %ldC", lnum, (long)nchars
@@ -5312,7 +5312,7 @@ msg_add_lines(insert_space, lnum, nchars)
 	else
 	    sprintf((char *)p,
 #ifdef LONG_LONG_OFF_T
-		    _("%lld characters"), nchars
+		    _("%lld characters"), (long long)nchars
 #else
 		    /* Explicit typecast avoids warning on Mac OS X 10.6 */
 		    _("%ld characters"), (long)nchars

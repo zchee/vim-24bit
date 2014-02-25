@@ -366,7 +366,7 @@ struct u_header
 /*
  * structures used in undo.c
  */
-#if SIZEOF_INT > 2
+#if VIM_SIZEOF_INT > 2
 # define ALIGN_LONG	/* longword alignment and use filler byte */
 # define ALIGN_SIZE (sizeof(long))
 #else
@@ -473,13 +473,17 @@ struct nr_trans
     blocknr_T	nt_new_bnum;		/* new, positive, number */
 };
 
+
+typedef struct buffblock buffblock_T;
+typedef struct buffheader buffheader_T;
+
 /*
  * structure used to store one block of the stuff/redo/recording buffers
  */
 struct buffblock
 {
-    struct buffblock	*b_next;	/* pointer to next buffblock */
-    char_u		b_str[1];	/* contents (actually longer) */
+    buffblock_T	*b_next;	/* pointer to next buffblock */
+    char_u	b_str[1];	/* contents (actually longer) */
 };
 
 /*
@@ -487,10 +491,10 @@ struct buffblock
  */
 struct buffheader
 {
-    struct buffblock	bh_first;	/* first (dummy) block of list */
-    struct buffblock	*bh_curr;	/* buffblock for appending */
-    int			bh_index;	/* index for reading */
-    int			bh_space;	/* space in bh_curr for appending */
+    buffblock_T	bh_first;	/* first (dummy) block of list */
+    buffblock_T	*bh_curr;	/* buffblock for appending */
+    int		bh_index;	/* index for reading */
+    int		bh_space;	/* space in bh_curr for appending */
 };
 
 /*
@@ -970,7 +974,8 @@ typedef struct
     int			typebuf_valid;	    /* TRUE when save_typebuf valid */
     int			old_char;
     int			old_mod_mask;
-    struct buffheader	save_stuffbuff;
+    buffheader_T	save_readbuf1;
+    buffheader_T	save_readbuf2;
 #ifdef USE_INPUT_BUF
     char_u		*save_inputbuf;
 #endif
@@ -1095,7 +1100,7 @@ typedef struct hashtable_S
 typedef long_u hash_T;		/* Type for hi_hash */
 
 
-#if SIZEOF_INT <= 3		/* use long if int is smaller than 32 bits */
+#if VIM_SIZEOF_INT <= 3		/* use long if int is smaller than 32 bits */
 typedef long	varnumber_T;
 #else
 typedef int	varnumber_T;
@@ -1450,6 +1455,7 @@ struct file_buffer
      * start and end of an operator, also used for '[ and ']
      */
     pos_T	b_op_start;
+    pos_T	b_op_start_orig;  /* used for Insstart_orig */
     pos_T	b_op_end;
 
 #ifdef FEAT_VIMINFO
