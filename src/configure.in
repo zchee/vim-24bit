@@ -802,9 +802,19 @@ if test "$enable_mzschemeinterp" = "yes"; then
     AC_MSG_CHECKING(for mzscheme_base.c)
     if test -f "${SCHEME_COLLECTS}collects/scheme/base.ss" ; then
       MZSCHEME_EXTRA="mzscheme_base.c"
+      MZSCHEME_MZC="${vi_cv_path_mzscheme_pfx}/bin/mzc"
+      MZSCHEME_MOD="++lib scheme/base"
     else
       if test -f "${SCHEME_COLLECTS}collects/scheme/base.rkt" ; then
 	MZSCHEME_EXTRA="mzscheme_base.c"
+	MZSCHEME_MZC="${vi_cv_path_mzscheme_pfx}/bin/mzc"
+	MZSCHEME_MOD="++lib scheme/base"
+      else
+	if test -f "${SCHEME_COLLECTS}collects/racket/base.rkt" ; then
+	  MZSCHEME_EXTRA="mzscheme_base.c"
+	  MZSCHEME_MZC="${vi_cv_path_mzscheme_pfx}/bin/raco ctool"
+	  MZSCHEME_MOD=""
+	fi
       fi
     fi
     if test "X$MZSCHEME_EXTRA" != "X" ; then
@@ -3579,6 +3589,10 @@ AC_CHECK_SIZEOF([int])
 AC_CHECK_SIZEOF([long])
 AC_CHECK_SIZEOF([time_t])
 AC_CHECK_SIZEOF([off_t])
+
+dnl Use different names to avoid clashing with other header files.
+AC_DEFINE_UNQUOTED(VIM_SIZEOF_INT, [$ac_cv_sizeof_int])
+AC_DEFINE_UNQUOTED(VIM_SIZEOF_LONG, [$ac_cv_sizeof_long])
 
 dnl Make sure that uint32_t is really 32 bits unsigned.
 AC_MSG_CHECKING([uint32_t is 32 bits])
