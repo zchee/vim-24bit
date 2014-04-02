@@ -3662,12 +3662,9 @@ setmouse()
 	return;
     }
 
-#  ifdef FEAT_VISUAL
     if (VIsual_active)
 	checkfor = MOUSE_VISUAL;
-    else
-#  endif
-	if (State == HITRETURN || State == ASKMORE || State == SETWSIZE)
+    else if (State == HITRETURN || State == ASKMORE || State == SETWSIZE)
 	checkfor = MOUSE_RETURN;
     else if (State & INSERT)
 	checkfor = MOUSE_INSERT;
@@ -4394,7 +4391,7 @@ check_termcode(max_offset, buf, bufsize, buflen)
 	    {
 #ifdef FEAT_MBYTE
 		int col;
-		int row_char;
+		int row_char = NUL;
 #endif
 		j = 0;
 		extra = 0;

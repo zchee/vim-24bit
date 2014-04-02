@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 7.4.  Last change: 2014 Feb 11
+*eval.txt*	For Vim version 7.4.  Last change: 2014 Mar 27
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -327,6 +327,7 @@ examples: >
 Changing the order of items in a list: >
 	:call sort(list)		" sort a list alphabetically
 	:call reverse(list)		" reverse the order of items
+	:call uniq(sort(list))		" sort and remove duplicates
 
 
 For loop ~
@@ -1557,6 +1558,16 @@ v:progname	Contains the name (with path removed) with which Vim was
 		|evim| etc., or any other name you might symlink to Vim.
 		Read-only.
 
+					*v:progpath* *progpath-variable*
+v:progpath	Contains the command with which Vim was invoked, including the
+		path.  Useful if you want to message a Vim server using a
+		|--remote-expr|.
+		To get the full path use: >
+			echo exepath(v:progpath)
+<		NOTE: This does not work when the command is a relative path
+		and the current directory has changed.
+		Read-only.
+
 					*v:register* *register-variable*
 v:register	The name of the register in effect for the current normal mode
 		command (regardless of whether that command actually used a
@@ -1671,7 +1682,7 @@ v:version	Version number of Vim: Major version number times 100 plus
 		is 501.  Read-only.  "version" also works, for backwards
 		compatibility.
 		Use |has()| to check if a certain patch was included, e.g.: >
-			if has("patch123")
+			if has("patch-7.4.123")
 <		Note that patch numbers are specific to the version, thus both
 		version 5.0 and 5.1 may have a patch 123, but these are
 		completely different.
@@ -1755,6 +1766,7 @@ escape( {string}, {chars})	String	escape {chars} in {string} with '\'
 eval( {string})			any	evaluate {string} into its value
 eventhandler( )			Number	TRUE if inside an event handler
 executable( {expr})		Number	1 if executable {expr} exists
+exepath( {expr})		String  full path of the command {expr}
 exists( {expr})			Number	TRUE if {expr} exists
 extend( {expr1}, {expr2} [, {expr3}])
 				List/Dict insert items of {expr2} into {expr1}
@@ -1807,7 +1819,8 @@ getmatches()			List	list of current matches
 getpid()			Number	process ID of Vim
 getpos( {expr})			List	position of cursor, mark, etc.
 getqflist()			List	list of quickfix items
-getreg( [{regname} [, 1]])	String	contents of register
+getreg( [{regname} [, 1 [, {list}]]])
+				String or List   contents of register
 getregtype( [{regname}])	String	type of register
 gettabvar( {nr}, {varname} [, {def}])
 				any	variable {varname} in tab {nr} or {def}
@@ -1978,7 +1991,8 @@ strridx( {haystack}, {needle} [, {start}])
 				Number	last index of {needle} in {haystack}
 strtrans( {expr})		String	translate string to make it printable
 strwidth( {expr})		Number	display cell length of the String {expr}
-submatch( {nr})			String	specific match in ":s" or substitute()
+submatch( {nr}[, {list}])	String or List
+					specific match in ":s" or substitute()
 substitute( {expr}, {pat}, {sub}, {flags})
 				String	all {pat} in {expr} replaced with {sub}
 synID( {lnum}, {col}, {trans})	Number	syntax ID at {lnum} and {col}
@@ -2005,6 +2019,8 @@ trunc( {expr})			Float	truncate Float {expr}
 type( {name})			Number	type of variable {name}
 undofile( {name})		String	undo file name for {name}
 undotree()			List	undo file tree
+uniq( {list} [, {func} [, {dict}]])
+				List	remove adjacent duplicates from a list
 values( {dict})			List	values in {dict}
 virtcol( {expr})		Number	screen column of cursor or mark
 visualmode( [expr])		String	last visual mode used
@@ -2697,6 +2713,15 @@ executable({expr})					*executable()*
 			0	does not exist
 			-1	not implemented on this system
 
+exepath({expr})						*exepath()*
+		If {expr} is an executable and is either an absolute path, a
+		relative path or found in $PATH, return the full path.
+		Note that the current directory is used when {expr} starts
+		with "./", which may be a problem for Vim: >
+			echo exepath(v:progpath)
+< 		If {expr} cannot be found in $PATH or is not executable then
+		an empty string is returned.
+
 							*exists()*
 exists({expr})	The result is a Number, which is non-zero if {expr} is
 		defined, zero otherwise.  The {expr} argument is a string,
@@ -2815,7 +2840,7 @@ expand({expr} [, {nosuf} [, {list}]])				*expand()*
 			<afile>		autocmd file name
 			<abuf>		autocmd buffer number (as a String!)
 			<amatch>	autocmd matched name
-			<sfile>		sourced script file name
+			<sfile>		sourced script file or function name
 			<slnum>		sourced script file line number
 			<cword>		word under the cursor
 			<cWORD>		WORD under the cursor
@@ -3443,7 +3468,7 @@ getqflist()						*getqflist()*
 			:endfor
 
 
-getreg([{regname} [, 1]])				*getreg()*
+getreg([{regname} [, 1 [, {list}]]])			*getreg()*
 		The result is a String, which is the contents of register
 		{regname}.  Example: >
 			:let cliptext = getreg('*')
@@ -3452,6 +3477,11 @@ getreg([{regname} [, 1]])				*getreg()*
 		getreg('=', 1) returns the expression itself, so that it can
 		be restored with |setreg()|.  For other registers the extra
 		argument is ignored, thus you can always give it.
+		If {list} is present and non-zero result type is changed to 
+		|List|. Each list item is one text line. Use it if you care
+		about zero bytes possibly present inside register: without
+		third argument both NLs and zero bytes are represented as NLs
+		(see |NL-used-for-Nul|).
 		If {regname} is not specified, |v:register| is used.
 
 
@@ -5338,6 +5368,8 @@ setqflist({list} [, {action}])				*setqflist()*
 							*setreg()*
 setreg({regname}, {value} [,{options}])
 		Set the register {regname} to {value}.
+		{value} may be any value returned by |getreg()|, including 
+		a |List|.
 		If {options} contains "a" or {regname} is upper case,
 		then the value is appended.
 		{options} can also contain a register type specification:
@@ -5350,10 +5382,15 @@ setreg({regname}, {value} [,{options}])
 		in the longest line (counting a <Tab> as 1 character).
 
 		If {options} contains no register settings, then the default
-		is to use character mode unless {value} ends in a <NL>.
-		Setting the '=' register is not possible, but you can use >
-			:let @= = var_expr
-<		Returns zero for success, non-zero for failure.
+		is to use character mode unless {value} ends in a <NL> for 
+		string {value} and linewise mode for list {value}. Blockwise 
+		mode is never selected automatically.
+		Returns zero for success, non-zero for failure.
+
+							*E883*
+		Note: you may not use |List| containing more then one item to 
+		      set search and expression registers. Lists containing no 
+		      items act like empty strings.
 
 		Examples: >
 			:call setreg(v:register, @*)
@@ -5361,8 +5398,11 @@ setreg({regname}, {value} [,{options}])
 			:call setreg('a', "1\n2\n3", 'b5')
 
 <		This example shows using the functions to save and restore a
-		register. >
-			:let var_a = getreg('a', 1)
+		register (note: you may not reliably restore register value 
+		without using the third argument to |getreg()| as without it 
+		newlines are represented as newlines AND Nul bytes are 
+		represented as newlines as well, see |NL-used-for-Nul|). >
+			:let var_a = getreg('a', 1, 1)
 			:let var_amode = getregtype('a')
 			    ....
 			:call setreg('a', var_a, var_amode)
@@ -5488,20 +5528,26 @@ sinh({expr})						*sinh()*
 
 
 sort({list} [, {func} [, {dict}]])			*sort()* *E702*
-		Sort the items in {list} in-place.  Returns {list}.  If you
-		want a list to remain unmodified make a copy first: >
+		Sort the items in {list} in-place.  Returns {list}.
+		
+		If you want a list to remain unmodified make a copy first: >
 			:let sortedlist = sort(copy(mylist))
 <		Uses the string representation of each item to sort on.
 		Numbers sort after Strings, |Lists| after Numbers.
 		For sorting text in the current buffer use |:sort|.
+
 		When {func} is given and it is one then case is ignored.
-		{dict} is for functions with the "dict" attribute.  It will be
-		used to set the local variable "self". |Dictionary-function|
 		When {func} is a |Funcref| or a function name, this function
 		is called to compare items.  The function is invoked with two
 		items as argument and must return zero if they are equal, 1 or
 		bigger if the first one sorts after the second one, -1 or
 		smaller if the first one sorts before the second one.
+
+		{dict} is for functions with the "dict" attribute.  It will be
+		used to set the local variable "self". |Dictionary-function|
+
+		Also see |uniq()|.
+
 		Example: >
 			func MyCompare(i1, i2)
 			   return a:i1 == a:i2 ? 0 : a:i1 > a:i2 ? 1 : -1
@@ -5768,12 +5814,23 @@ strwidth({expr})					*strwidth()*
 		Ambiguous, this function's return value depends on 'ambiwidth'.
 		Also see |strlen()|, |strdisplaywidth()| and |strchars()|.
 
-submatch({nr})						*submatch()*
+submatch({nr}[, {list}])				*submatch()*
 		Only for an expression in a |:substitute| command or
 		substitute() function.
 		Returns the {nr}'th submatch of the matched text.  When {nr}
 		is 0 the whole matched text is returned.
+		Note that a NL in the string can stand for a line break of a
+		multi-line match or a NUL character in the text.
 		Also see |sub-replace-expression|.
+
+		If {list} is present and non-zero then submatch() returns 
+		a list of strings, similar to |getline()| with two arguments. 
+		NL characters in the text represent NUL characters in the
+		text.
+		Only returns more than one item for |:substitute|, inside
+		|substitute()| this list will always contain one or zero
+		items, since there are no real line breaks.
+
 		Example: >
 			:s/\d\+/\=submatch(0) + 1/
 <		This finds the first number in the line and adds one to it.
@@ -5969,7 +6026,7 @@ tabpagenr([{arg}])					*tabpagenr()*
 		The number can be used with the |:tab| command.
 
 
-tabpagewinnr({tabarg}, [{arg}])				*tabpagewinnr()*
+tabpagewinnr({tabarg} [, {arg}])			*tabpagewinnr()*
 		Like |winnr()| but for tab page {tabarg}.
 		{tabarg} specifies the number of tab page to be used.
 		{arg} is used like with |winnr()|:
@@ -6168,6 +6225,14 @@ undotree()						*undotree()*
 		  "alt"		Alternate entry.  This is again a List of undo
 				blocks.  Each item may again have an "alt"
 				item.
+
+uniq({list} [, {func} [, {dict}]])			*uniq()* *E882*
+		Remove second and succeeding copies of repeated adjacent
+		{list} items in-place.  Returns {list}.  If you want a list
+		to remain unmodified make a copy first: >
+			:let newlist = uniq(copy(mylist))
+<		The default compare function uses the string representation of
+		each item.  For the use of {func} and {dict} see |sort()|.
 
 values({dict})						*values()*
 		Return a |List| with all the values of {dict}.	The |List| is
@@ -6624,7 +6689,8 @@ See |:verbose-cmd| for more information.
 :fu[nction][!] {name}([arguments]) [range] [abort] [dict]
 			Define a new function by the name {name}.  The name
 			must be made of alphanumeric characters and '_', and
-			must start with a capital or "s:" (see above).
+			must start with a capital or "s:" (see above).  When
+			using a capital "g:" be prepended.
 
 			{name} can also be a |Dictionary| entry that is a
 			|Funcref|: >
@@ -7463,10 +7529,19 @@ This does NOT work: >
 		:execute "!ls " . shellescape(filename, 1)
 <
 			Note: The executed string may be any command-line, but
-			you cannot start or end a "while", "for" or "if"
-			command.  Thus this is illegal: >
-		:execute 'while i > 5'
-		:execute 'echo "test" | break'
+			starting or ending "if", "while" and "for" does not
+			always work, because when commands are skipped the
+			":execute" is not evaluated and Vim loses track of
+			where blocks start and end.  Also "break" and
+			"continue" should not be inside ":execute".
+			This example does not work, because the ":execute" is
+			not evaluated and Vim does not see the "while", and
+			gives an error for finding an ":endwhile": >
+		:if 0
+		: execute 'while i > 5'
+		:  echo "test"
+		: endwhile
+		:endif
 <
 			It is allowed to have a "while" or "if" command
 			completely in the executed string: >

@@ -647,15 +647,11 @@ static char *(features[]) =
 #else
 	"-virtualedit",
 #endif
-#ifdef FEAT_VISUAL
 	"+visual",
-# ifdef FEAT_VISUALEXTRA
+#ifdef FEAT_VISUALEXTRA
 	"+visualextra",
-# else
-	"-visualextra",
-# endif
 #else
-	"-visual",
+	"-visualextra",
 #endif
 #ifdef FEAT_VIMINFO
 	"+viminfo",
@@ -743,6 +739,72 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    243,
+/**/
+    242,
+/**/
+    241,
+/**/
+    240,
+/**/
+    239,
+/**/
+    238,
+/**/
+    237,
+/**/
+    236,
+/**/
+    235,
+/**/
+    234,
+/**/
+    233,
+/**/
+    232,
+/**/
+    231,
+/**/
+    230,
+/**/
+    229,
+/**/
+    228,
+/**/
+    227,
+/**/
+    226,
+/**/
+    225,
+/**/
+    224,
+/**/
+    223,
+/**/
+    222,
+/**/
+    221,
+/**/
+    220,
+/**/
+    219,
+/**/
+    218,
+/**/
+    217,
+/**/
+    216,
+/**/
+    215,
+/**/
+    214,
+/**/
+    213,
+/**/
+    212,
+/**/
+    211,
 /**/
     210,
 /**/
