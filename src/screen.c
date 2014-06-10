@@ -42,7 +42,7 @@
  *
  * The part of the buffer that is displayed in a window is set with:
  * - w_topline (first buffer line in window)
- * - w_topfill (filler line above the first line)
+ * - w_topfill (filler lines above the first line)
  * - w_leftcol (leftmost window cell in window),
  * - w_skipcol (skipped window cells of first line)
  *
@@ -2456,8 +2456,8 @@ fold_line(wp, fold_count, foldinfo, lnum, row)
 	if (len > 0)
 	{
 	    int	    w = number_width(wp);
-	    long num;
-	    char *fmt = "%*ld ";
+	    long    num;
+	    char    *fmt = "%*ld ";
 
 	    if (len > w + 1)
 		len = w + 1;
@@ -3553,11 +3553,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		draw_state = WL_SIGN;
 		/* Show the sign column when there are any signs in this
 		 * buffer or when using Netbeans. */
-		if (draw_signcolumn(wp)
-# ifdef FEAT_DIFF
-			&& filler_todo <= 0
-# endif
-		   )
+		if (draw_signcolumn(wp))
 		{
 		    int	text_sign;
 # ifdef FEAT_SIGN_ICONS
@@ -3569,7 +3565,11 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    char_attr = hl_attr(HLF_SC);
 		    n_extra = 2;
 
-		    if (row == startrow)
+		    if (row == startrow
+#ifdef FEAT_DIFF
+			    + filler_lines && filler_todo <= 0
+#endif
+			    )
 		    {
 			text_sign = buf_getsigntype(wp->w_buffer, lnum,
 								   SIGN_TEXT);
@@ -6916,15 +6916,16 @@ screen_puts(text, row, col, attr)
  * a NUL.
  */
     void
-screen_puts_len(text, len, row, col, attr)
+screen_puts_len(text, textlen, row, col, attr)
     char_u	*text;
-    int		len;
+    int		textlen;
     int		row;
     int		col;
     int		attr;
 {
     unsigned	off;
     char_u	*ptr = text;
+    int		len = textlen;
     int		c;
 #ifdef FEAT_MBYTE
     unsigned	max_off;
@@ -7169,7 +7170,11 @@ screen_puts_len(text, len, row, col, attr)
 	    col += mbyte_cells;
 	    ptr += mbyte_blen;
 	    if (clear_next_cell)
+	    {
+		/* This only happens at the end, display one space next. */
 		ptr = (char_u *)" ";
+		len = -1;
+	    }
 	}
 	else
 #endif
@@ -9729,7 +9734,8 @@ showmode()
 	    }
 #endif
 #ifdef FEAT_INS_EXPAND
-	    if (edit_submode != NULL)		/* CTRL-X in Insert mode */
+	    /* CTRL-X in Insert mode */
+	    if (edit_submode != NULL && !shortmess(SHM_COMPLETIONMENU))
 	    {
 		/* These messages can get long, avoid a wrap in a narrow
 		 * window.  Prefer showing edit_submode_extra. */

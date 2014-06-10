@@ -6897,6 +6897,7 @@ buf_check_timestamp(buf, focus)
 	    && buf->b_mtime != 0
 	    && ((stat_res = mch_stat((char *)buf->b_ffname, &st)) < 0
 		|| time_differs((long)st.st_mtime, buf->b_mtime)
+		|| st.st_size != buf->b_orig_size
 #ifdef HAVE_ST_MODE
 		|| (int)st.st_mode != buf->b_orig_mode
 #else
@@ -9548,13 +9549,19 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
 
     /*
      * When stopping to execute autocommands, restore the search patterns and
-     * the redo buffer.
+     * the redo buffer.  Free buffers in the au_pending_free_buf list.
      */
     if (!autocmd_busy)
     {
 	restore_search_patterns();
 	restoreRedobuff();
 	did_filetype = FALSE;
+	while (au_pending_free_buf != NULL)
+	{
+	    buf_T *b = au_pending_free_buf->b_next;
+	    vim_free(au_pending_free_buf);
+	    au_pending_free_buf = b;
+	}
     }
 
     /*

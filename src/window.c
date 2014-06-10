@@ -5623,7 +5623,7 @@ set_fraction(wp)
     win_T	*wp;
 {
     wp->w_fraction = ((long)wp->w_wrow * FRACTION_MULT
-				    + FRACTION_MULT / 2) / (long)wp->w_height;
+				    + wp->w_height / 2) / (long)wp->w_height;
 }
 
 /*
@@ -5638,6 +5638,7 @@ win_new_height(wp, height)
 {
     linenr_T	lnum;
     int		sline, line_size;
+    int		prev_height = wp->w_height;
 
     /* Don't want a negative height.  Happens when splitting a tiny window.
      * Will equalize heights soon to fix it. */
@@ -5646,8 +5647,13 @@ win_new_height(wp, height)
     if (wp->w_height == height)
 	return;	    /* nothing to do */
 
-    if (wp->w_wrow != wp->w_prev_fraction_row && wp->w_height > 0)
-	set_fraction(wp);
+    if (wp->w_height > 0)
+    {
+	if (wp == curwin)
+	    validate_cursor();		/* w_wrow needs to be valid */
+	if (wp->w_wrow != wp->w_prev_fraction_row)
+	    set_fraction(wp);
+    }
 
     wp->w_height = height;
     wp->w_skipcol = 0;
@@ -5667,7 +5673,8 @@ win_new_height(wp, height)
 	lnum = wp->w_cursor.lnum;
 	if (lnum < 1)		/* can happen when starting up */
 	    lnum = 1;
-	wp->w_wrow = ((long)wp->w_fraction * (long)height - 1L) / FRACTION_MULT;
+	wp->w_wrow = ((long)wp->w_fraction * (long)height - 1L
+					 + FRACTION_MULT / 2) / FRACTION_MULT;
 	line_size = plines_win_col(wp, lnum, (long)(wp->w_cursor.col)) - 1;
 	sline = wp->w_wrow - line_size;
 
@@ -5703,8 +5710,9 @@ win_new_height(wp, height)
 		    --wp->w_wrow;
 		}
 	    }
+            set_topline(wp, lnum);
 	}
-	else
+	else if (sline > 0)
 	{
 	    while (sline > 0 && lnum > 1)
 	    {
@@ -5747,8 +5755,9 @@ win_new_height(wp, height)
 		lnum = 1;
 		wp->w_wrow -= sline;
 	    }
+
+            set_topline(wp, lnum);
 	}
-	set_topline(wp, lnum);
     }
 
     if (wp == curwin)
@@ -5757,7 +5766,8 @@ win_new_height(wp, height)
 	    update_topline();
 	curs_columns(FALSE);	/* validate w_wrow */
     }
-    wp->w_prev_fraction_row = wp->w_wrow;
+    if (prev_height > 0)
+	wp->w_prev_fraction_row = wp->w_wrow;
 
     win_comp_scroll(wp);
     redraw_win_later(wp, SOME_VALID);

@@ -1552,7 +1552,18 @@ make_filter_cmd(cmd, itmp, otmp)
     char_u	*buf;
     long_u	len;
 
-    len = (long_u)STRLEN(cmd) + 3;			/* "()" + NUL */
+#if (defined(UNIX) && !defined(ARCHIE)) || defined(OS2)
+    int		is_fish_shell;
+    char_u	*shell_name = get_isolated_shell_name();
+
+    /* Account for fish's different syntax for subshells */
+    is_fish_shell = (fnamecmp(shell_name, "fish") == 0);
+    vim_free(shell_name);
+    if (is_fish_shell)
+	len = (long_u)STRLEN(cmd) + 13;		/* "begin; " + "; end" + NUL */
+    else
+#endif
+	len = (long_u)STRLEN(cmd) + 3;			/* "()" + NUL */
     if (itmp != NULL)
 	len += (long_u)STRLEN(itmp) + 9;		/* " { < " + " } " */
     if (otmp != NULL)
@@ -1567,7 +1578,12 @@ make_filter_cmd(cmd, itmp, otmp)
      * redirecting input and/or output.
      */
     if (itmp != NULL || otmp != NULL)
-	vim_snprintf((char *)buf, len, "(%s)", (char *)cmd);
+    {
+	if (is_fish_shell)
+	    vim_snprintf((char *)buf, len, "begin; %s; end", (char *)cmd);
+	else
+	    vim_snprintf((char *)buf, len, "(%s)", (char *)cmd);
+    }
     else
 	STRCPY(buf, cmd);
     if (itmp != NULL)
@@ -1577,7 +1593,7 @@ make_filter_cmd(cmd, itmp, otmp)
     }
 #else
     /*
-     * for shells that don't understand braces around commands, at least allow
+     * For shells that don't understand braces around commands, at least allow
      * the use of commands in a pipe.
      */
     STRCPY(buf, cmd);
@@ -3343,6 +3359,12 @@ do_ecmd(fnum, ffname, sfname, eap, newlnum, flags, oldwin)
 #endif
 	    buf = buflist_new(ffname, sfname, 0L,
 		    BLN_CURBUF | ((flags & ECMD_SET_HELP) ? 0 : BLN_LISTED));
+#ifdef FEAT_AUTOCMD
+	    /* autocommands may change curwin and curbuf */
+	    if (oldwin != NULL)
+		oldwin = curwin;
+	    old_curbuf = curbuf;
+#endif
 	}
 	if (buf == NULL)
 	    goto theend;
@@ -4309,7 +4331,7 @@ do_sub(eap)
     pos_T	old_cursor = curwin->w_cursor;
     int		start_nsubs;
 #ifdef FEAT_EVAL
-    int         save_ma = 0;
+    int		save_ma = 0;
 #endif
 
     cmd = eap->arg;
@@ -4438,7 +4460,7 @@ do_sub(eap)
 	else if (*cmd == 'p')
 	    eap->flags = EXFLAG_PRINT;
 
-	(void)do_join(eap->line2 - eap->line1 + 1, FALSE, TRUE, FALSE);
+	(void)do_join(eap->line2 - eap->line1 + 1, FALSE, TRUE, FALSE, TRUE);
 	sub_nlines = sub_nsubs = eap->line2 - eap->line1 + 1;
 	(void)do_sub_msg(FALSE);
 	ex_may_print(eap);
@@ -5980,7 +6002,7 @@ find_help_tags(arg, num_matches, matches, keep_lang)
 			       "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
 			       "\\[count]", "\\[quotex]", "\\[range]",
 			       "\\[pattern]", "\\\\bar", "/\\\\%\\$",
-                               "s/\\\\\\~", "s/\\\\U", "s/\\\\L",
+			       "s/\\\\\\~", "s/\\\\U", "s/\\\\L",
 			       "s/\\\\1", "s/\\\\2", "s/\\\\3", "s/\\\\9"};
     int flags;
 
@@ -6020,7 +6042,7 @@ find_help_tags(arg, num_matches, matches, keep_lang)
 	  /* Replace:
 	   * "[:...:]" with "\[:...:]"
 	   * "[++...]" with "\[++...]"
-	   * "\{" with "\\{"               -- matching "} \}"
+	   * "\{" with "\\{"		   -- matching "} \}"
 	   */
 	    if ((arg[0] == '[' && (arg[1] == ':'
 			 || (arg[1] == '+' && arg[2] == '+')))
@@ -7269,7 +7291,10 @@ ex_sign(eap)
 	    else
 		/* ":sign place {id} file={fname}": change sign type */
 		lnum = buf_change_sign_type(buf, id, sp->sn_typenr);
-	    update_debug_sign(buf, lnum);
+	    if (lnum > 0)
+		update_debug_sign(buf, lnum);
+	    else
+		EMSG2(_("E885: Not possible to change sign %s"), sign_name);
 	}
 	else
 	    EMSG(_(e_invarg));
