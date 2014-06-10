@@ -612,6 +612,11 @@ static char *(features[]) =
 #else
 	"-termresponse",
 #endif
+#ifdef FEAT_TERMTRUECOLOR
+	"+termtruecolor",
+#else
+	"-termtruecolor",
+#endif
 #ifdef FEAT_TEXTOBJ
 	"+textobjects",
 #else
