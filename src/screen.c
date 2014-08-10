@@ -3702,7 +3702,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    char_attr = 0; /* was: hl_attr(HLF_AT); */
 #ifdef FEAT_DIFF
 		    if (diff_hlf != (hlf_T)0)
+		    {
 			char_attr = hl_attr(diff_hlf);
+			if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+			    char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
+		    }
 #endif
 		    p_extra = NULL;
 		    c_extra = ' ';
@@ -3753,7 +3758,8 @@ win_line(wp, lnum, startrow, endrow, nochange)
 #ifdef FEAT_SYN_HL
 		    /* combine 'showbreak' with 'cursorline' */
 		    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
-			char_attr = hl_combine_attr(char_attr, HLF_CLN);
+			char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
 #endif
 		}
 # endif
@@ -3852,7 +3858,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 			{
 			    shl->attr_cur = shl->attr;
 			}
-			else if (v == (long)shl->endcol)
+			else if (v >= (long)shl->endcol)
 			{
 			    shl->attr_cur = 0;
 			    next_search_hl(wp, shl, lnum, (colnr_T)v, cur);
@@ -3931,6 +3937,8 @@ win_line(wp, lnum, startrow, endrow, nochange)
 							      && n_extra == 0)
 		    diff_hlf = HLF_CHD;		/* changed line */
 		line_attr = hl_attr(diff_hlf);
+		if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+		    line_attr = hl_combine_attr(line_attr, hl_attr(HLF_CUL));
 	    }
 #endif
 
@@ -4494,7 +4502,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    tab_len = (int)wp->w_buffer->b_p_ts
 					- vcol % (int)wp->w_buffer->b_p_ts - 1;
 #ifdef FEAT_LINEBREAK
-		    if (!wp->w_p_lbr)
+		    if (!wp->w_p_lbr || !wp->w_p_list)
 #endif
 		    /* tab amount depends on current column */
 			n_extra = tab_len;
@@ -4646,6 +4654,8 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		else if (c != NUL)
 		{
 		    p_extra = transchar(c);
+		    if (n_extra == 0)
+			n_extra = byte2cells(c) - 1;
 #ifdef FEAT_RIGHTLEFT
 		    if ((dy_flags & DY_UHEX) && wp->w_p_rl)
 			rl_mirror(p_extra);	/* reverse "<12>" */
@@ -4727,7 +4737,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 		    {
 			diff_hlf = HLF_CHD;
 			if (attr == 0 || char_attr != attr)
+			{
 			    char_attr = hl_attr(diff_hlf);
+			    if (wp->w_p_cul && lnum == wp->w_cursor.lnum)
+				char_attr = hl_combine_attr(char_attr,
+							    hl_attr(HLF_CUL));
+			}
 		    }
 # endif
 		}
@@ -10226,9 +10241,9 @@ draw_tabline()
 			break;
 		    screen_puts_len(NameBuff, len, 0, col,
 #if defined(FEAT_SYN_HL)
-					   hl_combine_attr(attr, hl_attr(HLF_T))
+					 hl_combine_attr(attr, hl_attr(HLF_T))
 #else
-					   attr
+					 attr
 #endif
 					       );
 		    col += len;
