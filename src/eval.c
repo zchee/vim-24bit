@@ -554,6 +554,7 @@ static void f_getcharmod __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getcmdline __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getcmdpos __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getcmdtype __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_getcmdwintype __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getcwd __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getfontname __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getfperm __ARGS((typval_T *argvars, typval_T *rettv));
@@ -7984,6 +7985,7 @@ static struct fst
     {"getcmdline",	0, 0, f_getcmdline},
     {"getcmdpos",	0, 0, f_getcmdpos},
     {"getcmdtype",	0, 0, f_getcmdtype},
+    {"getcmdwintype",	0, 0, f_getcmdwintype},
     {"getcurpos",	0, 0, f_getcurpos},
     {"getcwd",		0, 0, f_getcwd},
     {"getfontname",	0, 1, f_getfontname},
@@ -11503,6 +11505,26 @@ f_getcmdtype(argvars, rettv)
 }
 
 /*
+ * "getcmdwintype()" function
+ */
+    static void
+f_getcmdwintype(argvars, rettv)
+    typval_T	*argvars UNUSED;
+    typval_T	*rettv;
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+#ifdef FEAT_CMDWIN
+    rettv->vval.v_string = alloc(2);
+    if (rettv->vval.v_string != NULL)
+    {
+	rettv->vval.v_string[0] = cmdwin_type;
+	rettv->vval.v_string[1] = NUL;
+    }
+#endif
+}
+
+/*
  * "getcwd()" function
  */
     static void
@@ -12441,6 +12463,9 @@ f_has(argvars, rettv)
 #endif
 #ifdef FEAT_DIGRAPHS
 	"digraphs",
+#endif
+#ifdef FEAT_DIRECTX
+	"directx",
 #endif
 #ifdef FEAT_DND
 	"dnd",
@@ -17332,6 +17357,13 @@ static int
 #endif
 	item_compare2 __ARGS((const void *s1, const void *s2));
 
+/* struct used in the array that's given to qsort() */
+typedef struct
+{
+    listitem_T	*item;
+    int		idx;
+} sortItem_T;
+
 static int	item_compare_ic;
 static int	item_compare_numeric;
 static char_u	*item_compare_func;
@@ -17352,14 +17384,17 @@ item_compare(s1, s2)
     const void	*s1;
     const void	*s2;
 {
+    sortItem_T  *si1, *si2;
     char_u	*p1, *p2;
     char_u	*tofree1, *tofree2;
     int		res;
     char_u	numbuf1[NUMBUFLEN];
     char_u	numbuf2[NUMBUFLEN];
 
-    p1 = tv2string(&(*(listitem_T **)s1)->li_tv, &tofree1, numbuf1, 0);
-    p2 = tv2string(&(*(listitem_T **)s2)->li_tv, &tofree2, numbuf2, 0);
+    si1 = (sortItem_T *)s1;
+    si2 = (sortItem_T *)s2;
+    p1 = tv2string(&si1->item->li_tv, &tofree1, numbuf1, 0);
+    p2 = tv2string(&si2->item->li_tv, &tofree2, numbuf2, 0);
     if (p1 == NULL)
 	p1 = (char_u *)"";
     if (p2 == NULL)
@@ -17382,7 +17417,7 @@ item_compare(s1, s2)
     /* When the result would be zero, compare the pointers themselves.  Makes
      * the sort stable. */
     if (res == 0 && !item_compare_keep_zero)
-	res = s1 > s2 ? 1 : -1;
+	res = si1->idx > si2->idx ? 1 : -1;
 
     vim_free(tofree1);
     vim_free(tofree2);
@@ -17397,6 +17432,7 @@ item_compare2(s1, s2)
     const void	*s1;
     const void	*s2;
 {
+    sortItem_T  *si1, *si2;
     int		res;
     typval_T	rettv;
     typval_T	argv[3];
@@ -17406,10 +17442,13 @@ item_compare2(s1, s2)
     if (item_compare_func_err)
 	return 0;
 
+    si1 = (sortItem_T *)s1;
+    si2 = (sortItem_T *)s2;
+
     /* Copy the values.  This is needed to be able to set v_lock to VAR_FIXED
      * in the copy without changing the original list items. */
-    copy_tv(&(*(listitem_T **)s1)->li_tv, &argv[0]);
-    copy_tv(&(*(listitem_T **)s2)->li_tv, &argv[1]);
+    copy_tv(&si1->item->li_tv, &argv[0]);
+    copy_tv(&si2->item->li_tv, &argv[1]);
 
     rettv.v_type = VAR_UNKNOWN;		/* clear_tv() uses this */
     res = call_func(item_compare_func, (int)STRLEN(item_compare_func),
@@ -17429,7 +17468,7 @@ item_compare2(s1, s2)
     /* When the result would be zero, compare the pointers themselves.  Makes
      * the sort stable. */
     if (res == 0 && !item_compare_keep_zero)
-	res = s1 > s2 ? 1 : -1;
+	res = si1->idx > si2->idx ? 1 : -1;
 
     return res;
 }
@@ -17445,7 +17484,7 @@ do_sort_uniq(argvars, rettv, sort)
 {
     list_T	*l;
     listitem_T	*li;
-    listitem_T	**ptrs;
+    sortItem_T	*ptrs;
     long	len;
     long	i;
 
@@ -17513,7 +17552,7 @@ do_sort_uniq(argvars, rettv, sort)
 	}
 
 	/* Make an array with each entry pointing to an item in the List. */
-	ptrs = (listitem_T **)alloc((int)(len * sizeof(listitem_T *)));
+	ptrs = (sortItem_T *)alloc((int)(len * sizeof(sortItem_T)));
 	if (ptrs == NULL)
 	    return;
 
@@ -17522,7 +17561,11 @@ do_sort_uniq(argvars, rettv, sort)
 	{
 	    /* sort(): ptrs will be the list to sort */
 	    for (li = l->lv_first; li != NULL; li = li->li_next)
-		ptrs[i++] = li;
+	    {
+		ptrs[i].item = li;
+		ptrs[i].idx = i;
+		++i;
+	    }
 
 	    item_compare_func_err = FALSE;
 	    item_compare_keep_zero = FALSE;
@@ -17534,7 +17577,7 @@ do_sort_uniq(argvars, rettv, sort)
 	    else
 	    {
 		/* Sort the array with item pointers. */
-		qsort((void *)ptrs, (size_t)len, sizeof(listitem_T *),
+		qsort((void *)ptrs, (size_t)len, sizeof(sortItem_T),
 		    item_compare_func == NULL ? item_compare : item_compare2);
 
 		if (!item_compare_func_err)
@@ -17543,7 +17586,7 @@ do_sort_uniq(argvars, rettv, sort)
 		    l->lv_first = l->lv_last = l->lv_idx_item = NULL;
 		    l->lv_len = 0;
 		    for (i = 0; i < len; ++i)
-			list_append(l, ptrs[i]);
+			list_append(l, ptrs[i].item);
 		}
 	    }
 	}
@@ -17562,7 +17605,7 @@ do_sort_uniq(argvars, rettv, sort)
 	    {
 		if (item_compare_func_ptr((void *)&li, (void *)&li->li_next)
 									 == 0)
-		    ptrs[i++] = li;
+		    ptrs[i++].item = li;
 		if (item_compare_func_err)
 		{
 		    EMSG(_("E882: Uniq compare function failed"));
@@ -17574,12 +17617,12 @@ do_sort_uniq(argvars, rettv, sort)
 	    {
 		while (--i >= 0)
 		{
-		    li = ptrs[i]->li_next;
-		    ptrs[i]->li_next = li->li_next;
+		    li = ptrs[i].item->li_next;
+		    ptrs[i].item->li_next = li->li_next;
 		    if (li->li_next != NULL)
-			li->li_next->li_prev = ptrs[i];
+			li->li_next->li_prev = ptrs[i].item;
 		    else
-			l->lv_last = ptrs[i];
+			l->lv_last = ptrs[i].item;
 		    list_fix_watch(l, li);
 		    listitem_free(li);
 		    l->lv_len--;

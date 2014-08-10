@@ -2004,11 +2004,14 @@ write_viminfo(file, forceit)
     {
 	fclose(fp_in);
 
-	/*
-	 * In case of an error keep the original viminfo file.
-	 * Otherwise rename the newly written file.
-	 */
-	if (viminfo_errcnt || vim_rename(tempname, fname) == -1)
+	/* In case of an error keep the original viminfo file.  Otherwise
+	 * rename the newly written file.  Give an error if that fails. */
+	if (viminfo_errcnt == 0 && vim_rename(tempname, fname) == -1)
+	{
+	    ++viminfo_errcnt;
+	    EMSG2(_("E886: Can't rename viminfo file to %s!"), fname);
+	}
+	if (viminfo_errcnt > 0)
 	    mch_remove(tempname);
 
 #ifdef WIN3264
@@ -5511,7 +5514,15 @@ ex_global(eap)
 	    smsg((char_u *)_("Pattern not found: %s"), pat);
     }
     else
+    {
+#ifdef FEAT_CLIPBOARD
+	start_global_changes();
+#endif
 	global_exe(cmd);
+#ifdef FEAT_CLIPBOARD
+	end_global_changes();
+#endif
+    }
 
     ml_clearmarked();	   /* clear rest of the marks */
     vim_regfree(regmatch.regprog);

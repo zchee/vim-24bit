@@ -684,8 +684,10 @@ win_split_ins(size, flags, new_wp, dir)
     int		available;
     int		oldwin_height = 0;
     int		layout;
-    frame_T	*frp, *curfrp;
+    frame_T	*frp, *curfrp, *frp2, *prevfrp;
     int		before;
+    int		minheight;
+    int		wmh1;
 
     if (flags & WSP_TOP)
 	oldwin = firstwin;
@@ -714,22 +716,49 @@ win_split_ins(size, flags, new_wp, dir)
 #ifdef FEAT_VERTSPLIT
     if (flags & WSP_VERT)
     {
+	int	wmw1;
+	int	minwidth;
+
 	layout = FR_ROW;
 
 	/*
 	 * Check if we are able to split the current window and compute its
 	 * width.
 	 */
-	needed = p_wmw + 1;
+	/* Current window requires at least 1 space. */
+	wmw1 = (p_wmw == 0 ? 1 : p_wmw);
+	needed = wmw1 + 1;
 	if (flags & WSP_ROOM)
-	    needed += p_wiw - p_wmw;
-	if (p_ea || (flags & (WSP_BOT | WSP_TOP)))
+	    needed += p_wiw - wmw1;
+	if (flags & (WSP_BOT | WSP_TOP))
 	{
+	    minwidth = frame_minwidth(topframe, NOWIN);
 	    available = topframe->fr_width;
-	    needed += frame_minwidth(topframe, NULL);
+	    needed += minwidth;
+	}
+	else if (p_ea)
+	{
+	    minwidth = frame_minwidth(oldwin->w_frame, NOWIN);
+	    prevfrp = oldwin->w_frame;
+	    for (frp = oldwin->w_frame->fr_parent; frp != NULL;
+							frp = frp->fr_parent)
+	    {
+		if (frp->fr_layout == FR_ROW)
+		    for (frp2 = frp->fr_child; frp2 != NULL;
+							frp2 = frp2->fr_next)
+			if (frp2 != prevfrp)
+			    minwidth += frame_minwidth(frp2, NOWIN);
+		prevfrp = frp;
+	    }
+	    available = topframe->fr_width;
+	    needed += minwidth;
 	}
 	else
-	    available = oldwin->w_width;
+	{
+	    minwidth = frame_minwidth(oldwin->w_frame, NOWIN);
+	    available = oldwin->w_frame->fr_width;
+	    needed += minwidth;
+	}
 	if (available < needed && new_wp == NULL)
 	{
 	    EMSG(_(e_noroom));
@@ -737,10 +766,10 @@ win_split_ins(size, flags, new_wp, dir)
 	}
 	if (new_size == 0)
 	    new_size = oldwin->w_width / 2;
-	if (new_size > oldwin->w_width - p_wmw - 1)
-	    new_size = oldwin->w_width - p_wmw - 1;
-	if (new_size < p_wmw)
-	    new_size = p_wmw;
+	if (new_size > available - minwidth - 1)
+	    new_size = available - minwidth - 1;
+	if (new_size < wmw1)
+	    new_size = wmw1;
 
 	/* if it doesn't fit in the current window, need win_equal() */
 	if (oldwin->w_width - new_size - 1 < p_wmw)
@@ -781,18 +810,39 @@ win_split_ins(size, flags, new_wp, dir)
 	 * Check if we are able to split the current window and compute its
 	 * height.
 	 */
-	needed = p_wmh + STATUS_HEIGHT + need_status;
+	/* Current window requires at least 1 space. */
+	wmh1 = (p_wmh == 0 ? 1 : p_wmh);
+	needed = wmh1 + STATUS_HEIGHT;
 	if (flags & WSP_ROOM)
-	    needed += p_wh - p_wmh;
-	if (p_ea || (flags & (WSP_BOT | WSP_TOP)))
+	    needed += p_wh - wmh1;
+	if (flags & (WSP_BOT | WSP_TOP))
 	{
+	    minheight = frame_minheight(topframe, NOWIN) + need_status;
 	    available = topframe->fr_height;
-	    needed += frame_minheight(topframe, NULL);
+	    needed += minheight;
+	}
+	else if (p_ea)
+	{
+	    minheight = frame_minheight(oldwin->w_frame, NOWIN) + need_status;
+	    prevfrp = oldwin->w_frame;
+	    for (frp = oldwin->w_frame->fr_parent; frp != NULL;
+							frp = frp->fr_parent)
+	    {
+		if (frp->fr_layout == FR_COL)
+		    for (frp2 = frp->fr_child; frp2 != NULL;
+							frp2 = frp2->fr_next)
+			if (frp2 != prevfrp)
+			    minheight += frame_minheight(frp2, NOWIN);
+		prevfrp = frp;
+	    }
+	    available = topframe->fr_height;
+	    needed += minheight;
 	}
 	else
 	{
-	    available = oldwin->w_height;
-	    needed += p_wmh;
+	    minheight = frame_minheight(oldwin->w_frame, NOWIN) + need_status;
+	    available = oldwin->w_frame->fr_height;
+	    needed += minheight;
 	}
 	if (available < needed && new_wp == NULL)
 	{
@@ -807,11 +857,10 @@ win_split_ins(size, flags, new_wp, dir)
 	}
 	if (new_size == 0)
 	    new_size = oldwin_height / 2;
-
-	if (new_size > oldwin_height - p_wmh - STATUS_HEIGHT)
-	    new_size = oldwin_height - p_wmh - STATUS_HEIGHT;
-	if (new_size < p_wmh)
-	    new_size = p_wmh;
+	if (new_size > available - minheight - STATUS_HEIGHT)
+	    new_size = available - minheight - STATUS_HEIGHT;
+	if (new_size < wmh1)
+	    new_size = wmh1;
 
 	/* if it doesn't fit in the current window, need win_equal() */
 	if (oldwin_height - new_size - STATUS_HEIGHT < p_wmh)
@@ -1128,6 +1177,11 @@ win_split_ins(size, flags, new_wp, dir)
 	if (size != 0)
 	    p_wh = size;
     }
+
+#ifdef FEAT_JUMPLIST
+    /* Keep same changelist position in new window. */
+    wp->w_changelistidx = oldwin->w_changelistidx;
+#endif
 
     /*
      * make the new window the current window
@@ -2477,6 +2531,10 @@ win_free_all()
 
     while (firstwin != NULL)
 	(void)win_free_mem(firstwin, &dummy, NULL);
+
+    /* No window should be used after this. Set curwin to NULL to crash
+     * instead of using freed memory. */
+    curwin = NULL;
 }
 #endif
 
@@ -4836,15 +4894,20 @@ win_size_restore(gap)
     garray_T	*gap;
 {
     win_T	*wp;
-    int		i;
+    int		i, j;
 
     if (win_count() * 2 == gap->ga_len)
     {
-	i = 0;
-	for (wp = firstwin; wp != NULL; wp = wp->w_next)
+	/* The order matters, because frames contain other frames, but it's
+	 * difficult to get right. The easy way out is to do it twice. */
+	for (j = 0; j < 2; ++j)
 	{
-	    frame_setwidth(wp->w_frame, ((int *)gap->ga_data)[i++]);
-	    win_setheight_win(((int *)gap->ga_data)[i++], wp);
+	    i = 0;
+	    for (wp = firstwin; wp != NULL; wp = wp->w_next)
+	    {
+		frame_setwidth(wp->w_frame, ((int *)gap->ga_data)[i++]);
+		win_setheight_win(((int *)gap->ga_data)[i++], wp);
+	    }
 	}
 	/* recompute the window positions */
 	(void)win_comp_pos();
@@ -5732,7 +5795,7 @@ win_new_height(wp, height)
 		    --wp->w_wrow;
 		}
 	    }
-            set_topline(wp, lnum);
+	    set_topline(wp, lnum);
 	}
 	else if (sline > 0)
 	{
@@ -5778,7 +5841,7 @@ win_new_height(wp, height)
 		wp->w_wrow -= sline;
 	    }
 
-            set_topline(wp, lnum);
+	    set_topline(wp, lnum);
 	}
     }
 
