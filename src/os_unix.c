@@ -1960,9 +1960,12 @@ get_x11_thing(get_title, test_only)
     return retval;
 }
 
-/* Are Xutf8 functions available?  Avoid error from old compilers. */
+/* Xutf8 functions are not avaialble on older systems. Note that on some
+ * systems X_HAVE_UTF8_STRING may be defined in a header file but
+ * Xutf8SetWMProperties() is not in the X11 library.  Configure checks for
+ * that and defines HAVE_XUTF8SETWMPROPERTIES. */
 #if defined(X_HAVE_UTF8_STRING) && defined(FEAT_MBYTE)
-# if X_HAVE_UTF8_STRING
+# if X_HAVE_UTF8_STRING && HAVE_XUTF8SETWMPROPERTIES
 #  define USE_UTF8_STRING
 # endif
 #endif
@@ -5939,10 +5942,12 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 			*p++ = '\\';
 		    ++j;
 		}
-		else if (!intick && vim_strchr(SHELL_SPECIAL,
-							   pat[i][j]) != NULL)
+		else if (!intick
+			 && ((flags & EW_KEEPDOLLAR) == 0 || pat[i][j] != '$')
+			      && vim_strchr(SHELL_SPECIAL, pat[i][j]) != NULL)
 		    /* Put a backslash before a special character, but not
-		     * when inside ``. */
+		     * when inside ``. And not for $var when EW_KEEPDOLLAR is
+		     * set. */
 		    *p++ = '\\';
 
 		/* Copy one character. */

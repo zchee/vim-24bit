@@ -1584,9 +1584,17 @@ win_update(wp)
 	     */
 	    if (VIsual_mode == Ctrl_V)
 	    {
-		colnr_T	fromc, toc;
+		colnr_T	    fromc, toc;
+#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+		int	    save_ve_flags = ve_flags;
 
+		if (curwin->w_p_lbr)
+		    ve_flags = VE_ALL;
+#endif
 		getvcols(wp, &VIsual, &curwin->w_cursor, &fromc, &toc);
+#if defined(FEAT_VIRTUALEDIT) && defined(FEAT_LINEBREAK)
+		ve_flags = save_ve_flags;
+#endif
 		++toc;
 		if (curwin->w_curswant == MAXCOL)
 		    toc = MAXCOL;
@@ -4514,6 +4522,11 @@ win_line(wp, lnum, startrow, endrow, nochange)
 			int	i;
 			int	saved_nextra = n_extra;
 
+#ifdef FEAT_CONCEAL
+			if (is_concealing && vcol_off > 0)
+			    /* there are characters to conceal */
+			    tab_len += vcol_off;
+#endif
 			/* if n_extra > 0, it gives the number of chars, to
 			 * use for a tab, else we need to calculate the width
 			 * for a tab */
@@ -4539,6 +4552,12 @@ win_line(wp, lnum, startrow, endrow, nochange)
 #endif
 			}
 			p_extra = p_extra_free;
+#ifdef FEAT_CONCEAL
+			/* n_extra will be increased by FIX_FOX_BOGUSCOLS
+			 * macro below, so need to adjust for that here */
+			if (is_concealing && vcol_off > 0)
+			    n_extra -= vcol_off;
+#endif
 		    }
 #endif
 #ifdef FEAT_CONCEAL
@@ -4882,6 +4901,7 @@ win_line(wp, lnum, startrow, endrow, nochange)
 	 * special character (via 'listchars' option "precedes:<char>".
 	 */
 	if (lcs_prec_todo != NUL
+		&& wp->w_p_list
 		&& (wp->w_p_wrap ? wp->w_skipcol > 0 : wp->w_leftcol > 0)
 #ifdef FEAT_DIFF
 		&& filler_todo <= 0

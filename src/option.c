@@ -56,6 +56,7 @@
  */
 #define PV_AI		OPT_BUF(BV_AI)
 #define PV_AR		OPT_BOTH(OPT_BUF(BV_AR))
+#define PV_BKC		OPT_BOTH(OPT_BUF(BV_BKC))
 #ifdef FEAT_QUICKFIX
 # define PV_BH		OPT_BUF(BV_BH)
 # define PV_BT		OPT_BUF(BV_BT)
@@ -582,7 +583,7 @@ static struct vimoption
 			    (char_u *)&p_bk, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
     {"backupcopy",  "bkc",  P_STRING|P_VIM|P_COMMA|P_NODUP,
-			    (char_u *)&p_bkc, PV_NONE,
+			    (char_u *)&p_bkc, PV_BKC,
 #ifdef UNIX
 			    {(char_u *)"yes", (char_u *)"auto"}
 #else
@@ -1699,6 +1700,13 @@ static struct vimoption
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)"", (char_u *)0L} SCRIPTID_INIT},
+    {"langnoremap",  "lnr",   P_BOOL|P_VI_DEF,
+#ifdef FEAT_LANGMAP
+			    (char_u *)&p_lnr, PV_NONE,
+#else
+			    (char_u *)NULL, PV_NONE,
+#endif
+			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
     {"laststatus",  "ls",   P_NUM|P_VI_DEF|P_RALL,
 #ifdef FEAT_WINDOWS
 			    (char_u *)&p_ls, PV_NONE,
@@ -3108,6 +3116,9 @@ static void fill_breakat_flags __ARGS((void));
 static int opt_strings_flags __ARGS((char_u *val, char **values, unsigned *flagp, int list));
 static int check_opt_strings __ARGS((char_u *val, char **values, int));
 static int check_opt_wim __ARGS((void));
+#ifdef FEAT_LINEBREAK
+static int briopt_check __ARGS((win_T *wp));
+#endif
 
 /*
  * Initialize the options, first part.
@@ -3652,6 +3663,9 @@ set_options_default(opt_flags)
 	win_comp_scroll(wp);
 #else
 	win_comp_scroll(curwin);
+#endif
+#ifdef FEAT_CINDENT
+    parse_cino(curbuf);
 #endif
 }
 
@@ -5300,7 +5314,7 @@ didset_options()
     (void)check_cedit();
 #endif
 #ifdef FEAT_LINEBREAK
-    briopt_check();
+    briopt_check(curwin);
 #endif
 }
 
@@ -5417,6 +5431,7 @@ check_buf_options(buf)
 #ifdef FEAT_LISP
     check_string_option(&buf->b_p_lw);
 #endif
+    check_string_option(&buf->b_p_bkc);
 }
 
 /*
@@ -5734,17 +5749,32 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     }
 
     /* 'backupcopy' */
-    else if (varp == &p_bkc)
+    else if (gvarp == &p_bkc)
     {
-	if (opt_strings_flags(p_bkc, p_bkc_values, &bkc_flags, TRUE) != OK)
-	    errmsg = e_invarg;
-	if (((bkc_flags & BKC_AUTO) != 0)
-		+ ((bkc_flags & BKC_YES) != 0)
-		+ ((bkc_flags & BKC_NO) != 0) != 1)
+	char_u		*bkc = p_bkc;
+	unsigned int	*flags = &bkc_flags;
+
+	if (opt_flags & OPT_LOCAL)
 	{
-	    /* Must have exactly one of "auto", "yes"  and "no". */
-	    (void)opt_strings_flags(oldval, p_bkc_values, &bkc_flags, TRUE);
-	    errmsg = e_invarg;
+	    bkc = curbuf->b_p_bkc;
+	    flags = &curbuf->b_bkc_flags;
+	}
+
+	if ((opt_flags & OPT_LOCAL) && *bkc == NUL)
+	    /* make the local value empty: use the global value */
+	    *flags = 0;
+	else
+	{
+	    if (opt_strings_flags(bkc, p_bkc_values, flags, TRUE) != OK)
+		errmsg = e_invarg;
+	    if ((((int)*flags & BKC_AUTO) != 0)
+		    + (((int)*flags & BKC_YES) != 0)
+		    + (((int)*flags & BKC_NO) != 0) != 1)
+	    {
+		/* Must have exactly one of "auto", "yes"  and "no". */
+		(void)opt_strings_flags(oldval, p_bkc_values, flags, TRUE);
+		errmsg = e_invarg;
+	    }
 	}
     }
 
@@ -5759,7 +5789,7 @@ did_set_string_option(opt_idx, varp, new_value_alloced, oldval, errbuf,
     /* 'breakindentopt' */
     else if (varp == &curwin->w_p_briopt)
     {
-	if (briopt_check() == FAIL)
+	if (briopt_check(curwin) == FAIL)
 	    errmsg = e_invarg;
     }
 #endif
@@ -9041,12 +9071,13 @@ get_option_value_strict(name, numval, stringval, opt_type, from)
 }
 
 /*
- * Iterate over options. First argument is a pointer to a pointer to a structure 
- * inside options[] array, second is option type like in the above function.
+ * Iterate over options. First argument is a pointer to a pointer to a
+ * structure inside options[] array, second is option type like in the above
+ * function.
  *
- * If first argument points to NULL it is assumed that iteration just started 
+ * If first argument points to NULL it is assumed that iteration just started
  * and caller needs the very first value.
- * If first argument points to the end marker function returns NULL and sets 
+ * If first argument points to the end marker function returns NULL and sets
  * first argument to NULL.
  *
  * Returns full option name for current option on each call.
@@ -9872,6 +9903,10 @@ unset_global_local_option(name, from)
 	case PV_AR:
 	    buf->b_p_ar = -1;
 	    break;
+	case PV_BKC:
+	    clear_string_option(&buf->b_p_bkc);
+	    buf->b_bkc_flags = 0;
+	    break;
 	case PV_TAGS:
 	    clear_string_option(&buf->b_p_tags);
 	    break;
@@ -9977,6 +10012,7 @@ get_varp_scope(p, opt_flags)
 #ifdef FEAT_LISP
 	    case PV_LW:   return (char_u *)&(curbuf->b_p_lw);
 #endif
+	    case PV_BKC:  return (char_u *)&(curbuf->b_p_bkc);
 	}
 	return NULL; /* "cannot happen" */
     }
@@ -10009,6 +10045,8 @@ get_varp(p)
 				    ? (char_u *)&(curbuf->b_p_ar) : p->var;
 	case PV_TAGS:	return *curbuf->b_p_tags != NUL
 				    ? (char_u *)&(curbuf->b_p_tags) : p->var;
+	case PV_BKC:	return *curbuf->b_p_bkc != NUL
+				    ? (char_u *)&(curbuf->b_p_bkc) : p->var;
 #ifdef FEAT_FIND_ID
 	case PV_DEF:	return *curbuf->b_p_def != NUL
 				    ? (char_u *)&(curbuf->b_p_def) : p->var;
@@ -10254,6 +10292,9 @@ win_copy_options(wp_from, wp_to)
     wp_to->w_farsi = wp_from->w_farsi;
 #  endif
 # endif
+#if defined(FEAT_LINEBREAK)
+    briopt_check(wp_to);
+#endif
 }
 #endif
 
@@ -10598,6 +10639,8 @@ buf_copy_options(buf, flags)
 	     * are not copied, start using the global value */
 	    buf->b_p_ar = -1;
 	    buf->b_p_ul = NO_LOCAL_UNDOLEVEL;
+	    buf->b_p_bkc = empty_option;
+	    buf->b_bkc_flags = 0;
 #ifdef FEAT_QUICKFIX
 	    buf->b_p_gp = empty_option;
 	    buf->b_p_mp = empty_option;
@@ -12024,15 +12067,16 @@ find_mps_values(initc, findc, backwards, switchit)
  * This is called when 'breakindentopt' is changed and when a window is
  * initialized.
  */
-    int
-briopt_check()
+    static int
+briopt_check(wp)
+    win_T *wp;
 {
     char_u	*p;
     int		bri_shift = 0;
     long	bri_min = 20;
     int		bri_sbr = FALSE;
 
-    p = curwin->w_p_briopt;
+    p = wp->w_p_briopt;
     while (*p != NUL)
     {
 	if (STRNCMP(p, "shift:", 6) == 0
@@ -12057,10 +12101,20 @@ briopt_check()
 	    ++p;
     }
 
-    curwin->w_p_brishift = bri_shift;
-    curwin->w_p_brimin   = bri_min;
-    curwin->w_p_brisbr   = bri_sbr;
+    wp->w_p_brishift = bri_shift;
+    wp->w_p_brimin   = bri_min;
+    wp->w_p_brisbr   = bri_sbr;
 
     return OK;
 }
 #endif
+
+/*
+ * Get the local or global value of 'backupcopy'.
+ */
+    unsigned int
+get_bkc_value(buf)
+    buf_T *buf;
+{
+    return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
+}
