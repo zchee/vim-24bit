@@ -128,13 +128,18 @@
  * Adjust chars in a language according to 'langmap' option.
  * NOTE that there is no noticeable overhead if 'langmap' is not set.
  * When set the overhead for characters < 256 is small.
- * Don't apply 'langmap' if the character comes from the Stuff buffer.
+ * Don't apply 'langmap' if the character comes from the Stuff buffer or from
+ * a mapping and the langnoremap option was set.
  * The do-while is just to ignore a ';' after the macro.
  */
 # ifdef FEAT_MBYTE
 #  define LANGMAP_ADJUST(c, condition) \
     do { \
-	if (*p_langmap && (condition) && !KeyStuffed && (c) >= 0) \
+	if (*p_langmap \
+		&& (condition) \
+		&& (!p_lnr || (p_lnr && typebuf_maplen() == 0)) \
+		&& !KeyStuffed \
+		&& (c) >= 0) \
 	{ \
 	    if ((c) < 256) \
 		c = langmap_mapchar[c]; \
@@ -145,7 +150,11 @@
 # else
 #  define LANGMAP_ADJUST(c, condition) \
     do { \
-	if (*p_langmap && (condition) && !KeyStuffed && (c) >= 0 && (c) < 256) \
+	if (*p_langmap \
+		&& (condition) \
+		&& (!p_lnr || (p_lnr && typebuf_maplen() == 0)) \
+		&& !KeyStuffed \
+		&& (c) >= 0 && (c) < 256) \
 	    c = langmap_mapchar[c]; \
     } while (0)
 # endif
@@ -264,7 +273,7 @@
 # define mb_ptr_adv(p)	    p += has_mbyte ? (*mb_ptr2len)(p) : 1
 /* Advance multi-byte pointer, do not skip over composing chars. */
 # define mb_cptr_adv(p)	    p += enc_utf8 ? utf_ptr2len(p) : has_mbyte ? (*mb_ptr2len)(p) : 1
-/* Backup multi-byte pointer. */
+/* Backup multi-byte pointer. Only use with "p" > "s" ! */
 # define mb_ptr_back(s, p)  p -= has_mbyte ? ((*mb_head_off)(s, p - 1) + 1) : 1
 /* get length of multi-byte char, not including composing chars */
 # define mb_cptr2len(p)	    (enc_utf8 ? utf_ptr2len(p) : (*mb_ptr2len)(p))

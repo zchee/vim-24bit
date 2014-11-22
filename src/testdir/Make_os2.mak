@@ -35,7 +35,22 @@ SCRIPTS = test1.out test3.out test4.out test5.out test6.out \
 		test81.out test82.out test83.out test84.out test88.out \
 		test89.out test90.out test91.out test92.out test93.out \
 		test94.out test95.out test96.out test98.out test99.out \
-		test100.out test101.out test102.out test103.out
+		test100.out test101.out test102.out test103.out test104.out \
+		test105.out test106.out test107.out \
+		test_autoformat_join.out \
+		test_breakindent.out \
+		test_changelist.out \
+		test_eval.out \
+		test_insertcount.out \
+		test_listlbr.out \
+		test_listlbr_utf8.out \
+		test_mapping.out \
+		test_options.out \
+		test_qf_title.out \
+		test_signs.out \
+		test_utf8.out
+
+SCRIPTS_BENCH = bench_re_freeze.out
 
 .SUFFIXES: .in .out
 
@@ -43,6 +58,8 @@ all:	/tmp $(SCRIPTS)
 	@echo ALL DONE
 
 $(SCRIPTS): $(VIMPROG)
+
+benchmark: $(SCRIPTS_BENCH)
 
 clean:
 	-rm -rf *.out Xdotest test.ok tiny.vim small.vim mbyte.vim viminfo
@@ -62,3 +79,10 @@ clean:
 # Create a directory for temp files
 /tmp:
 	-mkdir /tmp
+
+bench_re_freeze.out: bench_re_freeze.vim
+	-del $*.failed test.ok benchmark.out
+	copy $*.ok test.ok
+	$(VIMPROG) -u os2.vim --noplugin -s dotest.in $*.in
+	type benchmark.out
+

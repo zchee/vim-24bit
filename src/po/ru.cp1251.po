@@ -3,14 +3,14 @@
 # Об условиях использования читайте в редакторе Vim ":help uganda"
 #
 # vassily "vr" ragosin <vrr@users.sourceforge.net>, 2004
-# Sergey Alyoshin <alyoshin.s@gmail.com>, 2013
+# Sergey Alyoshin <alyoshin.s@gmail.com>, 2013-2014
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: vim_7.4_ru\n"
+"Project-Id-Version: vim_ru\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-08-31 16:42+0400\n"
-"PO-Revision-Date: 2013-08-31 21:11+0400\n"
+"POT-Creation-Date: 2014-10-10 11:52+0400\n"
+"PO-Revision-Date: 2014-10-10 12:00+0400\n"
 "Last-Translator: Sergey Alyoshin <alyoshin.s@gmail.com>\n"
 "Language-Team: \n"
 "Language: Russian\n"
@@ -79,6 +79,9 @@ msgstr "Один буфер очищен"
 msgid "%d buffers wiped out"
 msgstr "Всего очищено буферов: %d"
 
+msgid "E90: Cannot unload last buffer"
+msgstr "E90: Невозможно выгрузить из памяти последний буфер"
+
 msgid "E84: No modified buffer found"
 msgstr "E84: Изменённых буферов не обнаружено"
 
@@ -100,9 +103,6 @@ msgstr "E88: Это первый буфер"
 msgid "E89: No write since last change for buffer %ld (add ! to override)"
 msgstr ""
 "E89: Изменения в буфере %ld не сохранены (добавьте !, чтобы обойти проверку)"
-
-msgid "E90: Cannot unload last buffer"
-msgstr "E90: Невозможно выгрузить из памяти последний буфер"
 
 msgid "W14: Warning: List of file names overflow"
 msgstr "W14: Предупреждение: переполнение списка имён файлов"
@@ -202,6 +202,21 @@ msgstr "Значки для %s:"
 #, c-format
 msgid "    line=%ld  id=%d  name=%s"
 msgstr "    строка=%ld  id=%d  имя=%s"
+
+msgid "E821: File is encrypted with unknown method"
+msgstr "E821: Файл зашифрован неизвестным методом"
+
+msgid "Enter encryption key: "
+msgstr "Введите пароль для шифрования: "
+
+msgid "Enter same key again: "
+msgstr "Повторите ввод пароля: "
+
+msgid "Keys don't match!"
+msgstr "Введённые пароли не совпадают!"
+
+msgid "[crypted]"
+msgstr "[зашифровано]"
 
 #, c-format
 msgid "E96: Can not diff more than %ld buffers"
@@ -474,7 +489,7 @@ msgstr "E109: Пропущено ':' после '?'"
 msgid "E691: Can only compare List with List"
 msgstr "E691: Список можно сравнивать только со списком"
 
-msgid "E692: Invalid operation for Lists"
+msgid "E692: Invalid operation for List"
 msgstr "E692: Недопустимая операция для списков"
 
 msgid "E735: Can only compare Dictionary with Dictionary"
@@ -568,7 +583,6 @@ msgstr "E725: Вызов функции dict без словаря: %s"
 msgid "E808: Number or Float required"
 msgstr "E808: Требуется целое число или с плавающей точкой"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "add() argument"
 msgstr "параметра add()"
 
@@ -590,15 +604,12 @@ msgstr "&Ok"
 msgid "E737: Key already exists: %s"
 msgstr "E737: Ключ уже существует: %s"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "extend() argument"
 msgstr "параметра extend()"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "map() argument"
 msgstr "параметра map()"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "filter() argument"
 msgstr "параметра filter()"
 
@@ -620,7 +631,6 @@ msgstr ""
 msgid "called inputrestore() more often than inputsave()"
 msgstr "Функция inputrestore() вызывается чаще, чем функция inputsave()"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "insert() argument"
 msgstr "параметра insert()"
 
@@ -649,26 +659,30 @@ msgstr "E241: Не могу отправить сообщение для %s"
 msgid "E277: Unable to read a server reply"
 msgstr "E277: Сервер не отвечает"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "remove() argument"
 msgstr "параметра remove()"
 
 msgid "E655: Too many symbolic links (cycle?)"
 msgstr "E655: Слишком много символических ссылок (цикл?)"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "reverse() argument"
 msgstr "параметра reverse()"
 
 msgid "E258: Unable to send to client"
 msgstr "E258: Не могу ответить клиенту"
 
-#. Используется для получения "значение параметра p()" в E741 и E742
 msgid "sort() argument"
 msgstr "параметра sort()"
 
+msgid "uniq() argument"
+msgstr "параметра uniq()"
+
 msgid "E702: Sort compare function failed"
 msgstr "E702: Неудачное завершение функции сравнения при сортировке"
+
+msgid "E882: Uniq compare function failed"
+msgstr ""
+"E882: Неудачное завершение функции сравнения при проверке единственности"
 
 msgid "(Invalid)"
 msgstr "(Неправильно)"
@@ -715,7 +729,6 @@ msgstr ""
 msgid "E705: Variable name conflicts with existing function: %s"
 msgstr "E705: Имя переменной конфликтует с существующей функцией: %s"
 
-#. Используется с %s = "параметера p"
 #, c-format
 msgid "E741: Value is locked: %s"
 msgstr "E741: Значение %s заблокировано"
@@ -723,7 +736,6 @@ msgstr "E741: Значение %s заблокировано"
 msgid "Unknown"
 msgstr "Неизвестно"
 
-#. Используется с %s = "параметера p()"
 #, c-format
 msgid "E742: Cannot change value of %s"
 msgstr "E742: Невозможно изменить значение %s"
@@ -769,10 +781,12 @@ msgid "E129: Function name required"
 msgstr "E129: Требуется имя функции"
 
 #, c-format
-msgid "E128: Function name must start with a capital or contain a colon: %s"
-msgstr ""
-"E128: Имя функции должно начинаться с заглавной буквы или содержать "
-"двоеточие: %s"
+msgid "E128: Function name must start with a capital or \"s:\": %s"
+msgstr "E128: Имя функции должно начинаться с заглавной буквы или \"s:\": %s"
+
+#, c-format
+msgid "E884: Function name cannot contain a colon: %s"
+msgstr "E884: Имя функции не может содержать двоеточие: %s"
 
 #, c-format
 msgid "E131: Cannot delete function %s: It is in use"
@@ -889,6 +903,10 @@ msgstr "E138: Невозможно записать файл viminfo %s!"
 #, c-format
 msgid "Writing viminfo file \"%s\""
 msgstr "Запись файла viminfo \"%s\""
+
+#, c-format
+msgid "E886: Can't rename viminfo file to %s!"
+msgstr "E886: Невозможно переименовать файл viminfo в %s!"
 
 #. Write the info:
 #, c-format
@@ -1089,6 +1107,10 @@ msgstr "E158: Неправильное имя буфера: %s"
 #, c-format
 msgid "E157: Invalid sign ID: %ld"
 msgstr "E157: Неправильный ID значка: %ld"
+
+#, c-format
+msgid "E885: Not possible to change sign %s"
+msgstr "E885: Невозможно изменить значок %s"
 
 msgid " (NOT FOUND)"
 msgstr " (НЕ НАЙДЕНО)"
@@ -1550,7 +1572,7 @@ msgstr "E603: :catch без :try"
 #. Give up for a ":catch" after ":finally" and ignore it.
 #. * Just parse.
 msgid "E604: :catch after :finally"
-msgstr "E604: :catch без :finally"
+msgstr "E604: :catch после :finally"
 
 msgid "E606: :finally without :try"
 msgstr "E606: :finally без :try"
@@ -1673,12 +1695,6 @@ msgstr "[БЕЗ преобразований]"
 msgid "[converted]"
 msgstr "[перекодировано]"
 
-msgid "[blowfish]"
-msgstr "[blowfish]"
-
-msgid "[crypted]"
-msgstr "[зашифровано]"
-
 #, c-format
 msgid "[CONVERSION ERROR in line %ld]"
 msgstr "[ОШИБКА ПРЕОБРАЗОВАНИЯ в строке %ld]"
@@ -1698,9 +1714,6 @@ msgstr "Преобразование с помощью 'charconvert' не выполнено"
 
 msgid "can't read output of 'charconvert'"
 msgstr "невозможно прочитать вывод 'charconvert'"
-
-msgid "E821: File is encrypted with unknown method"
-msgstr "E821: Файл зашифрован неизвестным методом"
 
 msgid "E676: No matching autocommands for acwrite buffer"
 msgstr "E676: Нет подходящих автокоманд для буфера acwrite"
@@ -2663,6 +2676,13 @@ msgid ""
 msgstr ""
 "E263: К сожалению эта команда не работает, поскольку не загружена библиотека "
 "Python"
+
+msgid ""
+"E887: Sorry, this command is disabled, the Python's site module could not be "
+"loaded."
+msgstr ""
+"E887: К сожалению эта команда не работает, поскольку не загружен модуль "
+"Python site."
 
 msgid "E659: Cannot invoke Python recursively"
 msgstr "E659: Невозможно выполнить рекурсивный вызов Python"
@@ -4029,13 +4049,6 @@ msgstr " (Прервано)"
 msgid "Beep!"
 msgstr "Би-би!"
 
-msgid "Vim: preserving files...\n"
-msgstr "Vim: сохранение файлов...\n"
-
-#. close all memfiles, without deleting
-msgid "Vim: Finished.\n"
-msgstr "Vim: Готово.\n"
-
 msgid "ERROR: "
 msgstr "ОШИБКА: "
 
@@ -4084,15 +4097,6 @@ msgstr "E548: Требуется ввести цифру"
 
 msgid "E549: Illegal percentage"
 msgstr "E549: Недопустимое значение процентов"
-
-msgid "Enter encryption key: "
-msgstr "Введите пароль для шифрования: "
-
-msgid "Enter same key again: "
-msgstr "Повторите ввод пароля: "
-
-msgid "Keys don't match!"
-msgstr "Введённые пароли не совпадают!"
 
 msgid "E854: path too long for completion"
 msgstr "E854: слишком большой путь для автодополнения"
@@ -4264,6 +4268,13 @@ msgstr ""
 #, c-format
 msgid "E574: Unknown register type %d"
 msgstr "E574: Неизвестный тип регистра %d"
+
+msgid ""
+"E883: search pattern and expression register may not contain two or more "
+"lines"
+msgstr ""
+"E883: шаблон поиска и регистр выражения не могут содержать двух или более "
+"строк"
 
 #, c-format
 msgid "%ld Cols; "
@@ -4551,17 +4562,6 @@ msgstr "E244: Недопустимое имя кодировки \"%s\" в имени шрифта \"%s\""
 msgid "E245: Illegal char '%c' in font name \"%s\""
 msgstr "E245: Недопустимый символ '%c' в имени шрифта \"%s\""
 
-msgid "Vim: Double signal, exiting\n"
-msgstr "Vim: Двойной сигнал, завершение работы\n"
-
-#, c-format
-msgid "Vim: Caught deadly signal %s\n"
-msgstr "Vim: Получен убийственный сигнал %s\n"
-
-#, c-format
-msgid "Vim: Caught deadly signal\n"
-msgstr "Vim: Получен убийственный сигнал\n"
-
 #, c-format
 msgid "Opening the X display took %ld msec"
 msgstr "Открытие дисплея X заняло %ld msec"
@@ -4592,6 +4592,19 @@ msgid ""
 msgstr ""
 "\n"
 "Невозможно установить контекст безопасности для "
+
+msgid "Could not set security context "
+msgstr "Невозможно установить контекст безопасности "
+
+msgid " for "
+msgstr " для "
+
+#. no enough size OR unexpected error
+msgid "Could not get security context "
+msgstr "Невозможно получить контекст безопасности "
+
+msgid ". Removing it!\n"
+msgstr ". Будет удалён!\n"
 
 msgid ""
 "\n"
@@ -4862,6 +4875,10 @@ msgstr "E554: Синтаксическая ошибка в %s{...}"
 msgid "External submatches:\n"
 msgstr "Внешние подсоответствия:\n"
 
+#, c-format
+msgid "E888: (NFA regexp) cannot repeat %s"
+msgstr "E888: (рег. выражение НКА) невозможно повторить %s"
+
 msgid ""
 "E864: \\%#= can only be followed by 0, 1, or 2. The automatic engine will be "
 "used "
@@ -4869,12 +4886,16 @@ msgstr ""
 "E864: после \\%#= может быть только 0, 1 или 2. Будет использоваться "
 "автоматическая машина"
 
+msgid "E865: (NFA) Regexp end encountered prematurely"
+msgstr "E865: (НКА) неожиданный конец регулярного выражения"
+
 #, c-format
 msgid "E866: (NFA regexp) Misplaced %c"
 msgstr "E866: (рег. выражение НКА) неожиданный %c"
 
-msgid "E865: (NFA) Regexp end encountered prematurely"
-msgstr "E865: (НКА) неожиданный конец регулярного выражения"
+#, c-format
+msgid "E877: (NFA regexp) Invalid character class: %ld"
+msgstr "E877: (рег. выражение НКА) неправильный класс символов: %ld"
 
 #, c-format
 msgid "E867: (NFA) Unknown operator '\\z%c'"
@@ -5378,12 +5399,12 @@ msgid "E765: 'spellfile' does not have %ld entries"
 msgstr "E765: 'spellfile' не содержит %ld элементов"
 
 #, c-format
-msgid "Word removed from %s"
-msgstr "Слово удалено из %s"
+msgid "Word '%.*s' removed from %s"
+msgstr "Слово '%.*s' удалено из %s"
 
 #, c-format
-msgid "Word added to %s"
-msgstr "Слово добавлено в %s"
+msgid "Word '%.*s' added to %s"
+msgstr "Слово '%.*s' добавлено в %s"
 
 msgid "E763: Word characters differ between spell files"
 msgstr "E763: Символы слов отличаются в файлах правописания"
@@ -5773,8 +5794,8 @@ msgstr "Вместо пустого выделения используется CUT_BUFFER0"
 
 #. This happens when the FileChangedRO autocommand changes the
 #. * file in a way it becomes shorter.
-msgid "E834: Line count changed unexpectedly"
-msgstr "E834: Неожиданно изменился счётчик строк"
+msgid "E881: Line count changed unexpectedly"
+msgstr "E881: Неожиданно изменился счётчик строк"
 
 #. must display the prompt
 msgid "No undo possible; continue anyway"
@@ -6256,6 +6277,9 @@ msgstr "E446: Нет имени файла в позиции курсора"
 msgid "E447: Can't find file \"%s\" in path"
 msgstr "E447: Файл \"%s\" не найден по известным путям"
 
+msgid "List or number required"
+msgstr "Требуется список или число"
+
 #, c-format
 msgid "E370: Could not load library %s"
 msgstr "E370: Невозможно загрузить библиотеку %s"
@@ -6489,6 +6513,9 @@ msgstr "E485: Невозможно прочитать файл %s"
 msgid "E37: No write since last change (add ! to override)"
 msgstr "E37: Изменения не сохранены (добавьте !, чтобы обойти проверку)"
 
+msgid "E37: No write since last change"
+msgstr "E37: Изменения не сохранены"
+
 msgid "E38: Null argument"
 msgstr "E38: Нулевой параметр"
 
@@ -6688,7 +6715,7 @@ msgstr "Значение слишком велико для целочисленного типа C"
 msgid "value is too small to fit into C int type"
 msgstr "Значение слишком мало для целочисленного типа C"
 
-msgid "number must be greater then zero"
+msgid "number must be greater than zero"
 msgstr "Номер должен быть больше нуля"
 
 msgid "number must be greater or equal to zero"
@@ -6750,15 +6777,33 @@ msgstr "Индекс списка за пределами диапазона"
 msgid "internal error: failed to get vim list item %d"
 msgstr "Внутренняя ошибка: не удалось получить элемент VIM-списка %d"
 
-msgid "failed to add item to list"
-msgstr "Невозможно добавить элемент в список"
+msgid "slice step cannot be zero"
+msgstr "Шаг выборки не может быть нулевым"
+
+#, c-format
+msgid "attempt to assign sequence of size greater than %d to extended slice"
+msgstr ""
+"Попытка присвоить последовательность размером больше чем %d к расширенной "
+"выборке"
 
 #, c-format
 msgid "internal error: no vim list item %d"
 msgstr "Внутренняя ошибка: нет элемента VIM-списка %d"
 
+msgid "internal error: not enough list items"
+msgstr "Внутренняя ошибка: недостаточно элемнтов списка"
+
 msgid "internal error: failed to add item to list"
 msgstr "Внутренняя ошибка: не удалось добавить элемент в список"
+
+#, c-format
+msgid "attempt to assign sequence of size %d to extended slice of size %d"
+msgstr ""
+"Попытка присвоить последовательность размером %d к расширенной выборке "
+"размером %d"
+
+msgid "failed to add item to list"
+msgstr "Невозможно добавить элемент в список"
 
 msgid "cannot delete vim.List attributes"
 msgstr "Невозможно удалить атрибуты vim.List"
@@ -6891,3 +6936,4 @@ msgid ""
 msgstr ""
 "Ошибка при установке пути: sys.path не является списком\n"
 "Следует добавить vim.VIM_SPECIAL_PATH в sys.path"
+

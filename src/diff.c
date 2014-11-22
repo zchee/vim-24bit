@@ -622,6 +622,7 @@ diff_redraw(dofold)
 		    wp->w_topfill = (n < 0 ? 0 : n);
 		else if (n > 0 && n > wp->w_topfill)
 		    wp->w_topfill = n;
+		check_topfill(wp, FALSE);
 	    }
 	}
 }
@@ -2106,12 +2107,20 @@ diff_infold(wp, lnum)
  * "dp" and "do" commands.
  */
     void
-nv_diffgetput(put)
+nv_diffgetput(put, count)
     int		put;
+    long	count;
 {
     exarg_T	ea;
+    char_u	buf[30];
 
-    ea.arg = (char_u *)"";
+    if (count == 0)
+	ea.arg = (char_u *)"";
+    else
+    {
+	vim_snprintf((char *)buf, 30, "%ld", count);
+	ea.arg = buf;
+    }
     if (put)
 	ea.cmdidx = CMD_diffput;
     else
@@ -2324,7 +2333,7 @@ ex_diffgetput(eap)
 		    end_skip = 0;
 	    }
 
-	    buf_empty = FALSE;
+	    buf_empty = bufempty();
 	    added = 0;
 	    for (i = 0; i < count; ++i)
 	    {

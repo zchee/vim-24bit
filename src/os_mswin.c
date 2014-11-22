@@ -277,10 +277,6 @@ mch_early_init(void)
     AnsiUpperBuff(toupper_tab, 256);
     AnsiLowerBuff(tolower_tab, 256);
 #endif
-
-#if defined(FEAT_MBYTE) && !defined(FEAT_GUI)
-    (void)get_cmd_argsW(NULL);
-#endif
 }
 
 
@@ -348,7 +344,7 @@ mch_restore_title(
     int which)
 {
 #ifndef FEAT_GUI_MSWIN
-    mch_settitle((which & 1) ? g_szOrigTitle : NULL, NULL);
+    SetConsoleTitle(g_szOrigTitle);
 #endif
 }
 
@@ -415,7 +411,7 @@ mch_FullName(
 	     * - convert the result from UCS2 to 'encoding'.
 	     */
 	    wname = enc_to_utf16(fname, NULL);
-	    if (wname != NULL && _wfullpath(wbuf, wname, MAX_PATH - 1) != NULL)
+	    if (wname != NULL && _wfullpath(wbuf, wname, MAX_PATH) != NULL)
 	    {
 		cname = utf16_to_enc((short_u *)wbuf, NULL);
 		if (cname != NULL)
@@ -498,7 +494,7 @@ slash_adjust(p)
     }
 }
 
-#if (_MSC_VER >= 1300)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__MINGW32__)
 # define OPEN_OH_ARGTYPE intptr_t
 #else
 # define OPEN_OH_ARGTYPE long
@@ -617,8 +613,22 @@ vim_stat(const char *name, struct stat *stp)
     p = buf + strlen(buf);
     if (p > buf)
 	mb_ptr_back(buf, p);
+
+    /* Remove trailing '\\' except root path. */
     if (p > buf && (*p == '\\' || *p == '/') && p[-1] != ':')
 	*p = NUL;
+
+    if ((buf[0] == '\\' && buf[1] == '\\') || (buf[0] == '/' && buf[1] == '/'))
+    {
+	/* UNC root path must be followed by '\\'. */
+	p = vim_strpbrk(buf + 2, "\\/");
+	if (p != NULL)
+	{
+	    p = vim_strpbrk(p + 1, "\\/");
+	    if (p == NULL)
+		STRCAT(buf, "\\");
+	}
+    }
 #ifdef FEAT_MBYTE
     if (enc_codepage >= 0 && (int)GetACP() != enc_codepage
 # ifdef __BORLANDC__
@@ -634,7 +644,7 @@ vim_stat(const char *name, struct stat *stp)
 	{
 	    n = wstat_symlink_aware(wp, (struct _stat *)stp);
 	    vim_free(wp);
-	    if (n >= 0)
+	    if (n >= 0 || g_PlatformId == VER_PLATFORM_WIN32_NT)
 		return n;
 	    /* Retry with non-wide function (for Windows 98). Can't use
 	     * GetLastError() here and it's unclear what errno gets set to if
@@ -801,8 +811,8 @@ mch_chdir(char *path)
 	{
 	    n = _wchdir(p);
 	    vim_free(p);
-	    if (n == 0)
-		return 0;
+	    if (n == 0 || g_PlatformId == VER_PLATFORM_WIN32_NT)
+		return n;
 	    /* Retry with non-wide function (for Windows 98). */
 	}
     }
@@ -917,6 +927,33 @@ check_str_len(char_u *str)
     return 0;
 }
 # endif
+
+/*
+ * Passed to do_in_runtimepath() to load a vim.ico file.
+ */
+    static void
+mch_icon_load_cb(char_u *fname, void *cookie)
+{
+    HANDLE *h = (HANDLE *)cookie;
+
+    *h = LoadImage(NULL,
+		   fname,
+		   IMAGE_ICON,
+		   64,
+		   64,
+		   LR_LOADFROMFILE | LR_LOADMAP3DCOLORS);
+}
+
+/*
+ * Try loading an icon file from 'runtimepath'.
+ */
+    int
+mch_icon_load(iconp)
+    HANDLE *iconp;
+{
+    return do_in_runtimepath((char_u *)"bitmaps/vim.ico",
+					      FALSE, mch_icon_load_cb, iconp);
+}
 
     int
 mch_libcall(
@@ -1598,11 +1635,34 @@ mch_print_init(prt_settings_T *psettings, char_u *jobname, int forceit)
 	char_u	*printer_name = (char_u *)devname + devname->wDeviceOffset;
 	char_u	*port_name = (char_u *)devname +devname->wOutputOffset;
 	char_u	*text = _("to %s on %s");
+#ifdef FEAT_MBYTE
+	char_u  *printer_name_orig = printer_name;
+	char_u	*port_name_orig = port_name;
 
+	if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+	{
+	    char_u  *to_free = NULL;
+	    int     maxlen;
+
+	    acp_to_enc(printer_name, (int)STRLEN(printer_name), &to_free,
+								    &maxlen);
+	    if (to_free != NULL)
+		printer_name = to_free;
+	    acp_to_enc(port_name, (int)STRLEN(port_name), &to_free, &maxlen);
+	    if (to_free != NULL)
+		port_name = to_free;
+	}
+#endif
 	prt_name = alloc((unsigned)(STRLEN(printer_name) + STRLEN(port_name)
 							     + STRLEN(text)));
 	if (prt_name != NULL)
 	    wsprintf(prt_name, text, printer_name, port_name);
+#ifdef FEAT_MBYTE
+	if (printer_name != printer_name_orig)
+	    vim_free(printer_name);
+	if (port_name != port_name_orig)
+	    vim_free(port_name);
+#endif
     }
     GlobalUnlock(prt_dlg.hDevNames);
 
@@ -1636,16 +1696,22 @@ mch_print_init(prt_settings_T *psettings, char_u *jobname, int forceit)
      */
     psettings->chars_per_line = prt_get_cpl();
     psettings->lines_per_page = prt_get_lpp();
-    psettings->n_collated_copies = (prt_dlg.Flags & PD_COLLATE)
-							? prt_dlg.nCopies : 1;
-    psettings->n_uncollated_copies = (prt_dlg.Flags & PD_COLLATE)
-							? 1 : prt_dlg.nCopies;
+    if (prt_dlg.Flags & PD_USEDEVMODECOPIESANDCOLLATE)
+    {
+	psettings->n_collated_copies = (prt_dlg.Flags & PD_COLLATE)
+						    ? prt_dlg.nCopies : 1;
+	psettings->n_uncollated_copies = (prt_dlg.Flags & PD_COLLATE)
+						    ? 1 : prt_dlg.nCopies;
 
-    if (psettings->n_collated_copies == 0)
+	if (psettings->n_collated_copies == 0)
+	    psettings->n_collated_copies = 1;
+
+	if (psettings->n_uncollated_copies == 0)
+	    psettings->n_uncollated_copies = 1;
+    } else {
 	psettings->n_collated_copies = 1;
-
-    if (psettings->n_uncollated_copies == 0)
 	psettings->n_uncollated_copies = 1;
+    }
 
     psettings->jobname = jobname;
 
@@ -1928,8 +1994,7 @@ mch_resolve_shortcut(char_u *fname)
 
 shortcut_errorw:
 		vim_free(p);
-		if (hr == S_OK)
-		    goto shortcut_end;
+		goto shortcut_end;
 	    }
 	}
 	/* Retry with non-wide function (for Windows 98). */
@@ -2854,12 +2919,27 @@ get_logfont(
 {
     char_u	*p;
     int		i;
+    int		ret = FAIL;
     static LOGFONT *lastlf = NULL;
+#ifdef FEAT_MBYTE
+    char_u	*acpname = NULL;
+#endif
 
     *lf = s_lfDefault;
     if (name == NULL)
 	return OK;
 
+#ifdef FEAT_MBYTE
+    /* Convert 'name' from 'encoding' to the current codepage, because
+     * lf->lfFaceName uses the current codepage.
+     * TODO: Use Wide APIs instead of ANSI APIs. */
+    if (enc_codepage >= 0 && (int)GetACP() != enc_codepage)
+    {
+	int	len;
+	enc_to_acp(name, (int)strlen(name), &acpname, &len);
+	name = acpname;
+    }
+#endif
     if (STRCMP(name, "*") == 0)
     {
 #if defined(FEAT_GUI_W32)
@@ -2874,10 +2954,9 @@ get_logfont(
 	cf.lpLogFont = lf;
 	cf.nFontType = 0 ; //REGULAR_FONTTYPE;
 	if (ChooseFont(&cf))
-	    goto theend;
-#else
-	return FAIL;
+	    ret = OK;
 #endif
+	goto theend;
     }
 
     /*
@@ -2886,7 +2965,7 @@ get_logfont(
     for (p = name; *p && *p != ':'; p++)
     {
 	if (p - name + 1 > LF_FACESIZE)
-	    return FAIL;			/* Name too long */
+	    goto theend;			/* Name too long */
 	lf->lfFaceName[p - name] = *p;
     }
     if (p != name)
@@ -2914,7 +2993,7 @@ get_logfont(
 		did_replace = TRUE;
 	    }
 	if (!did_replace || init_logfont(lf) == FAIL)
-	    return FAIL;
+	    goto theend;
     }
 
     while (*p == ':')
@@ -2975,25 +3054,27 @@ get_logfont(
 			    p[-1], name);
 		    EMSG(IObuff);
 		}
-		return FAIL;
+		goto theend;
 	}
 	while (*p == ':')
 	    p++;
     }
+    ret = OK;
 
-#if defined(FEAT_GUI_W32)
 theend:
-#endif
     /* ron: init lastlf */
-    if (printer_dc == NULL)
+    if (ret == OK && printer_dc == NULL)
     {
 	vim_free(lastlf);
 	lastlf = (LOGFONT *)alloc(sizeof(LOGFONT));
 	if (lastlf != NULL)
 	    mch_memmove(lastlf, lf, sizeof(LOGFONT));
     }
+#ifdef FEAT_MBYTE
+    vim_free(acpname);
+#endif
 
-    return OK;
+    return ret;
 }
 
 #endif /* defined(FEAT_GUI) || defined(FEAT_PRINTER) */

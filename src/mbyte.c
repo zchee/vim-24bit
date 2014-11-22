@@ -83,10 +83,18 @@
 # ifndef WIN32_LEAN_AND_MEAN
 #  define WIN32_LEAN_AND_MEAN
 # endif
-# include <windows.h>
+# if defined(FEAT_GUI) || defined(FEAT_XCLIPBOARD)
+#  include <X11/Xwindows.h>
+#  define WINBYTE wBYTE
+# else
+#  include <windows.h>
+#  define WINBYTE BYTE
+# endif
 # ifdef WIN32
 #  undef WIN32	    /* Some windows.h define WIN32, we don't want that here. */
 # endif
+#else
+# define WINBYTE BYTE
 #endif
 
 #if (defined(WIN3264) || defined(WIN32UNIX)) && !defined(__MINGW32__)
@@ -397,6 +405,7 @@ enc_alias_table[] =
     {"unix-jis",	IDX_EUC_JP},
     {"ujis",		IDX_EUC_JP},
     {"shift-jis",	IDX_SJIS},
+    {"pck",		IDX_SJIS},	/* Sun: PCK */
     {"euckr",		IDX_EUC_KR},
     {"5601",		IDX_EUC_KR},	/* Sun: KS C 5601 */
     {"euccn",		IDX_EUC_CN},
@@ -698,9 +707,9 @@ codepage_invalid:
 	    /* enc_dbcs is set by setting 'fileencoding'.  It becomes a Windows
 	     * CodePage identifier, which we can pass directly in to Windows
 	     * API */
-	    n = IsDBCSLeadByteEx(enc_dbcs, (BYTE)i) ? 2 : 1;
+	    n = IsDBCSLeadByteEx(enc_dbcs, (WINBYTE)i) ? 2 : 1;
 #else
-# if defined(MACOS) || defined(__amigaos4__)
+# if defined(MACOS) || defined(__amigaos4__) || defined(__ANDROID__)
 	    /*
 	     * if mblen() is not available, character which MSB is turned on
 	     * are treated as leading byte character. (note : This assumption
@@ -2529,6 +2538,7 @@ utf_class(c)
 	{0x2900, 0x2998, 1},		/* arrows, brackets, etc. */
 	{0x29d8, 0x29db, 1},
 	{0x29fc, 0x29fd, 1},
+	{0x2e00, 0x2e7f, 1},		/* supplemental punctuation */
 	{0x3000, 0x3000, 0},		/* ideographic space */
 	{0x3001, 0x3020, 1},		/* ideographic punctuation */
 	{0x3030, 0x3030, 1},

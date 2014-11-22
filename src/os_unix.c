@@ -46,6 +46,14 @@
 static int selinux_enabled = -1;
 #endif
 
+#ifdef HAVE_SMACK
+# include <attr/xattr.h>
+# include <linux/xattr.h>
+# ifndef SMACK_LABEL_LEN
+#  define SMACK_LABEL_LEN 1024
+# endif
+#endif
+
 /*
  * Use this prototype for select, some include files have a wrong prototype
  */
@@ -1578,12 +1586,15 @@ x_IOerror_check(dpy)
  * An X IO Error handler, used to catch terminal errors.
  */
 static int x_IOerror_handler __ARGS((Display *dpy));
+static void may_restore_clipboard __ARGS((void));
+static int xterm_dpy_was_reset = FALSE;
 
     static int
 x_IOerror_handler(dpy)
     Display *dpy UNUSED;
 {
     xterm_dpy = NULL;
+    xterm_dpy_was_reset = TRUE;
     x11_window = 0;
     x11_display = NULL;
     xterm_Shell = (Widget)0;
@@ -1594,6 +1605,22 @@ x_IOerror_handler(dpy)
     return 0;  /* avoid the compiler complains about missing return value */
 # endif
 }
+
+/*
+ * If the X11 connection was lost try to restore it.
+ * Helps when the X11 server was stopped and restarted while Vim was inactive
+ * (e.g. though tmux).
+ */
+    static void
+may_restore_clipboard()
+{
+    if (xterm_dpy_was_reset)
+    {
+	xterm_dpy_was_reset = FALSE;
+	setup_term_clip();
+	get_x11_title(FALSE);
+    }
+}
 #endif
 
 /*
@@ -1602,8 +1629,6 @@ x_IOerror_handler(dpy)
     static int
 x_connect_to_server()
 {
-    regmatch_T	regmatch;
-
 #if defined(FEAT_CLIENTSERVER)
     if (x_force_connect)
 	return TRUE;
@@ -1614,9 +1639,7 @@ x_connect_to_server()
     /* Check for a match with "exclude:" from 'clipboard'. */
     if (clip_exclude_prog != NULL)
     {
-	regmatch.rm_ic = FALSE;		/* Don't ignore case */
-	regmatch.regprog = clip_exclude_prog;
-	if (vim_regexec(&regmatch, T_NAME, (colnr_T)0))
+	if (vim_regexec_prog(&clip_exclude_prog, FALSE, T_NAME, (colnr_T)0))
 	    return FALSE;
     }
     return TRUE;
@@ -1952,9 +1975,12 @@ get_x11_thing(get_title, test_only)
     return retval;
 }
 
-/* Are Xutf8 functions available?  Avoid error from old compilers. */
+/* Xutf8 functions are not avaialble on older systems. Note that on some
+ * systems X_HAVE_UTF8_STRING may be defined in a header file but
+ * Xutf8SetWMProperties() is not in the X11 library.  Configure checks for
+ * that and defines HAVE_XUTF8SETWMPROPERTIES. */
 #if defined(X_HAVE_UTF8_STRING) && defined(FEAT_MBYTE)
-# if X_HAVE_UTF8_STRING
+# if X_HAVE_UTF8_STRING && HAVE_XUTF8SETWMPROPERTIES
 #  define USE_UTF8_STRING
 # endif
 #endif
@@ -2798,6 +2824,84 @@ mch_copy_sec(from_file, to_file)
 }
 #endif /* HAVE_SELINUX */
 
+#if defined(HAVE_SMACK) && !defined(PROTO)
+/*
+ * Copy security info from "from_file" to "to_file".
+ */
+    void
+mch_copy_sec(from_file, to_file)
+    char_u	*from_file;
+    char_u	*to_file;
+{
+    static const char * const smack_copied_attributes[] =
+	{
+	    XATTR_NAME_SMACK,
+	    XATTR_NAME_SMACKEXEC,
+	    XATTR_NAME_SMACKMMAP
+	};
+
+    char	buffer[SMACK_LABEL_LEN];
+    const char	*name;
+    int		index;
+    int		ret;
+    ssize_t	size;
+
+    if (from_file == NULL)
+	return;
+
+    for (index = 0 ; index < (int)(sizeof(smack_copied_attributes)
+			      / sizeof(smack_copied_attributes)[0]) ; index++)
+    {
+	/* get the name of the attribute to copy */
+	name = smack_copied_attributes[index];
+
+	/* get the value of the attribute in buffer */
+	size = getxattr((char*)from_file, name, buffer, sizeof(buffer));
+	if (size >= 0)
+	{
+	    /* copy the attribute value of buffer */
+	    ret = setxattr((char*)to_file, name, buffer, (size_t)size, 0);
+	    if (ret < 0)
+	    {
+		MSG_PUTS(_("Could not set security context "));
+		MSG_PUTS(name);
+		MSG_PUTS(_(" for "));
+		msg_outtrans(to_file);
+		msg_putchar('\n');
+	    }
+	}
+	else
+	{
+	    /* what reason of not having the attribute value? */
+	    switch (errno)
+	    {
+		case ENOTSUP:
+		    /* extended attributes aren't supported or enabled */
+		    /* should a message be echoed? not sure... */
+		    return; /* leave because it isn't usefull to continue */
+
+		case ERANGE:
+		default:
+		    /* no enough size OR unexpected error */
+		    MSG_PUTS(_("Could not get security context "));
+		    MSG_PUTS(name);
+		    MSG_PUTS(_(" for "));
+		    msg_outtrans(from_file);
+		    MSG_PUTS(_(". Removing it!\n"));
+		    /* FALLTHROUGH to remove the attribute */
+
+		case ENODATA:
+		    /* no attribute of this name */
+		    ret = removexattr((char*)to_file, name);
+		    /* Silently ignore errors, apparently this happens when
+		     * smack is not actually being used. */
+		    break;
+	    }
+	}
+    }
+}
+#endif /* HAVE_SMACK */
+
 /*
  * Return a pointer to the ACL of file "fname" in allocated memory.
  * Return NULL if the ACL is not available for whatever reason.
@@ -2965,7 +3069,26 @@ executable_file(name)
 
     if (stat((char *)name, &st))
 	return 0;
+#ifdef VMS
+    /* Like on Unix system file can have executable rights but not necessarily
+     * be an executable, but on Unix is not a default for an ordianry file to
+     * have an executable flag - on VMS it is in most cases.
+     * Therefore, this check does not have any sense - let keep us to the
+     * conventions instead:
+     * *.COM and *.EXE files are the executables - the rest are not. This is
+     * not ideal but better then it was.
+     */
+    int vms_executable = 0;
+    if (S_ISREG(st.st_mode) && mch_access((char *)name, X_OK) == 0)
+    {
+	if (strstr(vms_tolower((char*)name),".exe") != NULL
+		|| strstr(vms_tolower((char*)name),".com")!= NULL)
+	    vms_executable = 1;
+    }
+    return vms_executable;
+#else
     return S_ISREG(st.st_mode) && mch_access((char *)name, X_OK) == 0;
+#endif
 }
 
 /*
@@ -2973,8 +3096,9 @@ executable_file(name)
  * Return -1 if unknown.
  */
     int
-mch_can_exe(name)
+mch_can_exe(name, path)
     char_u	*name;
+    char_u	**path;
 {
     char_u	*buf;
     char_u	*p, *e;
@@ -2983,7 +3107,20 @@ mch_can_exe(name)
     /* If it's an absolute or relative path don't need to use $PATH. */
     if (mch_isFullName(name) || (name[0] == '.' && (name[1] == '/'
 				      || (name[1] == '.' && name[2] == '/'))))
-	return executable_file(name);
+    {
+	if (executable_file(name))
+	{
+	    if (path != NULL)
+	    {
+		if (name[0] == '.')
+		    *path = FullName_save(name, TRUE);
+		else
+		    *path = vim_strsave(name);
+	    }
+	    return TRUE;
+	}
+	return FALSE;
+    }
 
     p = (char_u *)getenv("PATH");
     if (p == NULL || *p == NUL)
@@ -3011,7 +3148,16 @@ mch_can_exe(name)
 	STRCAT(buf, name);
 	retval = executable_file(buf);
 	if (retval == 1)
+	{
+	    if (path != NULL)
+	    {
+		if (buf[0] == '.')
+		    *path = FullName_save(buf, TRUE);
+		else
+		    *path = vim_strsave(buf);
+	    }
 	    break;
+	}
 
 	if (*e != ':')
 	    break;
@@ -3583,7 +3729,7 @@ check_mouse_termcode()
 # endif
 
 # ifdef FEAT_MOUSE_JSB
-    /* conflicts with xterm mouse: "\033[" and "\033[M" ??? */
+    /* Conflicts with xterm mouse: "\033[" and "\033[M" ??? */
     if (!use_xterm_mouse()
 #  ifdef FEAT_GUI
 	    && !gui.in_use
@@ -3610,7 +3756,7 @@ check_mouse_termcode()
 # endif
 
 # ifdef FEAT_MOUSE_DEC
-    /* conflicts with xterm mouse: "\033[" and "\033[M" */
+    /* Conflicts with xterm mouse: "\033[" and "\033[M" */
     if (!use_xterm_mouse()
 #  ifdef FEAT_GUI
 	    && !gui.in_use
@@ -3622,7 +3768,7 @@ check_mouse_termcode()
 	del_mouse_termcode(KS_DEC_MOUSE);
 # endif
 # ifdef FEAT_MOUSE_PTERM
-    /* same as the dec mouse */
+    /* same conflict as the dec mouse */
     if (!use_xterm_mouse()
 #  ifdef FEAT_GUI
 	    && !gui.in_use
@@ -3634,7 +3780,7 @@ check_mouse_termcode()
 	del_mouse_termcode(KS_PTERM_MOUSE);
 # endif
 # ifdef FEAT_MOUSE_URXVT
-    /* same as the dec mouse */
+    /* same conflict as the dec mouse */
     if (use_xterm_mouse() == 3
 #  ifdef FEAT_GUI
 	    && !gui.in_use
@@ -3655,7 +3801,7 @@ check_mouse_termcode()
 	del_mouse_termcode(KS_URXVT_MOUSE);
 # endif
 # ifdef FEAT_MOUSE_SGR
-    /* same as the dec mouse */
+    /* There is no conflict with xterm mouse */
     if (use_xterm_mouse() == 4
 #  ifdef FEAT_GUI
 	    && !gui.in_use
@@ -5147,6 +5293,7 @@ RealWaitForChar(fd, msec, check_for_gpm)
 	}
 # endif
 # ifdef FEAT_XCLIPBOARD
+	may_restore_clipboard();
 	if (xterm_Shell != (Widget)0)
 	{
 	    xterm_idx = nfd;
@@ -5299,6 +5446,7 @@ select_eintr:
 	}
 # endif
 # ifdef FEAT_XCLIPBOARD
+	may_restore_clipboard();
 	if (xterm_Shell != (Widget)0)
 	{
 	    FD_SET(ConnectionNumber(xterm_dpy), &rfds);
@@ -5571,7 +5719,7 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 		    continue;
 
 		/* Skip files that are not executable if we check for that. */
-		if (!dir && (flags & EW_EXEC) && !mch_can_exe(p))
+		if (!dir && (flags & EW_EXEC) && !mch_can_exe(p, NULL))
 		    continue;
 
 		if (--files_free == 0)
@@ -5811,10 +5959,12 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 			*p++ = '\\';
 		    ++j;
 		}
-		else if (!intick && vim_strchr(SHELL_SPECIAL,
-							   pat[i][j]) != NULL)
+		else if (!intick
+			 && ((flags & EW_KEEPDOLLAR) == 0 || pat[i][j] != '$')
+			      && vim_strchr(SHELL_SPECIAL, pat[i][j]) != NULL)
 		    /* Put a backslash before a special character, but not
-		     * when inside ``. */
+		     * when inside ``. And not for $var when EW_KEEPDOLLAR is
+		     * set. */
 		    *p++ = '\\';
 
 		/* Copy one character. */
@@ -6069,7 +6219,7 @@ mch_expand_wildcards(num_pat, pat, num_file, file, flags)
 	    continue;
 
 	/* Skip files that are not executable if we check for that. */
-	if (!dir && (flags & EW_EXEC) && !mch_can_exe((*file)[i]))
+	if (!dir && (flags & EW_EXEC) && !mch_can_exe((*file)[i], NULL))
 	    continue;
 
 	p = alloc((unsigned)(STRLEN((*file)[i]) + 1 + dir));
@@ -6296,7 +6446,7 @@ gpm_close()
 
 /* Reads gpm event and adds special keys to input buf. Returns length of
  * generated key sequence.
- * This function is made after gui_send_mouse_event
+ * This function is styled after gui_send_mouse_event().
  */
     static int
 mch_gpm_process()
