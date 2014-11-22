@@ -3410,6 +3410,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When on, uses |highlight-guifg| and |highlight-guibg| attributes in 
 	terminal (thus using 24-bit color). Requires ISO-8613-3 compatible 
 	terminal.
+	Note: you may have to set |t_8f| and |t_8b| options for colors to 
+	work. They are set by default to `^[[38;2;%lu;%lu;%lum` and 
+	`^[[48;2;%lu;%lu;%lum` (replace `^[` with real escape) respectively, 
+	but only when `$TERM` is `xterm`. These are printf-like options, with 
+	|printf()| (actually, its C equivalent hence `l` modifier) invoked 
+	with the t_ option value and three unsigned long integers that may 
+	have any value between 0 and 255 (inclusive) representing red, green 
+	and blue colors respectively.
 
 			*'guicursor'* *'gcr'* *E545* *E546* *E548* *E549*
 'guicursor' 'gcr'	string	(default "n-v-c:block-Cursor/lCursor,
