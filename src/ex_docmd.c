@@ -27,6 +27,7 @@ typedef struct ucmd
     char_u	*uc_rep;	/* The command's replacement string */
     long	uc_def;		/* The default value for a range/count */
     int		uc_compl;	/* completion type */
+    int		uc_addr_type;	/* The command's address type */
 # ifdef FEAT_EVAL
     scid_T	uc_scriptID;	/* SID where the command was defined */
 #  ifdef FEAT_CMDL_COMPL
@@ -2129,17 +2130,23 @@ do_one_cmd(cmdlinep, sourcing,
  * is equal to the lower.
  */
 
-    if (ea.cmdidx != CMD_SIZE
-#ifdef FEAT_USR_CMDS
-	&& ea.cmdidx != CMD_USER
+    /* ea.addr_type for user commands is set by find_ucmd */
+    if (!IS_USER_CMDIDX(ea.cmdidx))
+    {
+	if (ea.cmdidx != CMD_SIZE)
+	    ea.addr_type = cmdnames[(int)ea.cmdidx].cmd_addr_type;
+	else
+	    ea.addr_type = ADDR_LINES;
+
+#ifdef FEAT_WINDOWS
+	/* :wincmd range depends on the argument. */
+	if (ea.cmdidx == CMD_wincmd && p != NULL)
+	    get_wincmd_addr_type(skipwhite(p), &ea);
 #endif
-       )
-	ea.addr_type = cmdnames[(int)ea.cmdidx].cmd_addr_type;
-    else
-	ea.addr_type = ADDR_LINES;
-    ea.cmd = cmd;
+    }
 
     /* repeat for all ',' or ';' separated addresses */
+    ea.cmd = cmd;
     for (;;)
     {
 	ea.line1 = ea.line2;
@@ -2155,9 +2162,11 @@ do_one_cmd(cmdlinep, sourcing,
 		break;
 	    case ADDR_ARGUMENTS:
 		ea.line2 = curwin->w_arg_idx + 1;
+		if (ea.line2 > ARGCOUNT)
+		    ea.line2 = ARGCOUNT;
 		break;
 	    case ADDR_LOADED_BUFFERS:
-	    case ADDR_UNLOADED_BUFFERS:
+	    case ADDR_BUFFERS:
 		ea.line2 = curbuf->b_fnum;
 		break;
 	    case ADDR_TABS:
@@ -2173,7 +2182,6 @@ do_one_cmd(cmdlinep, sourcing,
 	{
 	    if (*ea.cmd == '%')		    /* '%' - all lines */
 	    {
-		buf_T	*buf;
 		++ea.cmd;
 		switch (ea.addr_type)
 		{
@@ -2182,27 +2190,48 @@ do_one_cmd(cmdlinep, sourcing,
 			ea.line2 = curbuf->b_ml.ml_line_count;
 			break;
 		    case ADDR_LOADED_BUFFERS:
-			buf = firstbuf;
-			while (buf->b_next != NULL && buf->b_ml.ml_mfp == NULL)
-			    buf = buf->b_next;
-			ea.line1 = buf->b_fnum;
-			buf = lastbuf;
-			while (buf->b_prev != NULL && buf->b_ml.ml_mfp == NULL)
-			    buf = buf->b_prev;
-			ea.line2 = buf->b_fnum;
-			break;
-		    case ADDR_UNLOADED_BUFFERS:
+			{
+			    buf_T	*buf = firstbuf;
+
+			    while (buf->b_next != NULL
+						  && buf->b_ml.ml_mfp == NULL)
+				buf = buf->b_next;
+			    ea.line1 = buf->b_fnum;
+			    buf = lastbuf;
+			    while (buf->b_prev != NULL
+						  && buf->b_ml.ml_mfp == NULL)
+				buf = buf->b_prev;
+			    ea.line2 = buf->b_fnum;
+			    break;
+			}
+		    case ADDR_BUFFERS:
 			ea.line1 = firstbuf->b_fnum;
 			ea.line2 = lastbuf->b_fnum;
 			break;
 		    case ADDR_WINDOWS:
 		    case ADDR_TABS:
-			errormsg = (char_u *)_(e_invrange);
-			goto doend;
+			if (IS_USER_CMDIDX(ea.cmdidx))
+			{
+			    ea.line1 = 1;
+			    ea.line2 = ea.addr_type == ADDR_WINDOWS
+						  ? LAST_WIN_NR : LAST_TAB_NR;
+			}
+			else
+			{
+			    /* there is no Vim command which uses '%' and
+			     * ADDR_WINDOWS or ADDR_TABS */
+			    errormsg = (char_u *)_(e_invrange);
+			    goto doend;
+			}
 			break;
 		    case ADDR_ARGUMENTS:
-			ea.line1 = 1;
-			ea.line2 = ARGCOUNT;
+			if (ARGCOUNT == 0)
+			    ea.line1 = ea.line2 = 0;
+			else
+			{
+			    ea.line1 = 1;
+			    ea.line2 = ARGCOUNT;
+			}
 			break;
 		}
 		++ea.addr_count;
@@ -2629,8 +2658,41 @@ do_one_cmd(cmdlinep, sourcing,
 
     if ((ea.argt & DFLALL) && ea.addr_count == 0)
     {
+	buf_T	    *buf;
+
 	ea.line1 = 1;
-	ea.line2 = curbuf->b_ml.ml_line_count;
+	switch (ea.addr_type)
+	{
+	    case ADDR_LINES:
+		ea.line2 = curbuf->b_ml.ml_line_count;
+		break;
+	    case ADDR_LOADED_BUFFERS:
+		buf = firstbuf;
+		while (buf->b_next != NULL && buf->b_ml.ml_mfp == NULL)
+		    buf = buf->b_next;
+		ea.line1 = buf->b_fnum;
+		buf = lastbuf;
+		while (buf->b_prev != NULL && buf->b_ml.ml_mfp == NULL)
+		    buf = buf->b_prev;
+		ea.line2 = buf->b_fnum;
+		break;
+	    case ADDR_BUFFERS:
+		ea.line1 = firstbuf->b_fnum;
+		ea.line2 = lastbuf->b_fnum;
+		break;
+	    case ADDR_WINDOWS:
+		ea.line2 = LAST_WIN_NR;
+		break;
+	    case ADDR_TABS:
+		ea.line2 = LAST_TAB_NR;
+		break;
+	    case ADDR_ARGUMENTS:
+		if (ARGCOUNT == 0)
+		    ea.line1 = ea.line2 = 0;
+		else
+		    ea.line2 = ARGCOUNT;
+		break;
+	}
     }
 
     /* accept numbered register only when no count allowed (:put) */
@@ -3055,7 +3117,7 @@ find_command(eap, full)
      * Exceptions:
      * - the 'k' command can directly be followed by any character.
      * - the 's' command can be followed directly by 'c', 'g', 'i', 'I' or 'r'
-     *	    but :sre[wind] is another command, as are :scrip[tnames],
+     *	    but :sre[wind] is another command, as are :scr[iptnames],
      *	    :scs[cope], :sim[alt], :sig[ns] and :sil[ent].
      * - the "d" command can directly be followed by 'l' or 'p' flag.
      */
@@ -3211,6 +3273,7 @@ find_ucmd(eap, p, full, xp, compl)
 			eap->cmdidx = CMD_USER_BUF;
 		    eap->argt = (long)uc->uc_argt;
 		    eap->useridx = j;
+		    eap->addr_type = uc->uc_addr_type;
 
 # ifdef FEAT_CMDL_COMPL
 		    if (compl != NULL)
@@ -3839,7 +3902,7 @@ set_one_cmd_context(xp, buff)
 			return NULL;
 		    }
 
-		    /* For the -complete and -nargs attributes, we complete
+		    /* For the -complete, -nargs and -addr attributes, we complete
 		     * their arguments as well.
 		     */
 		    if (STRNICMP(arg, "complete", p - arg) == 0)
@@ -3851,6 +3914,12 @@ set_one_cmd_context(xp, buff)
 		    else if (STRNICMP(arg, "nargs", p - arg) == 0)
 		    {
 			xp->xp_context = EXPAND_USER_NARGS;
+			xp->xp_pattern = p + 1;
+			return NULL;
+		    }
+		    else if (STRNICMP(arg, "addr", p - arg) == 0)
+		    {
+			xp->xp_context = EXPAND_USER_ADDR_TYPE;
 			xp->xp_pattern = p + 1;
 			return NULL;
 		    }
@@ -4264,6 +4333,7 @@ get_address(ptr, addr_type, skip, to_other_file)
     pos_T	pos;
     pos_T	*fp;
     linenr_T	lnum;
+    buf_T	*buf;
 
     cmd = skipwhite(*ptr);
     lnum = MAXLNUM;
@@ -4285,7 +4355,7 @@ get_address(ptr, addr_type, skip, to_other_file)
 			lnum = curwin->w_arg_idx + 1;
 			break;
 		    case ADDR_LOADED_BUFFERS:
-		    case ADDR_UNLOADED_BUFFERS:
+		    case ADDR_BUFFERS:
 			lnum = curbuf->b_fnum;
 			break;
 		    case ADDR_TABS:
@@ -4308,7 +4378,16 @@ get_address(ptr, addr_type, skip, to_other_file)
 			lnum = ARGCOUNT;
 			break;
 		    case ADDR_LOADED_BUFFERS:
-		    case ADDR_UNLOADED_BUFFERS:
+			buf = lastbuf;
+			while (buf->b_ml.ml_mfp == NULL)
+			{
+			    if (buf->b_prev == NULL)
+				break;
+			    buf = buf->b_prev;
+			}
+			lnum = buf->b_fnum;
+			break;
+		    case ADDR_BUFFERS:
 			lnum = lastbuf->b_fnum;
 			break;
 		    case ADDR_TABS:
@@ -4477,7 +4556,7 @@ get_address(ptr, addr_type, skip, to_other_file)
 			lnum = curwin->w_arg_idx + 1;
 			break;
 		    case ADDR_LOADED_BUFFERS:
-		    case ADDR_UNLOADED_BUFFERS:
+		    case ADDR_BUFFERS:
 			lnum = curbuf->b_fnum;
 			break;
 		    case ADDR_TABS:
@@ -4495,52 +4574,12 @@ get_address(ptr, addr_type, skip, to_other_file)
 	    else
 		n = getdigits(&cmd);
 	    if (addr_type == ADDR_LOADED_BUFFERS
-		    || addr_type == ADDR_UNLOADED_BUFFERS)
+		    || addr_type == ADDR_BUFFERS)
 		lnum = compute_buffer_local_count(addr_type, lnum, (i == '-') ? -1 * n : n);
 	    else if (i == '-')
 		lnum -= n;
 	    else
 		lnum += n;
-
-	    switch (addr_type)
-	    {
-		case ADDR_LINES:
-		    break;
-		case ADDR_ARGUMENTS:
-		    if (lnum < 0)
-			lnum = 0;
-		    else if (lnum >= ARGCOUNT)
-			lnum = ARGCOUNT;
-		    break;
-		case ADDR_TABS:
-		    if (lnum < 0)
-		    {
-			lnum = 0;
-			break;
-		    }
-		    if (lnum >= LAST_TAB_NR)
-			lnum = LAST_TAB_NR;
-		    break;
-		case ADDR_WINDOWS:
-		    if (lnum < 0)
-		    {
-			lnum = 0;
-			break;
-		    }
-		    if (lnum >= LAST_WIN_NR)
-			lnum = LAST_WIN_NR;
-		    break;
-		case ADDR_LOADED_BUFFERS:
-		case ADDR_UNLOADED_BUFFERS:
-		    if (lnum < firstbuf->b_fnum)
-		    {
-			lnum = firstbuf->b_fnum;
-			break;
-		    }
-		    if (lnum > lastbuf->b_fnum)
-			lnum = lastbuf->b_fnum;
-		    break;
-	    }
 	}
     } while (*cmd == '/' || *cmd == '?');
 
@@ -4603,17 +4642,64 @@ ex_script_ni(eap)
 invalid_range(eap)
     exarg_T	*eap;
 {
+    buf_T	*buf;
     if (       eap->line1 < 0
 	    || eap->line2 < 0
-	    || eap->line1 > eap->line2
-	    || ((eap->argt & RANGE)
-		&& !(eap->argt & NOTADR)
-		&& eap->line2 > curbuf->b_ml.ml_line_count
-#ifdef FEAT_DIFF
-			+ (eap->cmdidx == CMD_diffget)
-#endif
-		))
+	    || eap->line1 > eap->line2)
 	return (char_u *)_(e_invrange);
+
+    if (eap->argt & RANGE)
+    {
+	switch(eap->addr_type)
+	{
+	    case ADDR_LINES:
+		if (!(eap->argt & NOTADR)
+			&& eap->line2 > curbuf->b_ml.ml_line_count
+#ifdef FEAT_DIFF
+			    + (eap->cmdidx == CMD_diffget)
+#endif
+		   )
+		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_ARGUMENTS:
+		if (eap->line2 > ARGCOUNT + (!ARGCOUNT))    // add 1 if ARCOUNT is 0
+		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_BUFFERS:
+		if (eap->line1 < firstbuf->b_fnum
+			|| eap->line2 > lastbuf->b_fnum)
+		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_LOADED_BUFFERS:
+		buf = firstbuf;
+		while (buf->b_ml.ml_mfp == NULL)
+		{
+		    if (buf->b_next == NULL)
+			return (char_u *)_(e_invrange);
+		    buf = buf->b_next;
+		}
+		if (eap->line1 < buf->b_fnum)
+		    return (char_u *)_(e_invrange);
+		buf = lastbuf;
+		while (buf->b_ml.ml_mfp == NULL)
+		{
+		    if (buf->b_prev == NULL)
+			return (char_u *)_(e_invrange);
+		    buf = buf->b_prev;
+		}
+		if (eap->line2 > buf->b_fnum)
+		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_WINDOWS:
+		if (eap->line2 > LAST_WIN_NR)
+		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_TABS:
+		if (eap->line2 > LAST_TAB_NR)
+		    return (char_u *)_(e_invrange);
+		break;
+	}
+    }
     return NULL;
 }
 
@@ -5585,14 +5671,14 @@ get_command_name(xp, idx)
 #endif
 
 #if defined(FEAT_USR_CMDS) || defined(PROTO)
-static int	uc_add_command __ARGS((char_u *name, size_t name_len, char_u *rep, long argt, long def, int flags, int compl, char_u *compl_arg, int force));
+static int	uc_add_command __ARGS((char_u *name, size_t name_len, char_u *rep, long argt, long def, int flags, int compl, char_u *compl_arg, int addr_type, int force));
 static void	uc_list __ARGS((char_u *name, size_t name_len));
-static int	uc_scan_attr __ARGS((char_u *attr, size_t len, long *argt, long *def, int *flags, int *compl, char_u **compl_arg));
+static int	uc_scan_attr __ARGS((char_u *attr, size_t len, long *argt, long *def, int *flags, int *compl, char_u **compl_arg, int* attr_type_arg));
 static char_u	*uc_split_args __ARGS((char_u *arg, size_t *lenp));
 static size_t	uc_check_code __ARGS((char_u *code, size_t len, char_u *buf, ucmd_T *cmd, exarg_T *eap, char_u **split_buf, size_t *split_len));
 
     static int
-uc_add_command(name, name_len, rep, argt, def, flags, compl, compl_arg, force)
+uc_add_command(name, name_len, rep, argt, def, flags, compl, compl_arg, addr_type, force)
     char_u	*name;
     size_t	name_len;
     char_u	*rep;
@@ -5601,6 +5687,7 @@ uc_add_command(name, name_len, rep, argt, def, flags, compl, compl_arg, force)
     int		flags;
     int		compl;
     char_u	*compl_arg;
+    int		addr_type;
     int		force;
 {
     ucmd_T	*cmd = NULL;
@@ -5695,6 +5782,7 @@ uc_add_command(name, name_len, rep, argt, def, flags, compl, compl_arg, force)
     cmd->uc_compl_arg = compl_arg;
 # endif
 #endif
+    cmd->uc_addr_type = addr_type;
 
     return OK;
 
@@ -5705,6 +5793,23 @@ fail:
 #endif
     return FAIL;
 }
+#endif
+
+#if defined(FEAT_USR_CMDS)
+static struct
+{
+    int	    expand;
+    char    *name;
+} addr_type_complete[] =
+{
+    {ADDR_ARGUMENTS, "arguments"},
+    {ADDR_LINES, "lines"},
+    {ADDR_LOADED_BUFFERS, "loaded_buffers"},
+    {ADDR_TABS, "tabs"},
+    {ADDR_BUFFERS, "buffers"},
+    {ADDR_WINDOWS, "windows"},
+    {-1, NULL}
+};
 #endif
 
 #if defined(FEAT_USR_CMDS) || defined(FEAT_EVAL) || defined(PROTO)
@@ -5794,7 +5899,7 @@ uc_list(name, name_len)
 
 	    /* Put out the title first time */
 	    if (!found)
-		MSG_PUTS_TITLE(_("\n    Name        Args Range Complete  Definition"));
+		MSG_PUTS_TITLE(_("\n    Name        Args       Address   Complete  Definition"));
 	    found = TRUE;
 	    msg_putchar('\n');
 	    if (got_int)
@@ -5855,6 +5960,20 @@ uc_list(name, name_len)
 		IObuff[len++] = ' ';
 	    } while (len < 11);
 
+	    /* Address Type */
+	    for (j = 0; addr_type_complete[j].expand != -1; ++j)
+		if (addr_type_complete[j].expand != ADDR_LINES
+			&& addr_type_complete[j].expand == cmd->uc_addr_type)
+		{
+		    STRCPY(IObuff + len, addr_type_complete[j].name);
+		    len += (int)STRLEN(IObuff + len);
+		    break;
+		}
+
+	    do {
+		IObuff[len++] = ' ';
+	    } while (len < 21);
+
 	    /* Completion */
 	    for (j = 0; command_complete[j].expand != 0; ++j)
 		if (command_complete[j].expand == cmd->uc_compl)
@@ -5866,7 +5985,7 @@ uc_list(name, name_len)
 
 	    do {
 		IObuff[len++] = ' ';
-	    } while (len < 21);
+	    } while (len < 35);
 
 	    IObuff[len] = '\0';
 	    msg_outtrans(IObuff);
@@ -5906,7 +6025,7 @@ uc_fun_cmd()
 }
 
     static int
-uc_scan_attr(attr, len, argt, def, flags, compl, compl_arg)
+uc_scan_attr(attr, len, argt, def, flags, compl, compl_arg, addr_type_arg)
     char_u	*attr;
     size_t	len;
     long	*argt;
@@ -5914,6 +6033,7 @@ uc_scan_attr(attr, len, argt, def, flags, compl, compl_arg)
     int		*flags;
     int		*compl;
     char_u	**compl_arg;
+    int		*addr_type_arg;
 {
     char_u	*p;
 
@@ -6032,6 +6152,20 @@ invalid_count:
 								      == FAIL)
 		return FAIL;
 	}
+	else if (STRNICMP(attr, "addr", attrlen) == 0)
+	{
+	    *argt |= RANGE;
+	    if (val == NULL)
+	    {
+		EMSG(_("E179: argument required for -addr"));
+		return FAIL;
+	    }
+	    if (parse_addr_type_arg(val, (int)vallen, argt, addr_type_arg)
+								      == FAIL)
+		return FAIL;
+	    if (addr_type_arg != ADDR_LINES)
+		*argt |= (ZEROR | NOTADR) ;
+	}
 	else
 	{
 	    char_u ch = attr[len];
@@ -6060,6 +6194,7 @@ ex_command(eap)
     int	    flags = 0;
     int	    compl = EXPAND_NOTHING;
     char_u  *compl_arg = NULL;
+    int	    addr_type_arg = ADDR_LINES;
     int	    has_attr = (eap->arg[0] == '-');
     int	    name_len;
 
@@ -6070,7 +6205,7 @@ ex_command(eap)
     {
 	++p;
 	end = skiptowhite(p);
-	if (uc_scan_attr(p, end - p, &argt, &def, &flags, &compl, &compl_arg)
+	if (uc_scan_attr(p, end - p, &argt, &def, &flags, &compl, &compl_arg, &addr_type_arg)
 		== FAIL)
 	    return;
 	p = skipwhite(end);
@@ -6111,7 +6246,7 @@ ex_command(eap)
     }
     else
 	uc_add_command(name, end - name, p, argt, def, flags, compl, compl_arg,
-								eap->forceit);
+								addr_type_arg, eap->forceit);
 }
 
 /*
@@ -6652,6 +6787,17 @@ get_user_commands(xp, idx)
 }
 
 /*
+ * Function given to ExpandGeneric() to obtain the list of user address type names.
+ */
+    char_u *
+get_user_cmd_addr_type(xp, idx)
+    expand_T	*xp UNUSED;
+    int		idx;
+{
+    return (char_u *)addr_type_complete[idx].name;
+}
+
+/*
  * Function given to ExpandGeneric() to obtain the list of user command
  * attributes.
  */
@@ -6661,8 +6807,8 @@ get_user_cmd_flags(xp, idx)
     int		idx;
 {
     static char *user_cmd_flags[] =
-	{"bang", "bar", "buffer", "complete", "count",
-	    "nargs", "range", "register"};
+	{"addr", "bang", "bar", "buffer", "complete",
+	    "count", "nargs", "range", "register"};
 
     if (idx >= (int)(sizeof(user_cmd_flags) / sizeof(user_cmd_flags[0])))
 	return NULL;
@@ -6695,6 +6841,43 @@ get_user_cmd_complete(xp, idx)
     return (char_u *)command_complete[idx].name;
 }
 # endif /* FEAT_CMDL_COMPL */
+
+/*
+ * Parse address type argument
+ */
+    int
+parse_addr_type_arg(value, vallen, argt, addr_type_arg)
+    char_u	*value;
+    int		vallen;
+    long	*argt;
+    int		*addr_type_arg;
+{
+    int	    i, a, b;
+    for (i = 0; addr_type_complete[i].expand != -1; ++i)
+    {
+	a = (int)STRLEN(addr_type_complete[i].name) == vallen;
+	b = STRNCMP(value, addr_type_complete[i].name, vallen) == 0;
+	if (a && b)
+	{
+	    *addr_type_arg = addr_type_complete[i].expand;
+	    break;
+	}
+    }
+
+    if (addr_type_complete[i].expand == -1)
+    {
+	char_u	*err = value;
+	for (i=0; err[i] == NUL || !vim_iswhite(err[i]); i++);
+	err[i] = NUL;
+	EMSG2(_("E180: Invalid address type value: %s"), err);
+	return FAIL;
+    }
+
+    if (*addr_type_arg != ADDR_LINES)
+	*argt |= NOTADR;
+
+    return OK;
+}
 
 #endif	/* FEAT_USR_CMDS */
 
