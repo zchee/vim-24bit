@@ -1,4 +1,4 @@
-*windows.txt*   For Vim version 7.4.  Last change: 2014 Sep 23
+*windows.txt*   For Vim version 7.4.  Last change: 2014 Dec 05
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -278,16 +278,17 @@ CTRL-W CTRL-Q						*CTRL-W_CTRL-Q*
 		and there is only one window for the current buffer, and the
 		buffer was changed, the command fails.
 		
-		(Note: CTRL-Q does not
-		work on all terminals).  If [count] is greater than
-		the last window number the last window will be closed: >
+		(Note: CTRL-Q does not work on all terminals).
+		
+		If [count] is greater than the last window number the last
+		window will be closed: >
 		    :1quit  " quit the first window
 		    :$quit  " quit the last window
 		    :9quit  " quit the last window
 			     " if there are less than 9 windows opened
 		    :-quit  " quit the previews window
 		    :+quit  " quit the next window
-		    :+2quit " will also work as expected
+		    :+2quit " quit the second next window
 <
 :q[uit]!
 :{count}q[uit]!
@@ -332,9 +333,9 @@ CTRL-W CTRL-C						*CTRL-W_CTRL-C*
 		screen.  For {count} see |:quit| command.
 		
 		The buffer becomes hidden (unless there is another window
-		editing it or 'bufhidden' is "unload" or "delete").  If the
-		window is the last one in the current tab page the tab page is
-		closed.  |tab-page| 
+		editing it or 'bufhidden' is "unload", "delete" or "wipe").
+		If the window is the last one in the current tab page the tab
+		page is closed.  |tab-page| 
 		
 		The value of 'hidden' is irrelevant for this command.  Changes
 		to the buffer are not written and won't get lost, so this is a
@@ -697,8 +698,9 @@ can also get to them with the buffer list commands, like ":bnext".
 8. Do a command in all buffers or windows			*list-repeat*
 
 							*:windo*
-:windo {cmd}		Execute {cmd} in each window.
-			It works like doing this: >
+:[range]windo {cmd}	Execute {cmd} in each window or if [range] is given
+			only in windows for which the window number lies in
+			the [range].  It works like doing this: >
 				CTRL-W t
 				:{cmd}
 				CTRL-W w
@@ -716,8 +718,10 @@ can also get to them with the buffer list commands, like ":bnext".
 			Also see |:tabdo|, |:argdo| and |:bufdo|.
 
 							*:bufdo*
-:bufdo[!] {cmd}		Execute {cmd} in each buffer in the buffer list.
-			It works like doing this: >
+:[range]bufdo[!] {cmd}	Execute {cmd} in each buffer in the buffer list or if
+			[range] is given only for buffers for which their
+			buffer numer is in the [range].  It works like doing
+			this: >
 				:bfirst
 				:{cmd}
 				:bnext

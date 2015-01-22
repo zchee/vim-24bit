@@ -1279,6 +1279,7 @@ utf_char2cells(c)
 	{0x20000, 0x2fffd},
 	{0x30000, 0x3fffd}
     };
+
     /* Sorted list of non-overlapping intervals of East Asian Ambiguous
      * characters, generated with ../runtime/tools/unicode.vim. */
     static struct interval ambiguous[] =
@@ -3186,7 +3187,6 @@ static convertStruct toUpper[] =
 	{0x10428,0x1044f,1,-40},
 	{0x118c0,0x118df,1,-32}
 };
-
 /*
  * Return the upper-case equivalent of "a", which is a UCS-4 character.  Use
  * simple case folding.
