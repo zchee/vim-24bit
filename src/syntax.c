@@ -6541,7 +6541,7 @@ syn_get_foldlevel(wp, lnum)
 }
 #endif
 
-#ifdef FEAT_PROFILE
+#if defined(FEAT_PROFILE) || defined(PROTO)
 /*
  * ":syntime".
  */
