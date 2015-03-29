@@ -575,6 +575,7 @@ static void f_getwinposy __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_getwinvar __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_glob __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_globpath __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_glob2regpat  __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_has __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_has_key __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_haslocaldir __ARGS((typval_T *argvars, typval_T *rettv));
@@ -8142,6 +8143,7 @@ static struct fst
     {"getwinposy",	0, 0, f_getwinposy},
     {"getwinvar",	2, 3, f_getwinvar},
     {"glob",		1, 4, f_glob},
+    {"glob2regpat",	1, 1, f_glob2regpat},
     {"globpath",	2, 5, f_globpath},
     {"has",		1, 1, f_has},
     {"has_key",		2, 2, f_has_key},
@@ -10269,7 +10271,11 @@ f_executable(argvars, rettv)
     typval_T	*argvars;
     typval_T	*rettv;
 {
-    rettv->vval.v_number = mch_can_exe(get_tv_string(&argvars[0]), NULL);
+    char_u *name = get_tv_string(&argvars[0]);
+
+    /* Check in $PATH and also check directly if there is a directory name. */
+    rettv->vval.v_number = mch_can_exe(name, NULL, TRUE)
+		 || (gettail(name) != name && mch_can_exe(name, NULL, FALSE));
 }
 
 /*
@@ -10282,7 +10288,7 @@ f_exepath(argvars, rettv)
 {
     char_u *p = NULL;
 
-    (void)mch_can_exe(get_tv_string(&argvars[0]), &p);
+    (void)mch_can_exe(get_tv_string(&argvars[0]), &p, TRUE);
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = p;
 }
@@ -12497,6 +12503,20 @@ f_globpath(argvars, rettv)
     }
     else
 	rettv->vval.v_string = NULL;
+}
+
+/*
+ * "glob2regpat()" function
+ */
+    static void
+f_glob2regpat(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv;
+{
+    char_u	*pat = get_tv_string_chk(&argvars[0]);
+
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = file_pat_to_reg_pat(pat, NULL, NULL, FALSE);
 }
 
 /*

@@ -43,6 +43,7 @@ SCRIPTS = test1.out test3.out test4.out test5.out test6.out \
 		test_changelist.out \
 		test_close_count.out \
 		test_command_count.out \
+		test_erasebackword.out \
 		test_eval.out \
 		test_insertcount.out \
 		test_listlbr.out \
@@ -53,6 +54,7 @@ SCRIPTS = test1.out test3.out test4.out test5.out test6.out \
 		test_options.out \
 		test_qf_title.out \
 		test_signs.out \
+		test_textobjects.out \
 		test_utf8.out
 
 .SUFFIXES: .in .out
@@ -184,6 +186,7 @@ test_breakindent.out: test_breakindent.in
 test_changelist.out: test_changelist.in
 test_close_count.out: test_close_count.in
 test_command_count.out: test_command_count.in
+test_erasebackword.out: test_erasebackword.in
 test_eval.out: test_eval.in
 test_insertcount.out: test_insertcount.in
 test_listlbr.out: test_listlbr.in
@@ -194,4 +197,5 @@ test_nested_function.out: test_nested_function.in
 test_options.out: test_options.in
 test_qf_title.out: test_qf_title.in
 test_signs.out: test_signs.in
+test_textobjects.out: test_textobjects.in
 test_utf8.out: test_utf8.in

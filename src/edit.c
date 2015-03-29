@@ -760,7 +760,8 @@ edit(cmdchar, startln, count)
 	/*
 	 * Get a character for Insert mode.  Ignore K_IGNORE.
 	 */
-	lastc = c;			/* remember previous char for CTRL-D */
+	if (c != K_CURSORHOLD)
+	    lastc = c;		/* remember the previous char for CTRL-D */
 	do
 	{
 	    c = safe_vgetc();
@@ -5879,8 +5880,9 @@ insertchar(c, flags, second_indent)
     char_u	*p;
 #endif
     int		fo_ins_blank;
+    int		force_format = flags & INSCHAR_FORMAT;
 
-    textwidth = comp_textwidth(flags & INSCHAR_FORMAT);
+    textwidth = comp_textwidth(force_format);
     fo_ins_blank = has_format_option(FO_INS_BLANK);
 
     /*
@@ -5899,7 +5901,7 @@ insertchar(c, flags, second_indent)
      *	      before 'textwidth'
      */
     if (textwidth > 0
-	    && ((flags & INSCHAR_FORMAT)
+	    && (force_format
 		|| (!vim_iswhite(c)
 		    && !((State & REPLACE_FLAG)
 #ifdef FEAT_VREPLACE
@@ -5916,9 +5918,12 @@ insertchar(c, flags, second_indent)
 	/* Format with 'formatexpr' when it's set.  Use internal formatting
 	 * when 'formatexpr' isn't set or it returns non-zero. */
 #if defined(FEAT_EVAL)
-	int do_internal = TRUE;
+	int     do_internal = TRUE;
+	colnr_T virtcol = get_nolist_virtcol()
+				  + char2cells(c != NUL ? c : gchar_cursor());
 
-	if (*curbuf->b_p_fex != NUL && (flags & INSCHAR_NO_FEX) == 0)
+	if (*curbuf->b_p_fex != NUL && (flags & INSCHAR_NO_FEX) == 0
+		&& (force_format || virtcol > (colnr_T)textwidth))
 	{
 	    do_internal = (fex_format(curwin->w_cursor.lnum, 1L, c) != 0);
 	    /* It may be required to save for undo again, e.g. when setline()
@@ -6682,7 +6687,7 @@ comp_textwidth(ff)
 #ifdef FEAT_SIGNS
 	if (curwin->w_buffer->b_signlist != NULL
 # ifdef FEAT_NETBEANS_INTG
-			    || netbeans_active()
+			  || curwin->w_buffer->b_has_sign_column
 # endif
 		    )
 	    textwidth -= 1;
@@ -9042,72 +9047,94 @@ ins_bs(c, mode, inserted_space_p)
 	/*
 	 * Delete upto starting point, start of line or previous word.
 	 */
-	else do
+	else
 	{
-#ifdef FEAT_RIGHTLEFT
-	    if (!revins_on) /* put cursor on char to be deleted */
-#endif
-		dec_cursor();
+#ifdef FEAT_MBYTE
+	    int cclass = 0, prev_cclass = 0;
 
-	    /* start of word? */
-	    if (mode == BACKSPACE_WORD && !vim_isspace(gchar_cursor()))
-	    {
-		mode = BACKSPACE_WORD_NOT_SPACE;
-		temp = vim_iswordc(gchar_cursor());
-	    }
-	    /* end of word? */
-	    else if (mode == BACKSPACE_WORD_NOT_SPACE
-		    && (vim_isspace(cc = gchar_cursor())
-			    || vim_iswordc(cc) != temp))
-	    {
-#ifdef FEAT_RIGHTLEFT
-		if (!revins_on)
+	    if (has_mbyte)
+		cclass = mb_get_class(ml_get_cursor());
 #endif
-		    inc_cursor();
+	    do
+	    {
 #ifdef FEAT_RIGHTLEFT
-		else if (State & REPLACE_FLAG)
+		if (!revins_on) /* put cursor on char to be deleted */
+#endif
 		    dec_cursor();
-#endif
-		break;
-	    }
-	    if (State & REPLACE_FLAG)
-		replace_do_bs(-1);
-	    else
-	    {
+
+		cc = gchar_cursor();
 #ifdef FEAT_MBYTE
-		if (enc_utf8 && p_deco)
-		    (void)utfc_ptr2char(ml_get_cursor(), cpc);
-#endif
-		(void)del_char(FALSE);
-#ifdef FEAT_MBYTE
-		/*
-		 * If there are combining characters and 'delcombine' is set
-		 * move the cursor back.  Don't back up before the base
-		 * character.
-		 */
-		if (enc_utf8 && p_deco && cpc[0] != NUL)
-		    inc_cursor();
-#endif
-#ifdef FEAT_RIGHTLEFT
-		if (revins_chars)
+		/* look multi-byte character class */
+		if (has_mbyte)
 		{
-		    revins_chars--;
-		    revins_legal++;
+		    prev_cclass = cclass;
+		    cclass = mb_get_class(ml_get_cursor());
 		}
-		if (revins_on && gchar_cursor() == NUL)
-		    break;
 #endif
-	    }
-	    /* Just a single backspace?: */
-	    if (mode == BACKSPACE_CHAR)
-		break;
-	} while (
+
+		/* start of word? */
+		if (mode == BACKSPACE_WORD && !vim_isspace(cc))
+		{
+		    mode = BACKSPACE_WORD_NOT_SPACE;
+		    temp = vim_iswordc(cc);
+		}
+		/* end of word? */
+		else if (mode == BACKSPACE_WORD_NOT_SPACE
+			&& ((vim_isspace(cc) || vim_iswordc(cc) != temp)
+#ifdef FEAT_MBYTE
+			|| prev_cclass != cclass
+#endif
+			))
+		{
 #ifdef FEAT_RIGHTLEFT
-		revins_on ||
+		    if (!revins_on)
 #endif
-		(curwin->w_cursor.col > mincol
-		 && (curwin->w_cursor.lnum != Insstart_orig.lnum
-		     || curwin->w_cursor.col != Insstart_orig.col)));
+			inc_cursor();
+#ifdef FEAT_RIGHTLEFT
+		    else if (State & REPLACE_FLAG)
+			dec_cursor();
+#endif
+		    break;
+		}
+		if (State & REPLACE_FLAG)
+		    replace_do_bs(-1);
+		else
+		{
+#ifdef FEAT_MBYTE
+		    if (enc_utf8 && p_deco)
+			(void)utfc_ptr2char(ml_get_cursor(), cpc);
+#endif
+		    (void)del_char(FALSE);
+#ifdef FEAT_MBYTE
+		    /*
+		     * If there are combining characters and 'delcombine' is set
+		     * move the cursor back.  Don't back up before the base
+		     * character.
+		     */
+		    if (enc_utf8 && p_deco && cpc[0] != NUL)
+			inc_cursor();
+#endif
+#ifdef FEAT_RIGHTLEFT
+		    if (revins_chars)
+		    {
+			revins_chars--;
+			revins_legal++;
+		    }
+		    if (revins_on && gchar_cursor() == NUL)
+			break;
+#endif
+		}
+		/* Just a single backspace?: */
+		if (mode == BACKSPACE_CHAR)
+		    break;
+	    } while (
+#ifdef FEAT_RIGHTLEFT
+		    revins_on ||
+#endif
+		    (curwin->w_cursor.col > mincol
+		    && (curwin->w_cursor.lnum != Insstart_orig.lnum
+			|| curwin->w_cursor.col != Insstart_orig.col)));
+	}
 	did_backspace = TRUE;
     }
 #ifdef FEAT_SMARTINDENT
