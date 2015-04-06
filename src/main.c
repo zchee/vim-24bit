@@ -110,7 +110,7 @@ static void check_tty __ARGS((mparm_T *parmp));
 static void read_stdin __ARGS((void));
 static void create_windows __ARGS((mparm_T *parmp));
 # ifdef FEAT_WINDOWS
-static void edit_buffers __ARGS((mparm_T *parmp));
+static void edit_buffers __ARGS((mparm_T *parmp, char_u *cwd));
 # endif
 static void exe_pre_commands __ARGS((mparm_T *parmp));
 static void exe_commands __ARGS((mparm_T *parmp));
@@ -146,6 +146,8 @@ static char *(main_errors[]) =
     N_("Invalid argument for"),
 #define ME_INVALID_ARG		5
 };
+
+static char_u *start_dir = NULL;	/* current working dir on startup */
 
 #ifndef PROTO		/* don't want a prototype for main() */
 #ifndef NO_VIM_MAIN	/* skip this for unittests */
@@ -404,12 +406,17 @@ main
 	 */
 	if (!params.literal)
 	{
+	    start_dir = alloc(MAXPATHL);
+	    if (start_dir != NULL)
+		mch_dirname(start_dir, MAXPATHL);
 	    /* Temporarily add '(' and ')' to 'isfname'.  These are valid
 	     * filename characters but are excluded from 'isfname' to make
 	     * "gf" work on a file name in parenthesis (e.g.: see vim.h). */
 	    do_cmdline_cmd((char_u *)":set isf+=(,)");
 	    alist_expand(NULL, 0);
 	    do_cmdline_cmd((char_u *)":set isf&");
+	    if (start_dir != NULL)
+		mch_chdir((char *)start_dir);
 	}
 #endif
 	fname = alist_name(&GARGLIST[0]);
@@ -435,6 +442,8 @@ main
 	 * If the cd fails, it doesn't matter.
 	 */
 	(void)vim_chdirfile(fname);
+	if (start_dir != NULL)
+	    mch_dirname(start_dir, MAXPATHL);
     }
 #endif
     TIME_MSG("expanding arguments");
@@ -488,6 +497,8 @@ main
 		expand_env((char_u *)"$HOME", NameBuff, MAXPATHL);
 		vim_chdir(NameBuff);
 	    }
+	    if (start_dir != NULL)
+		mch_dirname(start_dir, MAXPATHL);
 	}
     }
 #endif
@@ -900,8 +911,9 @@ vim_main2(int argc UNUSED, char **argv UNUSED)
      * If opened more than one window, start editing files in the other
      * windows.
      */
-    edit_buffers(&params);
+    edit_buffers(&params, start_dir);
 #endif
+    vim_free(start_dir);
 
 #ifdef FEAT_DIFF
     if (params.diff_mode)
@@ -2730,8 +2742,9 @@ create_windows(parmp)
      * windows.  make_windows() has already opened the windows.
      */
     static void
-edit_buffers(parmp)
+edit_buffers(parmp, cwd)
     mparm_T	*parmp;
+    char_u	*cwd;			/* current working dir */
 {
     int		arg_idx;		/* index in argument list */
     int		i;
@@ -2756,6 +2769,8 @@ edit_buffers(parmp)
     arg_idx = 1;
     for (i = 1; i < parmp->window_count; ++i)
     {
+	if (cwd != NULL)
+	    mch_chdir((char *)cwd);
 	/* When w_arg_idx is -1 remove the window (see create_windows()). */
 	if (curwin->w_arg_idx == -1)
 	{
