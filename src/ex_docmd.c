@@ -7092,7 +7092,14 @@ ex_quit(eap)
     else
     {
 #ifdef FEAT_WINDOWS
-	if (only_one_window())	    /* quit last window */
+	/* quit last window
+	 * Note: only_one_window() returns true, even so a help window is
+	 * still open. In that case only quit, if no address has been
+	 * specified. Example:
+	 * :h|wincmd w|1q     - don't quit
+	 * :h|wincmd w|q      - quit
+	 */
+	if (only_one_window() && (firstwin == lastwin || eap->addr_count == 0))
 #endif
 	    getout(0);
 #ifdef FEAT_WINDOWS
@@ -10746,7 +10753,11 @@ arg_all()
 		}
 		for ( ; *p != NUL; ++p)
 		{
-		    if (*p == ' ' || *p == '\\')
+		    if (*p == ' '
+#ifndef BACKSLASH_IN_FILENAME
+			    || *p == '\\'
+#endif
+			    )
 		    {
 			/* insert a backslash */
 			if (retval != NULL)

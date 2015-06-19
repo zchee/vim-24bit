@@ -1959,60 +1959,31 @@ op_delete(oap)
 		    curwin->w_cursor.coladd = 0;
 	    }
 #endif
-	    if (oap->op_type == OP_DELETE
-		    && oap->inclusive
-		    && oap->end.lnum == curbuf->b_ml.ml_line_count
-		    && n > (int)STRLEN(ml_get(oap->end.lnum)))
-	    {
-		/* Special case: gH<Del> deletes the last line. */
-		del_lines(1L, FALSE);
-	    }
-	    else
-	    {
-		(void)del_bytes((long)n, !virtual_op,
-				oap->op_type == OP_DELETE && !oap->is_VIsual);
-	    }
+	    (void)del_bytes((long)n, !virtual_op,
+			    oap->op_type == OP_DELETE && !oap->is_VIsual);
 	}
 	else				/* delete characters between lines */
 	{
 	    pos_T   curpos;
-	    int     delete_last_line;
 
 	    /* save deleted and changed lines for undo */
 	    if (u_save((linenr_T)(curwin->w_cursor.lnum - 1),
 		 (linenr_T)(curwin->w_cursor.lnum + oap->line_count)) == FAIL)
 		return FAIL;
 
-	    delete_last_line = (oap->end.lnum == curbuf->b_ml.ml_line_count);
 	    truncate_line(TRUE);	/* delete from cursor to end of line */
 
 	    curpos = curwin->w_cursor;	/* remember curwin->w_cursor */
 	    ++curwin->w_cursor.lnum;
 	    del_lines((long)(oap->line_count - 2), FALSE);
 
-	    if (delete_last_line)
-		oap->end.lnum = curbuf->b_ml.ml_line_count;
-
+	    /* delete from start of line until op_end */
 	    n = (oap->end.col + 1 - !oap->inclusive);
-	    if (oap->inclusive && delete_last_line
-		    && n > (int)STRLEN(ml_get(oap->end.lnum)))
-	    {
-		/* Special case: gH<Del> deletes the last line. */
-		del_lines(1L, FALSE);
-		curwin->w_cursor = curpos;	/* restore curwin->w_cursor */
-		if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count)
-		    curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;
-	    }
-	    else
-	    {
-		/* delete from start of line until op_end */
-		curwin->w_cursor.col = 0;
-		(void)del_bytes((long)n, !virtual_op,
-				oap->op_type == OP_DELETE && !oap->is_VIsual);
-		curwin->w_cursor = curpos;	/* restore curwin->w_cursor */
-	    }
-	    if (curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count)
-		(void)do_join(2, FALSE, FALSE, FALSE, FALSE);
+	    curwin->w_cursor.col = 0;
+	    (void)del_bytes((long)n, !virtual_op,
+			    oap->op_type == OP_DELETE && !oap->is_VIsual);
+	    curwin->w_cursor = curpos;	/* restore curwin->w_cursor */
+	    (void)do_join(2, FALSE, FALSE, FALSE, FALSE);
 	}
     }
 
@@ -3488,17 +3459,26 @@ do_put(regname, dir, count, flags)
     {
 	if (flags & PUT_LINE_SPLIT)
 	{
+	    char_u *p;
+
 	    /* "p" or "P" in Visual mode: split the lines to put the text in
 	     * between. */
 	    if (u_save_cursor() == FAIL)
 		goto end;
-	    ptr = vim_strsave(ml_get_cursor());
+	    p = ml_get_cursor();
+	    if (dir == FORWARD && *p != NUL)
+		mb_ptr_adv(p);
+	    ptr = vim_strsave(p);
 	    if (ptr == NULL)
 		goto end;
 	    ml_append(curwin->w_cursor.lnum, ptr, (colnr_T)0, FALSE);
 	    vim_free(ptr);
 
-	    ptr = vim_strnsave(ml_get_curline(), curwin->w_cursor.col);
+	    oldp = ml_get_curline();
+	    p = oldp + curwin->w_cursor.col;
+	    if (dir == FORWARD && *p != NUL)
+		mb_ptr_adv(p);
+	    ptr = vim_strnsave(oldp, p - oldp);
 	    if (ptr == NULL)
 		goto end;
 	    ml_replace(curwin->w_cursor.lnum, ptr, FALSE);
