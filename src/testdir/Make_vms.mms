@@ -4,7 +4,7 @@
 # Authors:	Zoltan Arpadffy, <arpadffy@polarhome.com>
 #		Sandor Kopanyi,  <sandor.kopanyi@mailbox.hu>
 #
-# Last change:  2015 Jun 19
+# Last change:  2015 Jul 17
 #
 # This has been tested on VMS 6.2 to 8.3 on DEC Alpha, VAX and IA64.
 # Edit the lines in the Configuration section below to select.
@@ -98,6 +98,7 @@ SCRIPT = test1.out  test2.out  test3.out  test4.out  test5.out  \
 	 test105.out test106.out test107.out \
 	 test_argument_0count.out \
 	 test_argument_count.out \
+	 test_autocmd_option.out \
 	 test_autoformat_join.out \
 	 test_breakindent.out \
 	 test_changelist.out \
@@ -105,6 +106,8 @@ SCRIPT = test1.out  test2.out  test3.out  test4.out  test5.out  \
 	 test_command_count.out \
 	 test_erasebackword.out \
 	 test_eval.out \
+	 test_fixeol.out \
+	 test_increment.out \
 	 test_insertcount.out \
 	 test_listchars.out \
 	 test_listlbr.out \
@@ -116,6 +119,7 @@ SCRIPT = test1.out  test2.out  test3.out  test4.out  test5.out  \
 	 test_perl.out \
 	 test_qf_title.out \
 	 test_ruby.out \
+	 test_search_mbyte.out \
 	 test_set.out \
 	 test_signs.out \
 	 test_textobjects.out \

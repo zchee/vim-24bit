@@ -965,6 +965,7 @@ enum
     , BV_INC
 #endif
     , BV_EOL
+    , BV_FIXEOL
     , BV_EP
     , BV_ET
     , BV_FENC
