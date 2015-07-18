@@ -2623,10 +2623,10 @@ failed:
 #endif
 
     /*
-     * Trick: We remember if the last line of the read didn't have
-     * an eol even when 'binary' is off, for when writing it again with
-     * 'binary' on.  This is required for
-     * ":autocmd FileReadPost *.gz set bin|'[,']!gunzip" to work.
+     * We remember if the last line of the read didn't have
+     * an eol even when 'binary' is off, to support turning 'fixeol' off,
+     * or writing the read again with 'binary' on.  The latter is required
+     * for ":autocmd FileReadPost *.gz set bin|'[,']!gunzip" to work.
      */
     curbuf->b_no_eol_lnum = read_no_eol_lnum;
 
@@ -4547,7 +4547,7 @@ restore_backup:
 	/* write failed or last line has no EOL: stop here */
 	if (end == 0
 		|| (lnum == end
-		    && write_bin
+		    && (write_bin || !buf->b_p_fixeol)
 		    && (lnum == buf->b_no_eol_lnum
 			|| (lnum == buf->b_ml.ml_line_count && !buf->b_p_eol))))
 	{
@@ -7699,6 +7699,7 @@ static struct event_name
     {"InsertLeave",	EVENT_INSERTLEAVE},
     {"InsertCharPre",	EVENT_INSERTCHARPRE},
     {"MenuPopup",	EVENT_MENUPOPUP},
+    {"OptionSet",	EVENT_OPTIONSET},
     {"QuickFixCmdPost",	EVENT_QUICKFIXCMDPOST},
     {"QuickFixCmdPre",	EVENT_QUICKFIXCMDPRE},
     {"QuitPre",		EVENT_QUITPRE},
@@ -7736,7 +7737,7 @@ static AutoPat *first_autopat[NUM_EVENTS] =
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
 /*
@@ -9321,7 +9322,7 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
      */
     if (fname_io == NULL)
     {
-	if (event == EVENT_COLORSCHEME)
+	if (event == EVENT_COLORSCHEME || event == EVENT_OPTIONSET)
 	    autocmd_fname = NULL;
 	else if (fname != NULL && *fname != NUL)
 	    autocmd_fname = fname;
@@ -9385,6 +9386,7 @@ apply_autocmds_group(event, fname, fname_io, force, group, buf, eap)
 		|| event == EVENT_SPELLFILEMISSING
 		|| event == EVENT_QUICKFIXCMDPRE
 		|| event == EVENT_COLORSCHEME
+		|| event == EVENT_OPTIONSET
 		|| event == EVENT_QUICKFIXCMDPOST)
 	    fname = vim_strsave(fname);
 	else
